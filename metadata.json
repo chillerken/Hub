@@ -1,0 +1,8 @@
+{
+  "name": "AI GOD MODE HUB v8",
+  "description": "A powerful all-in-one AI studio for chat, code, images, video, and web development.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
