@@ -1,20 +1,19 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Bloom & Beyond — Android APK project
 
-# Run and deploy your AI Studio app
+Native Android match-3 game prototype.
 
-This contains everything you need to run your app locally.
+## Implemented
+- 8x8 match-3 board
+- Valid adjacent swaps
+- Horizontal/vertical matching
+- Cascades and combo scoring
+- Scaling levels
+- Win/loss flow and coin rewards
+- Persistent progress
+- Shuffle and restart
+- Portrait UI and haptics
 
-View your app in AI Studio: https://ai.studio/apps/f1e8d489-954a-43b3-a566-4023082a0759
+## Automatic APK build
+Pushes to the `bloom-beyond-android` branch run GitHub Actions and upload `BloomBeyond-debug-apk`.
 
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+This is an original prototype and does not copy Lily's Garden art, characters, story, levels or assets.
