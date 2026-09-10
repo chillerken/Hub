@@ -1,0 +1,9 @@
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+openai>=1.100
+requests>=2.32
+websockets>=14
+google-api-python-client>=2.160
+google-auth>=2.38
+google-auth-oauthlib>=1.2
+pytest>=8
