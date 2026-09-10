@@ -10,14 +10,14 @@ import android.view.View;
 import java.util.*;
 
 public class GameView extends View {
-    private static final int N=8,TYPES=6,HOME=0,MAP=1,GAME=2,STORY=3,RENOVATE=4;
+    private static final int N=8,TYPES=6,HOME=0,MAP=1,GAME=2,STORY=3,RENOVATE=4,REWARDS=5,PETS=6;
     private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG), text=new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Random rng=new Random();
     private final SharedPreferences prefs;
     private final Vibrator vibrator;
     private final int[][] board=new int[N][N], power=new int[N][N], blocker=new int[N][N];
     private final ArrayList<Spark> sparks=new ArrayList<>();
-    private int mode=HOME, level, unlocked, score, moves, target, coins, stars, renovationStep, storyIndex;
+    private int mode=HOME, level, unlocked, score, moves, target, coins, stars, renovationStep, storyIndex, rocketBoosters, bombBoosters, rainbowBoosters, wins, petIndex;
     private int selR=-1,selC=-1;
     private float boardLeft,boardTop,cell;
     private String banner=""; private long bannerUntil=0; private boolean levelOver=false,won=false;
@@ -36,12 +36,12 @@ public class GameView extends View {
         prefs=c.getSharedPreferences("bloom_save",Context.MODE_PRIVATE);
         vibrator=(Vibrator)c.getSystemService(Context.VIBRATOR_SERVICE);
         unlocked=Math.max(1,prefs.getInt("level",1)); level=unlocked; coins=prefs.getInt("coins",0); stars=prefs.getInt("stars",0);
-        renovationStep=prefs.getInt("renovationStep",0); storyIndex=prefs.getInt("storyIndex",0);
+        renovationStep=prefs.getInt("renovationStep",0); storyIndex=prefs.getInt("storyIndex",0); rocketBoosters=prefs.getInt("rocketBoosters",2); bombBoosters=prefs.getInt("bombBoosters",1); rainbowBoosters=prefs.getInt("rainbowBoosters",1); wins=prefs.getInt("wins",0); petIndex=prefs.getInt("petIndex",0);
         text.setTypeface(Typeface.create("sans",Typeface.BOLD)); startLevel(level,false);
     }
 
     private void startLevel(int l,boolean enterGame){
-        level=Math.max(1,l); score=0; moves=Math.max(18,30-(level/4)); target=700+(level-1)*170; levelOver=false;won=false;selR=selC=-1;
+        level=Math.max(1,l); score=petIndex==1?50:0; moves=Math.max(18,30-(level/4))+(petIndex==0?1:0); target=700+(level-1)*170; levelOver=false;won=false;selR=selC=-1;
         for(int r=0;r<N;r++){Arrays.fill(power[r],0);Arrays.fill(blocker[r],0);} do{fillRandom();}while(hasAnyMatch()); seedObstacles();
         if(enterGame)mode=GAME; showBanner("Level "+level+"  •  Restore the estate"); invalidate();
     }
@@ -49,7 +49,7 @@ public class GameView extends View {
     private void seedObstacles(){int count=level<2?0:Math.min(12,2+level/2),guard=0;while(count>0&&guard++<300){int r=1+rng.nextInt(N-2),c=1+rng.nextInt(N-2);if(blocker[r][c]==0){blocker[r][c]=level>=7&&count%4==0?2:1;count--;}}}
     private void fillRandom(){for(int r=0;r<N;r++)for(int c=0;c<N;c++){int v;do{v=rng.nextInt(TYPES);}while((c>=2&&board[r][c-1]==v&&board[r][c-2]==v)||(r>=2&&board[r-1][c]==v&&board[r-2][c]==v));board[r][c]=v;}}
 
-    @Override protected void onDraw(Canvas c){super.onDraw(c);int w=getWidth(),h=getHeight();drawBackground(c,w,h);if(mode==HOME)drawHome(c,w,h);else if(mode==MAP)drawMap(c,w,h);else if(mode==GAME)drawGame(c,w,h);else if(mode==STORY)drawStory(c,w,h);else drawRenovate(c,w,h);drawSparks(c);}
+    @Override protected void onDraw(Canvas c){super.onDraw(c);int w=getWidth(),h=getHeight();drawBackground(c,w,h);if(mode==HOME)drawHome(c,w,h);else if(mode==MAP)drawMap(c,w,h);else if(mode==GAME)drawGame(c,w,h);else if(mode==STORY)drawStory(c,w,h);else if(mode==RENOVATE)drawRenovate(c,w,h);else if(mode==REWARDS)drawRewards(c,w,h);else drawPets(c,w,h);drawSparks(c);}
 
     private void drawBackground(Canvas c,int w,int h){LinearGradient g=new LinearGradient(0,0,w,h,Color.rgb(24,39,67),Color.rgb(18,25,43),Shader.TileMode.CLAMP);p.setShader(g);c.drawRect(0,0,w,h,p);p.setShader(null);long t=System.currentTimeMillis()/40;for(int i=0;i<18;i++){float x=(float)((i*109+t*(i%3+1))%(w+120))-60,y=(i*173)%Math.max(1,h);p.setColor(Color.argb(18+(i%4)*5,255,255,255));c.drawCircle(x,y,18+(i%5)*9,p);}postInvalidateDelayed(50);}
     private void title(Canvas c,int w,String sub){text.setTextAlign(Paint.Align.CENTER);text.setColor(Color.WHITE);text.setTextSize(dp(28));c.drawText("BLOOM & BEYOND",w/2f,dp(46),text);text.setTextSize(dp(12));text.setColor(Color.rgb(184,204,232));c.drawText(sub,w/2f,dp(68),text);}
@@ -59,8 +59,8 @@ public class GameView extends View {
         p.setColor(Color.rgb(68,119,91));c.drawRoundRect(dp(44),h*.22f,w-dp(44),h*.48f,dp(28),dp(28),p);p.setColor(Color.rgb(97,151,103));c.drawCircle(w*.30f,h*.35f,dp(56),p);c.drawCircle(w*.70f,h*.34f,dp(72),p);
         p.setColor(Color.rgb(224,203,164));c.drawRect(w*.40f,h*.29f,w*.60f,h*.48f,p);p.setColor(Color.rgb(88,61,76));Path roof=new Path();roof.moveTo(w*.37f,h*.29f);roof.lineTo(w*.5f,h*.22f);roof.lineTo(w*.63f,h*.29f);roof.close();c.drawPath(roof,p);
         text.setColor(Color.WHITE);text.setTextSize(dp(22));c.drawText("Your forgotten estate awaits",w/2f,h*.56f,text);text.setColor(Color.rgb(194,211,235));text.setTextSize(dp(13));c.drawText("Solve puzzles. Reveal secrets. Rebuild everything.",w/2f,h*.60f,text);
-        drawButton(c,w/2f,h*.67f,dp(250),dp(58),"CONTINUE  •  LEVEL "+unlocked,true);drawButton(c,w*.30f,h*.78f,dp(135),dp(48),"ESTATE MAP",false);drawButton(c,w*.70f,h*.78f,dp(135),dp(48),"RENOVATE",false);
-        text.setTextSize(dp(13));text.setColor(Color.rgb(173,196,225));c.drawText("Coins "+coins+"     Stars "+stars,w/2f,h*.88f,text);
+        drawButton(c,w/2f,h*.65f,dp(250),dp(58),"CONTINUE  •  LEVEL "+unlocked,true);drawButton(c,w*.25f,h*.76f,dp(110),dp(46),"MAP",false);drawButton(c,w*.50f,h*.76f,dp(110),dp(46),"RENOVATE",false);drawButton(c,w*.75f,h*.76f,dp(110),dp(46),"PETS",false);drawButton(c,w/2f,h*.84f,dp(230),dp(44),"DAILY REWARDS",false);
+        text.setTextSize(dp(12));text.setColor(Color.rgb(173,196,225));c.drawText("Coins "+coins+"  •  Stars "+stars+"  •  Wins "+wins,w/2f,h*.91f,text);
     }
 
     private void drawMap(Canvas c,int w,int h){
@@ -85,7 +85,7 @@ public class GameView extends View {
     }
 
     private void drawPower(Canvas c,int r,int col,float cx,float cy,float rad){int q=power[r][col];if(q==0)return;p.setColor(Color.WHITE);p.setStrokeWidth(dp(3));p.setStyle(Paint.Style.STROKE);if(q==1){c.drawLine(cx-rad*.62f,cy,cx+rad*.62f,cy,p);c.drawLine(cx-rad*.45f,cy-dp(5),cx-rad*.62f,cy,p);c.drawLine(cx-rad*.45f,cy+dp(5),cx-rad*.62f,cy,p);}else if(q==2){c.drawLine(cx,cy-rad*.62f,cx,cy+rad*.62f,p);c.drawLine(cx-dp(5),cy-rad*.45f,cx,cy-rad*.62f,p);c.drawLine(cx+dp(5),cy-rad*.45f,cx,cy-rad*.62f,p);}else if(q==3){c.drawCircle(cx,cy,rad*.48f,p);c.drawLine(cx+rad*.3f,cy-rad*.35f,cx+rad*.55f,cy-rad*.65f,p);}else for(int i=0;i<3;i++)c.drawCircle(cx,cy,rad*(.28f+i*.14f),p);p.setStyle(Paint.Style.FILL);}
-    private void drawFooter(Canvas c,int w,int h){float y=boardTop+cell*N+dp(30);text.setTextAlign(Paint.Align.CENTER);text.setTextSize(dp(12));text.setColor(Color.rgb(205,219,241));c.drawText("Match 4 = rocket  •  Match 5 = rainbow  •  T/L = bomb",w/2f,y,text);drawButton(c,w*.22f,y+dp(46),dp(95),dp(42),"MAP",false);drawButton(c,w*.50f,y+dp(46),dp(95),dp(42),"SHUFFLE",false);drawButton(c,w*.78f,y+dp(46),dp(95),dp(42),"RESTART",false);}
+    private void drawFooter(Canvas c,int w,int h){float y=boardTop+cell*N+dp(30);text.setTextAlign(Paint.Align.CENTER);text.setTextSize(dp(12));text.setColor(Color.rgb(205,219,241));c.drawText("Match 4 = rocket  •  Match 5 = rainbow  •  T/L = bomb",w/2f,y,text);drawButton(c,w*.18f,y+dp(44),dp(82),dp(40),"MAP",false);drawButton(c,w*.50f,y+dp(44),dp(82),dp(40),"SHUFFLE",false);drawButton(c,w*.82f,y+dp(44),dp(82),dp(40),"RESTART",false);drawButton(c,w*.22f,y+dp(91),dp(104),dp(38),"ROCKET "+rocketBoosters,false);drawButton(c,w*.50f,y+dp(91),dp(104),dp(38),"BOMB "+bombBoosters,false);drawButton(c,w*.78f,y+dp(91),dp(104),dp(38),"RAINBOW "+rainbowBoosters,false);}
     private void drawButton(Canvas c,float x,float y,float bw,float bh,String s,boolean primary){p.setShadowLayer(primary?dp(7):0,0,dp(3),Color.argb(100,0,0,0));p.setColor(primary?Color.rgb(143,94,220):Color.argb(190,48,70,105));c.drawRoundRect(x-bw/2,y-bh/2,x+bw/2,y+bh/2,dp(16),dp(16),p);p.clearShadowLayer();text.setColor(Color.WHITE);text.setTextSize(dp(12));text.setTextAlign(Paint.Align.CENTER);c.drawText(s,x,y+dp(4),text);}
     private void drawBanner(Canvas c,int w,int h){p.setColor(Color.argb(232,12,22,40));c.drawRoundRect(dp(28),h*.177f,w-dp(28),h*.222f,dp(18),dp(18),p);text.setColor(Color.WHITE);text.setTextSize(dp(13));text.setTextAlign(Paint.Align.CENTER);c.drawText(banner,w/2f,h*.207f,text);}
     private void drawOverlay(Canvas c,int w,int h){p.setColor(Color.argb(225,8,14,26));c.drawRect(0,0,w,h,p);p.setColor(Color.rgb(38,55,84));c.drawRoundRect(dp(30),h*.27f,w-dp(30),h*.73f,dp(28),dp(28),p);text.setTextAlign(Paint.Align.CENTER);text.setColor(Color.WHITE);text.setTextSize(dp(29));c.drawText(won?"Chapter Complete!":"Almost there",w/2f,h*.37f,text);text.setTextSize(dp(14));text.setColor(Color.rgb(207,219,240));c.drawText(won?"You earned a renovation star.":"Clear every debris tile and reach the score.",w/2f,h*.42f,text);text.setTextSize(dp(18));text.setColor(won?Color.rgb(101,218,164):Color.rgb(255,181,71));c.drawText(won?"+100 coins    +1 star":"Debris "+obstaclesLeft()+"   Score "+score+"/"+target,w/2f,h*.49f,text);drawButton(c,w/2f,h*.59f,dp(230),dp(56),won?"CONTINUE STORY":"TRY AGAIN",true);drawButton(c,w/2f,h*.67f,dp(180),dp(42),"ESTATE MAP",false);}
@@ -98,17 +98,19 @@ public class GameView extends View {
 
     @Override public boolean onTouchEvent(MotionEvent e){
         if(e.getAction()!=MotionEvent.ACTION_UP)return true;float x=e.getX(),y=e.getY();int w=getWidth(),h=getHeight();
-        if(mode==HOME){if(y>h*.62f&&y<h*.72f)startLevel(unlocked,true);else if(y>h*.73f&&y<h*.83f){mode=x<w/2f?MAP:RENOVATE;invalidate();}return true;}
+        if(mode==HOME){if(y>h*.60f&&y<h*.70f)startLevel(unlocked,true);else if(y>h*.72f&&y<h*.80f){if(x<w*.38f)mode=MAP;else if(x<w*.63f)mode=RENOVATE;else mode=PETS;invalidate();}else if(y>h*.80f&&y<h*.88f){mode=REWARDS;invalidate();}return true;}
         if(mode==MAP){if(y>h-dp(82)){if(x<w/2f)mode=HOME;else startLevel(unlocked,true);invalidate();return true;}if(x>w*.52f&&x<w*.84f&&y>h*.22f&&y<h*.40f){startLevel(unlocked,true);return true;}return true;}
         if(mode==STORY){if(y>h*.74f&&y<h*.85f){mode=stars>0?RENOVATE:MAP;invalidate();}return true;}
+        if(mode==REWARDS){long day=System.currentTimeMillis()/86400000L;long last=prefs.getLong("dailyDay",-1);if(y>h*.68f&&y<h*.77f&&day!=last){coins+=100;rocketBoosters++;prefs.edit().putLong("dailyDay",day).apply();saveProgress();vibrate(35);invalidate();}else if(y>h*.78f&&y<h*.87f){mode=HOME;invalidate();}return true;}
+        if(mode==PETS){if(y>h*.20f&&y<h*.66f){int col=x<w/2f?0:1,row=y<h*.42f?0:1;petIndex=row*2+col;saveProgress();vibrate(20);invalidate();}else if(y>h*.80f){mode=HOME;invalidate();}return true;}
         if(mode==RENOVATE){if(y>h*.65f&&y<h*.77f&&renovationStep<8){if(stars<=0){showBanner("Earn a star by completing a puzzle");return true;}int style=x<w*.36f?0:(x<w*.64f?1:2);prefs.edit().putInt("style_"+renovationStep,style).apply();stars--;renovationStep++;saveProgress();vibrate(45);invalidate();return true;}if(y>h*.84f){if(x<w/2f)mode=MAP;else startLevel(unlocked,true);invalidate();}return true;}
         if(levelOver){if(y>h*.53f&&y<h*.63f){if(won){storyIndex++;prefs.edit().putInt("storyIndex",storyIndex).apply();mode=STORY;}else startLevel(level,true);invalidate();}else if(y>h*.63f&&y<h*.72f){mode=MAP;invalidate();}return true;}
-        float footerY=boardTop+cell*N+dp(76);if(Math.abs(y-footerY)<dp(32)){if(x<w*.35f){mode=MAP;invalidate();}else if(x<w*.65f){shuffleBoard();moves=Math.max(0,moves-1);showBanner("Board shuffled  •  -1 move");}else startLevel(level,true);return true;}
+        float footerY=boardTop+cell*N+dp(74);if(Math.abs(y-footerY)<dp(30)){if(x<w*.34f){mode=MAP;invalidate();}else if(x<w*.66f){shuffleBoard();moves=Math.max(0,moves-1);showBanner("Board shuffled  •  -1 move");}else startLevel(level,true);return true;}if(Math.abs(y-(footerY+dp(47)))<dp(24)){if(x<w*.36f)useBooster(1);else if(x<w*.64f)useBooster(3);else useBooster(4);return true;}
         int c=(int)((x-boardLeft)/cell),r=(int)((y-boardTop)/cell);if(r<0||r>=N||c<0||c>=N)return true;if(selR<0){selR=r;selC=c;invalidate();return true;}
         if(Math.abs(selR-r)+Math.abs(selC-c)==1){int r1=selR,c1=selC,r2=r,c2=c;boolean specialSwap=power[r1][c1]>0&&power[r2][c2]>0;swapAll(r1,c1,r2,c2);boolean rainbowSwap=power[r2][c2]==4||power[r1][c1]==4;if(specialSwap){moves--;activateCombo(r1,c1,r2,c2);resolveCascades(-1,-1);afterMove();}else if(rainbowSwap){moves--;activateRainbowSwap(r1,c1,r2,c2);resolveCascades(-1,-1);afterMove();}else if(hasAnyMatch()){moves--;vibrate(18);resolveCascades(r2,c2);afterMove();}else{swapAll(r1,c1,r2,c2);showBanner("That swap makes no match");}selR=selC=-1;invalidate();}else{selR=r;selC=c;invalidate();}return true;
     }
 
-    private void afterMove(){if(score>=target&&obstaclesLeft()==0){won=true;levelOver=true;coins+=100;stars++;unlocked=Math.max(unlocked,level+1);saveProgress();vibrate(70);}else if(moves<=0){won=false;levelOver=true;saveProgress();}}
+    private void afterMove(){if(score>=target&&obstaclesLeft()==0){won=true;levelOver=true;coins+=100;stars++;wins++;unlocked=Math.max(unlocked,level+1);if(wins%3==0)rocketBoosters++;if(wins%5==0)bombBoosters++;if(wins%7==0)rainbowBoosters++;saveProgress();vibrate(70);}else if(moves<=0){won=false;levelOver=true;saveProgress();}}
     private void resolveCascades(int preferredR,int preferredC){int combo=0;boolean first=true;while(true){boolean[][] mark=findMatches();int count=countMarks(mark);if(count==0)break;combo++;int cr=-1,cc=-1,np=0;if(first){int[] s=detectSpecial(mark,preferredR,preferredC);cr=s[0];cc=s[1];np=s[2];}expandPowerEffects(mark);count=countMarks(mark);score+=count*48*combo;for(int r=0;r<N;r++)for(int c=0;c<N;c++)if(mark[r][c]){addSpark(r,c);if(blocker[r][c]>0){blocker[r][c]--;if(blocker[r][c]>0)mark[r][c]=false;}}if(cr>=0&&blocker[cr][cc]==0){mark[cr][cc]=false;power[cr][cc]=np;}clearAndDrop(mark);first=false;}if(combo>=3)showBanner("MEGA CASCADE x"+combo+"!");else if(combo>=2)showBanner("Cascade x"+combo+"!");}
     private int[] detectSpecial(boolean[][] mark,int pr,int pc){if(pr<0||pc<0||!mark[pr][pc]){outer:for(int r=0;r<N;r++)for(int c=0;c<N;c++)if(mark[r][c]){pr=r;pc=c;break outer;}}if(pr<0)return new int[]{-1,-1,0};int color=board[pr][pc],h=1,v=1;for(int c=pc-1;c>=0&&board[pr][c]==color;c--)h++;for(int c=pc+1;c<N&&board[pr][c]==color;c++)h++;for(int r=pr-1;r>=0&&board[r][pc]==color;r--)v++;for(int r=pr+1;r<N&&board[r][pc]==color;r++)v++;if(h>=5||v>=5)return new int[]{pr,pc,4};if(h>=3&&v>=3)return new int[]{pr,pc,3};if(h>=4)return new int[]{pr,pc,1};if(v>=4)return new int[]{pr,pc,2};return new int[]{-1,-1,0};}
     private void expandPowerEffects(boolean[][] mark){boolean changed=true;int guard=0;while(changed&&guard++<8){changed=false;for(int r=0;r<N;r++)for(int c=0;c<N;c++)if(mark[r][c]&&power[r][c]>0){int q=power[r][c];power[r][c]=0;changed=true;if(q==1)for(int x=0;x<N;x++)mark[r][x]=true;else if(q==2)for(int yy=0;yy<N;yy++)mark[yy][c]=true;else if(q==3)for(int yy=Math.max(0,r-1);yy<=Math.min(N-1,r+1);yy++)for(int x=Math.max(0,c-1);x<=Math.min(N-1,c+1);x++)mark[yy][x]=true;else{int col=board[r][c];for(int yy=0;yy<N;yy++)for(int x=0;x<N;x++)if(board[yy][x]==col)mark[yy][x]=true;}}}}
@@ -120,7 +122,34 @@ public class GameView extends View {
     private int countMarks(boolean[][] m){int n=0;for(int r=0;r<N;r++)for(int c=0;c<N;c++)if(m[r][c])n++;return n;} private boolean hasAnyMatch(){return countMarks(findMatches())>0;} private int obstaclesLeft(){int n=0;for(int r=0;r<N;r++)for(int c=0;c<N;c++)if(blocker[r][c]>0)n++;return n;}
     private void swapAll(int r1,int c1,int r2,int c2){int t=board[r1][c1];board[r1][c1]=board[r2][c2];board[r2][c2]=t;t=power[r1][c1];power[r1][c1]=power[r2][c2];power[r2][c2]=t;t=blocker[r1][c1];blocker[r1][c1]=blocker[r2][c2];blocker[r2][c2]=t;}
     private void shuffleBoard(){do{for(int r=0;r<N;r++)for(int c=0;c<N;c++){board[r][c]=rng.nextInt(TYPES);power[r][c]=0;}}while(hasAnyMatch());invalidate();}
-    private void saveProgress(){prefs.edit().putInt("level",unlocked).putInt("coins",coins).putInt("stars",stars).putInt("renovationStep",renovationStep).putInt("storyIndex",storyIndex).apply();}
+    private void saveProgress(){prefs.edit().putInt("level",unlocked).putInt("coins",coins).putInt("stars",stars).putInt("renovationStep",renovationStep).putInt("storyIndex",storyIndex).putInt("rocketBoosters",rocketBoosters).putInt("bombBoosters",bombBoosters).putInt("rainbowBoosters",rainbowBoosters).putInt("wins",wins).putInt("petIndex",petIndex).apply();}
+
+    private void useBooster(int kind){
+        int count=kind==1?rocketBoosters:(kind==3?bombBoosters:rainbowBoosters);
+        if(count<=0){showBanner("No boosters left — win levels to earn more");return;}
+        int r=rng.nextInt(N),c=rng.nextInt(N);power[r][c]=kind;
+        if(kind==1)rocketBoosters--;else if(kind==3)bombBoosters--;else rainbowBoosters--;
+        saveProgress();showBanner(kind==1?"Rocket placed!":(kind==3?"Bomb placed!":"Rainbow placed!"));vibrate(28);invalidate();
+    }
+
+    private void drawRewards(Canvas c,int w,int h){
+        title(c,w,"DAILY REWARDS");
+        text.setTextSize(dp(14));text.setColor(Color.rgb(190,211,236));c.drawText("Return each day for free progression rewards",w/2f,dp(102),text);
+        long day=System.currentTimeMillis()/86400000L;long last=prefs.getLong("dailyDay",-1);boolean can=day!=last;
+        for(int i=0;i<7;i++){float x=w*.16f+(i%4)*w*.225f,y=h*.28f+(i/4)*h*.20f;p.setColor(i==0&&can?Color.rgb(147,98,222):Color.rgb(47,67,99));c.drawRoundRect(x-dp(38),y-dp(43),x+dp(38),y+dp(43),dp(16),dp(16),p);text.setTextSize(dp(12));text.setColor(Color.WHITE);c.drawText("DAY "+(i+1),x,y-dp(14),text);text.setTextSize(dp(18));c.drawText(i==6?"★":"+"+(100+i*50),x,y+dp(12),text);}
+        drawButton(c,w/2f,h*.72f,dp(250),dp(56),can?"CLAIM TODAY  •  +100 COINS":"CLAIMED TODAY",can);
+        drawButton(c,w/2f,h*.82f,dp(180),dp(44),"HOME",false);
+    }
+
+    private void drawPets(Canvas c,int w,int h){
+        title(c,w,"ESTATE PETS");
+        String[] names={"Milo the Dog","Luna the Cat","Pip the Parrot","Clover the Rabbit"};
+        int[] pc={Color.rgb(201,151,97),Color.rgb(130,145,165),Color.rgb(70,181,134),Color.rgb(230,210,190)};
+        text.setTextSize(dp(13));text.setColor(Color.rgb(190,211,236));c.drawText("Your companion grants a small level-start bonus",w/2f,dp(100),text);
+        for(int i=0;i<4;i++){float x=w*.28f+(i%2)*w*.44f,y=h*.30f+(i/2)*h*.24f;boolean sel=i==petIndex;p.setColor(sel?Color.rgb(146,98,221):Color.rgb(45,65,95));c.drawRoundRect(x-dp(72),y-dp(82),x+dp(72),y+dp(82),dp(22),dp(22),p);p.setColor(pc[i]);c.drawCircle(x,y-dp(18),dp(42),p);p.setColor(Color.BLACK);c.drawCircle(x-dp(13),y-dp(26),dp(4),p);c.drawCircle(x+dp(13),y-dp(26),dp(4),p);text.setColor(Color.WHITE);text.setTextSize(dp(12));c.drawText(names[i],x,y+dp(48),text);text.setTextSize(dp(10));text.setColor(Color.rgb(210,222,240));c.drawText(i==0?"+1 move":i==1?"+50 score":i==2?"+1 rocket chance":"+75 coins / 3 wins",x,y+dp(67),text);}
+        drawButton(c,w/2f,h*.84f,dp(180),dp(44),"HOME",false);
+    }
+
     private void showBanner(String s){banner=s;bannerUntil=System.currentTimeMillis()+1800;invalidate();}
     private void vibrate(long ms){try{if(vibrator==null)return;if(android.os.Build.VERSION.SDK_INT>=26)vibrator.vibrate(VibrationEffect.createOneShot(ms,VibrationEffect.DEFAULT_AMPLITUDE));else vibrator.vibrate(ms);}catch(Exception ignored){}}
     private float dp(float x){return x*getResources().getDisplayMetrics().density;}
