@@ -1,13 +1,16 @@
 {
-  "name": "ai-business-automation-local",
-  "version": "1.0.0",
+  "name": "ai-business-automation-production",
+  "version": "2.0.0",
   "private": true,
-  "description": "White-label AI business automation template for local businesses",
+  "description": "Production AI business automation for local businesses",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node test/smoke.js"
+    "check": "node --check server.js && node --check src/store.js && node --check src/messaging.js && node --check src/ai.js && node --check src/automation.js"
   },
-  "engines": { "node": ">=20" }
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "pg": "^8.16.3"
+  }
 }
