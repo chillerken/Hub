@@ -1,6 +1,6 @@
 {
   "name": "ai-business-automation-production",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
   "description": "Production AI business automation for local businesses",
   "main": "server.js",
@@ -9,8 +9,8 @@
     "dev": "node --watch server.js",
     "check": "node --check server.js && node --check src/store.js && node --check src/messaging.js && node --check src/ai.js && node --check src/automation.js"
   },
-  "engines": { "node": ">=20" },
-  "dependencies": {
-    "pg": "^8.16.3"
-  }
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {}
 }

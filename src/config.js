@@ -27,8 +27,11 @@ const config = {
   adminPassword: process.env.ADMIN_PASSWORD || '',
   cookieSecret: process.env.COOKIE_SECRET || '',
   cronSecret: process.env.CRON_SECRET || '',
-  databaseUrl: process.env.DATABASE_URL || process.env.SUPABASE_DATABASE_URL || '',
-  databaseSsl: (process.env.DATABASE_SSL || (production ? 'true' : 'false')) === 'true',
+  supabase: {
+    url: process.env.SUPABASE_URL || '',
+    publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || '',
+    appSecret: process.env.SUPABASE_APP_SECRET || ''
+  },
   openaiKey: process.env.OPENAI_API_KEY || '',
   openaiModel: process.env.OPENAI_MODEL || 'gpt-5.6-luna',
   resend: {
@@ -57,7 +60,9 @@ const config = {
 
 function validate() {
   const errors = [];
-  if (!config.databaseUrl) errors.push('DATABASE_URL ontbreekt');
+  if (!config.supabase.url) errors.push('SUPABASE_URL ontbreekt');
+  if (!config.supabase.publishableKey) errors.push('SUPABASE_PUBLISHABLE_KEY ontbreekt');
+  if (!config.supabase.appSecret || config.supabase.appSecret.length < 32) errors.push('SUPABASE_APP_SECRET moet minstens 32 tekens bevatten');
   if (!config.adminPassword || config.adminPassword.length < 12) errors.push('ADMIN_PASSWORD moet minstens 12 tekens bevatten');
   if (!config.cookieSecret || config.cookieSecret.length < 32) errors.push('COOKIE_SECRET moet minstens 32 tekens bevatten');
   if (!config.cronSecret || config.cronSecret.length < 32) errors.push('CRON_SECRET moet minstens 32 tekens bevatten');
