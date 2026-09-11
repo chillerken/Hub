@@ -23,7 +23,7 @@ const production = process.env.NODE_ENV === 'production';
 const config = {
   production,
   port: Number(process.env.PORT || 3000),
-  baseUrl: process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`,
+  baseUrl: process.env.BASE_URL || (process.env.RENDER_EXTERNAL_HOSTNAME ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}` : `http://localhost:${process.env.PORT || 3000}`),
   adminPassword: process.env.ADMIN_PASSWORD || '',
   cookieSecret: process.env.COOKIE_SECRET || '',
   cronSecret: process.env.CRON_SECRET || '',
