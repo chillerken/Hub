@@ -204,6 +204,7 @@ async function start() {
   require('./src/core/diagnostics')(config).then(report=>console.log('LuxWash provider checks',JSON.stringify(report))).catch(()=>{});
   server.listen(config.port,'0.0.0.0',()=>console.log(`AI Business Automation productie draait op ${config.baseUrl}`));
   if(config.automationIntervalMinutes > 0) {
+    automation.run().catch(e=>console.error('Automation startup failed:',e.message));
     automationTimer=setInterval(()=>automation.run().catch(e=>console.error('Automation error:',e)),config.automationIntervalMinutes*60*1000);
     automationTimer.unref();
   }

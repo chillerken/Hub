@@ -27,6 +27,10 @@ module.exports=function automation(config,db){
    else{
     if(!c.email)throw new Error('E-mailadres ontbreekt; klant telefonisch bevestigen');
     if(!config.resend.apiKey||!config.resend.from)throw new Error('RESEND_API_KEY en geverifieerde afzender ontbreken');
+    if(a?.idempotency_key){
+     const token=crypto.createHmac('sha256',config.cookieSecret).update(a.idempotency_key).digest('base64url');
+     await db('management_prepare',{id:a.id,idempotency_key:a.idempotency_key,token_hash:crypto.createHash('sha256').update(token).digest('hex')});
+    }
     const message=formatMessage(ctx,settings,config);
     const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${config.resend.apiKey}`,'Content-Type':'application/json','Idempotency-Key':`luxwash/${job.id}`},body:JSON.stringify({from:config.resend.from,to:[c.email],reply_to:settings.business.email,...message}),signal:AbortSignal.timeout(20000)});
     const data=await response.json();if(!response.ok)throw new Error(`Mailprovider: ${response.status}`);provider_id=data.id;
