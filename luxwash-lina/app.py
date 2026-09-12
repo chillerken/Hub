@@ -23,8 +23,13 @@ async def lifespan(app):
     try:
         response=await asyncio.to_thread(requests.get,'https://api.openai.com/v1/models/'+MODEL,headers={'Authorization':'Bearer '+KEY},timeout=10)
         model_status=response.status_code
-    except Exception:model_status='timeout'
-    log.info('Lina configuration: openai=%s webhook=%s central_bridge=%s model_status=%s recording=false',bool(KEY),bool(SECRET),app.state.bridge_ready,model_status)
+        error=(response.json().get('error') or {}) if not response.ok else {}
+        model_error=error.get('code') or error.get('type') or ''
+        if not re.fullmatch(r'[a-zA-Z0-9_]{0,80}',str(model_error)):model_error='unclassified'
+    except Exception:model_status='timeout';model_error='unavailable'
+    app.state.model_status=model_status
+    app.state.model_error=model_error
+    log.info('Lina configuration: openai=%s webhook=%s central_bridge=%s model_status=%s model_error=%s recording=false',bool(KEY),bool(SECRET),app.state.bridge_ready,model_status,model_error)
     yield
     for t in tuple(tasks): t.cancel()
     if tasks: await asyncio.gather(*tasks,return_exceptions=True)
@@ -32,7 +37,7 @@ app=FastAPI(title='LuxWash Lina',version='2.0.0',lifespan=lifespan)
 @app.get('/health')
 def health():
     required={'OPENAI_API_KEY':bool(KEY),'OPENAI_WEBHOOK_SECRET':bool(SECRET),'SUPABASE_APP_SECRET':bool(central.SECRET)}
-    return {'ok':all(required.values()) and getattr(app.state,'bridge_ready',False),'central_bridge':getattr(app.state,'bridge_ready',False),'required':required,'recording':False,'live_call_verified':False,'provider':'SIP via OpenAI','route_verified':False,'active_calls':len(tasks)}
+    return {'ok':all(required.values()) and getattr(app.state,'bridge_ready',False),'central_bridge':getattr(app.state,'bridge_ready',False),'required':required,'recording':False,'live_call_verified':False,'model_status':getattr(app.state,'model_status',None),'model_error':getattr(app.state,'model_error',None),'provider':'SIP via OpenAI','route_verified':False,'active_calls':len(tasks)}
 async def db(action,payload): return await asyncio.to_thread(central.event,action,payload)
 def accept(call_id,settings):
     tools=[{k:v for k,v in t.items() if k!='strict'} for t in settings['tools']]
@@ -93,8 +98,12 @@ async def conversation(call_id,crm_id,settings):
 @app.post('/openai/realtime-webhook')
 async def webhook(request:Request):
     if not client:raise HTTPException(503,'Voice credentials ontbreken')
-    raw=await request.body()
-    if len(raw)>100000:raise HTTPException(413,'Request too large')
+    chunks=[];size=0
+    async for chunk in request.stream():
+        size+=len(chunk)
+        if size>100000:raise HTTPException(413,'Request too large')
+        chunks.append(chunk)
+    raw=b''.join(chunks)
     try:event=client.webhooks.unwrap(raw,request.headers)
     except InvalidWebhookSignatureError:raise HTTPException(400,'Invalid signature')
     except Exception:raise HTTPException(400,'Invalid webhook')
