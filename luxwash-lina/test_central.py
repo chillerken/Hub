@@ -120,3 +120,43 @@ def test_model_timeout_cannot_report_ready(monkeypatch):
     monkeypatch.setattr(app.app.state,'bridge_ready',True,raising=False)
     monkeypatch.setattr(app.app.state,'model_status','timeout',raising=False)
     assert app.health()['ok'] is False
+
+def test_missing_transcript_identifiers_are_stable_and_do_not_expose_content():
+    e={'type':'response.output_audio_transcript.done','transcript':'Private customer text'}
+    key=app.transcript_event_id('call-1',e)
+    assert key==app.transcript_event_id('call-1',e)
+    assert 'Private' not in key
+
+def test_accepted_call_is_not_failed_when_webhook_journal_is_temporarily_down(monkeypatch):
+    from types import SimpleNamespace
+    from fastapi.testclient import TestClient
+    event=SimpleNamespace(type='realtime.call.incoming',id='event-qa',data=SimpleNamespace(call_id='call-qa',sip_headers=[]))
+    monkeypatch.setattr(app,'client',SimpleNamespace(webhooks=SimpleNamespace(unwrap=lambda *args:event)))
+    actions=[];accepts=[]
+    async def db(action,payload):
+        actions.append(action)
+        if action=='webhook_claim':return {'claimed':True}
+        if action=='call_start':return {'id':'crm-qa','status':'ringing'}
+        if action=='webhook_finish':raise RuntimeError('Temporary journal failure')
+        return {}
+    async def bootstrap(*args):return {'tools':[{}],'instructions':'QA'}
+    async def conversation(*args):pass
+    monkeypatch.setattr(app,'db',db);monkeypatch.setattr(app,'bootstrap_bridge',bootstrap)
+    monkeypatch.setattr(app,'accept',lambda *args:accepts.append(1));monkeypatch.setattr(app,'conversation',conversation)
+    response=TestClient(app.app).post('/openai/realtime-webhook',content='{}')
+    assert response.status_code==200 and response.json()['journal_pending'] is True
+    assert len(accepts)==1 and 'call_update' not in actions and 'handoff' not in actions
+
+def test_replayed_event_for_connected_call_does_not_accept_again(monkeypatch):
+    from types import SimpleNamespace
+    from fastapi.testclient import TestClient
+    event=SimpleNamespace(type='realtime.call.incoming',id='event-qa',data=SimpleNamespace(call_id='call-qa',sip_headers=[]))
+    monkeypatch.setattr(app,'client',SimpleNamespace(webhooks=SimpleNamespace(unwrap=lambda *args:event)))
+    async def db(action,payload):
+        if action=='webhook_claim':return {'claimed':True}
+        if action=='call_start':return {'id':'crm-qa','status':'connected'}
+        return {}
+    def no_accept(*args):raise AssertionError('Already accepted')
+    monkeypatch.setattr(app,'db',db);monkeypatch.setattr(app,'accept',no_accept)
+    response=TestClient(app.app).post('/openai/realtime-webhook',content='{}')
+    assert response.status_code==200 and response.json()['duplicate'] is True

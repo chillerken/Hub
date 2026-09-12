@@ -1,4 +1,4 @@
-import asyncio,json,os,logging,re
+import asyncio,json,os,logging,re,hashlib
 from contextlib import asynccontextmanager
 import requests,websockets
 from fastapi import FastAPI,Request,HTTPException
@@ -13,6 +13,11 @@ MODEL=os.getenv('OPENAI_REALTIME_MODEL','gpt-realtime-2.1')
 VOICE=os.getenv('OPENAI_REALTIME_VOICE','marin')
 client=OpenAI(api_key=KEY,webhook_secret=SECRET) if KEY and SECRET else None
 tasks=set()
+def transcript_event_id(call_id,event):
+    if event.get('event_id'):return event['event_id']
+    if event.get('item_id'):return event['item_id']+':'+event['type']
+    # Deterministic fallback without storing transcript text in identifiers.
+    return call_id+':'+hashlib.sha256(json.dumps(event,sort_keys=True).encode()).hexdigest()
 async def bootstrap_bridge(application,attempts=1):
     for attempt in range(attempts):
         try:
@@ -95,9 +100,14 @@ async def conversation(call_id,crm_id,settings):
                     text=e.get('transcript','')
                     if text:
                         transcript.append(text[:12000])
-                        await db('transcript',{'provider_call_id':call_id,'event_id':e.get('event_id') or e.get('item_id')+':'+et,'role':'customer' if et.startswith('conversation') else 'assistant','content':text[:12000]})
+                        await db('transcript',{'provider_call_id':call_id,'event_id':transcript_event_id(call_id,e),'role':'customer' if et.startswith('conversation') else 'assistant','content':text[:12000]})
                 elif et=='error':
-                    log.warning('Realtime reported error %s',(e.get('error') or {}).get('code','unknown'))
+                    code=(e.get('error') or {}).get('code','unknown')
+                    safe_code=code if code in ('insufficient_quota','rate_limit_exceeded','server_error','invalid_api_key','conversation_already_has_active_response') else 'unclassified'
+                    log.warning('Realtime reported error %s',safe_code)
+                    if code in ('insufficient_quota','invalid_api_key','server_error'):
+                        failed=True
+                        break
                 elif et=='session.closed':break
     except asyncio.CancelledError:
         failed=True;raise
@@ -126,6 +136,7 @@ async def webhook(request:Request):
     if event.type!='realtime.call.incoming':return {'ok':True}
     call_id=event.data.call_id
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,180}',call_id):raise HTTPException(400,'Invalid call id')
+    accepted=False
     try:
         claim=await db('webhook_claim',{'id':event.id,'provider':'openai'})
         if not claim.get('claimed'):
@@ -135,12 +146,20 @@ async def webhook(request:Request):
         from_header=next((getattr(h,'value','') if not isinstance(h,dict) else h.get('value','') for h in headers if (getattr(h,'name','') if not isinstance(h,dict) else h.get('name','')).lower()=='from'),'')
         match=re.search(r'\+[1-9][0-9]{7,14}',from_header)
         call=await db('call_start',{'provider_call_id':call_id,'phone':match.group(0) if match else None})
+        if call.get('status') in ('accepted','connected','completed'):
+            await db('webhook_finish',{'id':event.id})
+            return {'ok':True,'duplicate':True}
         settings=await bootstrap_bridge(app)
         await asyncio.to_thread(accept,call_id,settings)
+        accepted=True
         task=asyncio.create_task(conversation(call_id,call['id'],settings));tasks.add(task);task.add_done_callback(tasks.discard)
         await db('webhook_finish',{'id':event.id})
         return {'ok':True}
     except Exception:
+        if accepted:
+            # The call is already active. A journal outage must not reject it or accept twice.
+            log.warning('Call accepted; webhook acknowledgement journal needs review')
+            return {'ok':True,'journal_pending':True}
         log.warning('Unable to accept incoming call')
         try:
             await db('call_update',{'provider_call_id':call_id,'status':'failed','escalated':True})
