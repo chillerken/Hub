@@ -35,3 +35,25 @@ def test_invalid_webhook_signature(monkeypatch):
     assert response.status_code==400
 def test_no_recording_or_unverified_live_claim():
     status=app.health();assert status['recording'] is False;assert status['live_call_verified'] is False
+
+def test_processing_webhook_requests_retry_without_failing_original_call(monkeypatch):
+    from types import SimpleNamespace
+    from fastapi.testclient import TestClient
+    event=SimpleNamespace(type='realtime.call.incoming',id='event-qa',data=SimpleNamespace(call_id='call-qa'))
+    monkeypatch.setattr(app,'client',SimpleNamespace(webhooks=SimpleNamespace(unwrap=lambda *args:event)))
+    actions=[]
+    async def db(action,payload):actions.append(action);return {'claimed':False,'completed':False}
+    monkeypatch.setattr(app,'db',db)
+    response=TestClient(app.app).post('/openai/realtime-webhook',content='{}')
+    assert response.status_code==503
+    assert actions==['webhook_claim']
+
+def test_completed_webhook_replay_is_acknowledged(monkeypatch):
+    from types import SimpleNamespace
+    from fastapi.testclient import TestClient
+    event=SimpleNamespace(type='realtime.call.incoming',id='event-qa',data=SimpleNamespace(call_id='call-qa'))
+    monkeypatch.setattr(app,'client',SimpleNamespace(webhooks=SimpleNamespace(unwrap=lambda *args:event)))
+    async def db(action,payload):return {'claimed':False,'completed':True}
+    monkeypatch.setattr(app,'db',db)
+    response=TestClient(app.app).post('/openai/realtime-webhook',content='{}')
+    assert response.status_code==200

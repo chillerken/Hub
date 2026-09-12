@@ -2,6 +2,7 @@ import asyncio,json,os,logging,re
 from contextlib import asynccontextmanager
 import requests,websockets
 from fastapi import FastAPI,Request,HTTPException
+from fastapi.responses import JSONResponse
 from openai import OpenAI,InvalidWebhookSignatureError
 import central
 logging.basicConfig(level=logging.INFO)
@@ -14,6 +15,16 @@ client=OpenAI(api_key=KEY,webhook_secret=SECRET) if KEY and SECRET else None
 tasks=set()
 @asynccontextmanager
 async def lifespan(app):
+    try:
+        settings=await asyncio.to_thread(central.bootstrap)
+        app.state.bridge_ready=bool(settings.get('tools'))
+    except Exception:
+        app.state.bridge_ready=False
+    try:
+        response=await asyncio.to_thread(requests.get,'https://api.openai.com/v1/models/'+MODEL,headers={'Authorization':'Bearer '+KEY},timeout=10)
+        model_status=response.status_code
+    except Exception:model_status='timeout'
+    log.info('Lina configuration: openai=%s webhook=%s central_bridge=%s model_status=%s recording=false',bool(KEY),bool(SECRET),app.state.bridge_ready,model_status)
     yield
     for t in tuple(tasks): t.cancel()
     if tasks: await asyncio.gather(*tasks,return_exceptions=True)
@@ -21,7 +32,7 @@ app=FastAPI(title='LuxWash Lina',version='2.0.0',lifespan=lifespan)
 @app.get('/health')
 def health():
     required={'OPENAI_API_KEY':bool(KEY),'OPENAI_WEBHOOK_SECRET':bool(SECRET),'SUPABASE_APP_SECRET':bool(central.SECRET)}
-    return {'ok':all(required.values()),'required':required,'recording':False,'live_call_verified':False,'provider':'SIP via OpenAI','route_verified':False,'active_calls':len(tasks)}
+    return {'ok':all(required.values()) and getattr(app.state,'bridge_ready',False),'central_bridge':getattr(app.state,'bridge_ready',False),'required':required,'recording':False,'live_call_verified':False,'provider':'SIP via OpenAI','route_verified':False,'active_calls':len(tasks)}
 async def db(action,payload): return await asyncio.to_thread(central.event,action,payload)
 def accept(call_id,settings):
     tools=[{k:v for k,v in t.items() if k!='strict'} for t in settings['tools']]
@@ -50,6 +61,7 @@ async def handle_tool(ws,call_id,crm_id,event):
     await ws.send(json.dumps({'type':'response.create'}))
 async def conversation(call_id,crm_id,settings):
     failed=False
+    transcript=[]
     try:
         async with websockets.connect('wss://api.openai.com/v1/realtime?call_id='+call_id,additional_headers={'Authorization':'Bearer '+KEY},max_size=4000000) as ws:
             await db('call_update',{'provider_call_id':call_id,'status':'connected'})
@@ -60,7 +72,9 @@ async def conversation(call_id,crm_id,settings):
                 if et=='response.function_call_arguments.done':await handle_tool(ws,call_id,crm_id,e)
                 elif et in ('conversation.item.input_audio_transcription.completed','response.output_audio_transcript.done'):
                     text=e.get('transcript','')
-                    if text:await db('transcript',{'provider_call_id':call_id,'event_id':e.get('event_id') or e.get('item_id')+':'+et,'role':'customer' if et.startswith('conversation') else 'assistant','content':text[:12000]})
+                    if text:
+                        transcript.append(text[:12000])
+                        await db('transcript',{'provider_call_id':call_id,'event_id':e.get('event_id') or e.get('item_id')+':'+et,'role':'customer' if et.startswith('conversation') else 'assistant','content':text[:12000]})
                 elif et=='error':
                     log.warning('Realtime reported error %s',(e.get('error') or {}).get('code','unknown'))
                 elif et=='session.closed':break
@@ -71,6 +85,9 @@ async def conversation(call_id,crm_id,settings):
     finally:
         try:
             await db('call_update',{'provider_call_id':call_id,'status':'failed' if failed else 'completed','escalated':failed})
+            if transcript:
+                try:await asyncio.to_thread(central.post,'summary',{'provider_call_id':call_id,'transcript':'\n'.join(transcript)[-24000:]})
+                except Exception:log.warning('Summary unavailable; original transcript retained')
             if failed:await db('handoff',{'phone_call_id':crm_id,'summary':'Telefoongesprek onderbroken. Controleer transcript en bel terug.','priority':'high'})
         except Exception:log.error('Call persistence unavailable; check provider logs')
 @app.post('/openai/realtime-webhook')
@@ -86,7 +103,9 @@ async def webhook(request:Request):
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,180}',call_id):raise HTTPException(400,'Invalid call id')
     try:
         claim=await db('webhook_claim',{'id':event.id,'provider':'openai'})
-        if not claim.get('claimed'):return {'ok':True,'duplicate':True}
+        if not claim.get('claimed'):
+            if claim.get('completed'):return {'ok':True,'duplicate':True}
+            return JSONResponse(status_code=503,content={'error':'Event still processing; retry'})
         headers=event.data.sip_headers or []
         from_header=next((getattr(h,'value','') if not isinstance(h,dict) else h.get('value','') for h in headers if (getattr(h,'name','') if not isinstance(h,dict) else h.get('name','')).lower()=='from'),'')
         match=re.search(r'\+[1-9][0-9]{7,14}',from_header)
