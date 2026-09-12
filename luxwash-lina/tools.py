@@ -10,6 +10,9 @@ DB = os.getenv("AUDIT_DB","/tmp/luxwash_lina.sqlite3")
 CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID","primary")
 TRANSFER_NUMBER = "+32468186477"
 INTERNAL_EMAIL = "info@luxwash.online"
+SUPABASE_URL = os.getenv("SUPABASE_URL","").rstrip("/")
+SUPABASE_PUBLISHABLE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY","")
+SUPABASE_APP_SECRET = os.getenv("SUPABASE_APP_SECRET","")
 
 def fn(name, description, properties, required):
     return {"type":"function","name":name,"description":description,"parameters":{"type":"object","properties":properties,"required":required,"additionalProperties":False}}
@@ -59,6 +62,23 @@ def _sanitize_phone(phone):
     if p.startswith("0") and not p.startswith("+"): p="+32"+p[1:]
     return p
 
+def _crm_rpc(action: str, payload: dict):
+    if not SUPABASE_URL or not SUPABASE_PUBLISHABLE_KEY or not SUPABASE_APP_SECRET:
+        raise RuntimeError("central_crm_not_configured")
+    r=requests.post(
+        f"{SUPABASE_URL}/rest/v1/rpc/ai_business_rpc",
+        headers={
+            "Content-Type":"application/json",
+            "apikey":SUPABASE_PUBLISHABLE_KEY,
+            "Authorization":f"Bearer {SUPABASE_PUBLISHABLE_KEY}",
+        },
+        json={"p_secret":SUPABASE_APP_SECRET,"p_action":action,"p_payload":payload},
+        timeout=20,
+    )
+    if not r.ok:
+        raise RuntimeError(f"crm_{action}_failed_{r.status_code}")
+    return r.json() if r.content else None
+
 class ToolRuntime:
     def __init__(self,call_id): self.call_id=call_id; _ensure(call_id)
     def execute(self,name,args):
@@ -95,12 +115,47 @@ class ToolRuntime:
         if not state["data_consent"]: return {"ok":False,"error":"data_transfer_consent_missing"}
         st=datetime.fromisoformat(start_time).astimezone(TZ); en=datetime.fromisoformat(end_time).astimezone(TZ)
         if st.time()<time(8) or en.time()>time(20) or st.date()!=en.date(): return {"ok":False,"error":"outside_opening_hours"}
+        clean_phone=_sanitize_phone(phone)
         title=f"AANVRAAG – {service} – {name} – {municipality}"
-        desc=f"Status: voorlopig / persoonlijk bevestigen\nNaam: {name}\nTelefoon: {phone}\nAdres: {address}\nGemeente: {municipality}\nDienst: {service}\nOmvang: {scope}\nFoto-status: {photo_status}\nBijzonderheden: {details}\n\nNog persoonlijk bevestigen"
+        desc=f"Status: voorlopig / persoonlijk bevestigen\nNaam: {name}\nTelefoon: {clean_phone}\nAdres: {address}\nGemeente: {municipality}\nDienst: {service}\nOmvang: {scope}\nFoto-status: {photo_status}\nBijzonderheden: {details}\n\nNog persoonlijk bevestigen"
         from googleapiclient.discovery import build
         cal=build("calendar","v3",credentials=google_creds(),cache_discovery=False)
         event=cal.events().insert(calendarId=CALENDAR_ID,sendUpdates="none",body={"summary":title,"description":desc,"location":address,"start":{"dateTime":st.isoformat(),"timeZone":"Europe/Brussels"},"end":{"dateTime":en.isoformat(),"timeZone":"Europe/Brussels"},"transparency":"opaque","visibility":"private"}).execute()
-        _set(self.call_id,"tentative_created",True); return {"ok":True,"status":"voorlopig","event_id":event.get("id"),"title":title,"definitive":False}
+        event_id=event.get("id")
+        crm_synced=False; crm_lead_id=None; crm_appointment_id=None
+        try:
+            lead=_crm_rpc("create_lead",{
+                "name":name,
+                "phone":clean_phone,
+                "service":service,
+                "message":f"Telefonische aanvraag via Lina. Gemeente: {municipality}. Adres: {address}. Omvang: {scope}. Foto-status: {photo_status}. Details: {details}",
+                "source":"voice",
+                "status":"new",
+                "next_action":"Telefonische aanvraag persoonlijk bevestigen",
+                "agent_owner":"voice",
+                "consent_basis":"explicit_phone_data_transfer_consent",
+                "last_inbound_at":datetime.now(TZ).isoformat(),
+                "metadata":{"call_id":self.call_id,"address":address,"municipality":municipality,"scope":scope,"photo_status":photo_status,"google_event_id":event_id}
+            })
+            crm_lead_id=lead.get("id") if isinstance(lead,dict) else None
+            if crm_lead_id:
+                appt=_crm_rpc("create_appointment",{
+                    "lead_id":crm_lead_id,
+                    "starts_at":st.isoformat(),
+                    "ends_at":en.isoformat(),
+                    "status":"pending",
+                    "provider":"google_calendar",
+                    "provider_booking_id":event_id or "",
+                    "service_id":service,
+                    "notes":"Voorlopige telefonische aanvraag via Lina; persoonlijk bevestigen voor automatische reminder/opvolging."
+                })
+                crm_appointment_id=appt.get("id") if isinstance(appt,dict) else None
+                crm_synced=bool(crm_appointment_id)
+            _audit(self.call_id,"central_crm_sync",crm_synced,f"lead={crm_lead_id}; appointment={crm_appointment_id}")
+        except Exception as exc:
+            _audit(self.call_id,"central_crm_sync",False,str(exc))
+        _set(self.call_id,"tentative_created",True)
+        return {"ok":True,"status":"voorlopig","event_id":event_id,"title":title,"definitive":False,"crm_synced":crm_synced,"crm_lead_id":crm_lead_id,"crm_appointment_id":crm_appointment_id}
     def send_email_summary(self,service,name,summary):
         state=_get(self.call_id)
         if not state["summary_confirmed"] or not state["data_consent"]: return {"ok":False,"error":"consent_gate_not_satisfied"}
