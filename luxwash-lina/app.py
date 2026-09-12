@@ -13,11 +13,27 @@ MODEL=os.getenv('OPENAI_REALTIME_MODEL','gpt-realtime-2.1')
 VOICE=os.getenv('OPENAI_REALTIME_VOICE','marin')
 client=OpenAI(api_key=KEY,webhook_secret=SECRET) if KEY and SECRET else None
 tasks=set()
+async def bootstrap_bridge(application,attempts=1):
+    for attempt in range(attempts):
+        try:
+            settings=await asyncio.to_thread(central.bootstrap)
+            if not isinstance(settings,dict) or not settings.get('tools') or not settings.get('instructions'):
+                raise central.BridgeError('invalid_bootstrap')
+            application.state.bridge_ready=True
+            application.state.bridge_error=''
+            log.info('CRM bridge ready: tools=%s',len(settings['tools']))
+            return settings
+        except Exception as exc:
+            code=exc.code if isinstance(exc,central.BridgeError) else 'unexpected_error'
+            application.state.bridge_ready=False
+            application.state.bridge_error=code
+            log.warning('CRM bridge unavailable: code=%s attempt=%s',code,attempt+1)
+            if not isinstance(exc,central.BridgeError) or not exc.retryable or attempt+1>=attempts:raise
+            await asyncio.sleep(2*(attempt+1))
 @asynccontextmanager
 async def lifespan(app):
     try:
-        settings=await asyncio.to_thread(central.bootstrap)
-        app.state.bridge_ready=bool(settings.get('tools'))
+        await bootstrap_bridge(app,attempts=3)
     except Exception:
         app.state.bridge_ready=False
     try:
@@ -37,7 +53,7 @@ app=FastAPI(title='LuxWash Lina',version='2.0.0',lifespan=lifespan)
 @app.get('/health')
 def health():
     required={'OPENAI_API_KEY':bool(KEY),'OPENAI_WEBHOOK_SECRET':bool(SECRET),'SUPABASE_APP_SECRET':bool(central.SECRET)}
-    return {'ok':all(required.values()) and getattr(app.state,'bridge_ready',False) and getattr(app.state,'model_error',None) not in ('invalid_api_key','invalid_organization','invalid_project'),'central_bridge':getattr(app.state,'bridge_ready',False),'required':required,'recording':False,'live_call_verified':False,'model_status':getattr(app.state,'model_status',None),'model_error':getattr(app.state,'model_error',None),'provider':'SIP via OpenAI','route_verified':False,'active_calls':len(tasks)}
+    return {'ok':all(required.values()) and getattr(app.state,'bridge_ready',False) and getattr(app.state,'model_status',None)==200,'central_bridge':getattr(app.state,'bridge_ready',False),'bridge_error':getattr(app.state,'bridge_error',None),'required':required,'recording':False,'live_call_verified':False,'model_status':getattr(app.state,'model_status',None),'model_error':getattr(app.state,'model_error',None),'provider':'SIP via OpenAI','route_verified':False,'active_calls':len(tasks)}
 async def db(action,payload): return await asyncio.to_thread(central.event,action,payload)
 def accept(call_id,settings):
     tools=[{k:v for k,v in t.items() if k!='strict'} for t in settings['tools']]
@@ -119,7 +135,7 @@ async def webhook(request:Request):
         from_header=next((getattr(h,'value','') if not isinstance(h,dict) else h.get('value','') for h in headers if (getattr(h,'name','') if not isinstance(h,dict) else h.get('name','')).lower()=='from'),'')
         match=re.search(r'\+[1-9][0-9]{7,14}',from_header)
         call=await db('call_start',{'provider_call_id':call_id,'phone':match.group(0) if match else None})
-        settings=await asyncio.to_thread(central.bootstrap)
+        settings=await bootstrap_bridge(app)
         await asyncio.to_thread(accept,call_id,settings)
         task=asyncio.create_task(conversation(call_id,call['id'],settings));tasks.add(task);task.add_done_callback(tasks.discard)
         await db('webhook_finish',{'id':event.id})

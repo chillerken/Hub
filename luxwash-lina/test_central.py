@@ -65,3 +65,58 @@ def test_invalid_live_key_cannot_report_ready(monkeypatch):
     monkeypatch.setattr(app.app.state,'bridge_ready',True,raising=False)
     monkeypatch.setattr(app.app.state,'model_error','invalid_api_key',raising=False)
     assert app.health()['ok'] is False
+
+def test_bridge_auth_failure_is_sanitized_and_not_retried(monkeypatch,caplog):
+    from types import SimpleNamespace
+    import pytest
+    calls=[]
+    monkeypatch.setattr(app.central,'SECRET','test-secret')
+    def post(*args,**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(status_code=401,text='sensitive response must never be logged')
+    monkeypatch.setattr(app.central.requests,'post',post)
+    application=SimpleNamespace(state=SimpleNamespace())
+    with pytest.raises(app.central.BridgeError,match='http_401'):
+        asyncio.run(app.bootstrap_bridge(application,attempts=3))
+    assert len(calls)==1
+    assert calls[0]['allow_redirects'] is False
+    assert application.state.bridge_ready is False
+    assert application.state.bridge_error=='http_401'
+    assert 'sensitive response' not in caplog.text
+    assert 'test-secret' not in caplog.text
+
+def test_bootstrap_recovers_after_transient_failure(monkeypatch):
+    from types import SimpleNamespace
+    attempts=[]
+    def bootstrap():
+        attempts.append(1)
+        if len(attempts)==1:raise app.central.BridgeError('http_503',True)
+        return {'tools':[{'name':'getServices'}],'instructions':'Test only'}
+    async def no_delay(*args):pass
+    monkeypatch.setattr(app.central,'bootstrap',bootstrap)
+    monkeypatch.setattr(app.asyncio,'sleep',no_delay)
+    application=SimpleNamespace(state=SimpleNamespace(bridge_ready=False))
+    asyncio.run(app.bootstrap_bridge(application,attempts=3))
+    assert len(attempts)==2
+    assert application.state.bridge_ready is True
+    assert application.state.bridge_error==''
+
+def test_mutations_are_never_automatically_retried(monkeypatch):
+    import pytest,requests
+    calls=[]
+    monkeypatch.setattr(app.central,'SECRET','test-secret')
+    def post(*args,**kwargs):
+        calls.append(1)
+        raise requests.Timeout('secret URL must not be exposed')
+    monkeypatch.setattr(app.central.requests,'post',post)
+    with pytest.raises(app.central.BridgeError,match='^timeout$'):
+        app.central.event('call_start',{})
+    assert len(calls)==1
+
+def test_model_timeout_cannot_report_ready(monkeypatch):
+    monkeypatch.setattr(app,'KEY','test-only')
+    monkeypatch.setattr(app,'SECRET','test-only')
+    monkeypatch.setattr(app.central,'SECRET','test-only')
+    monkeypatch.setattr(app.app.state,'bridge_ready',True,raising=False)
+    monkeypatch.setattr(app.app.state,'model_status','timeout',raising=False)
+    assert app.health()['ok'] is False
