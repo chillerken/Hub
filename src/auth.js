@@ -8,13 +8,13 @@ function sign(payload, secret) {
   return crypto.createHmac('sha256', secret).update(payload).digest('base64url');
 }
 
-function makeAdminCookie(secret) {
-  const payload = b64url(JSON.stringify({ role: 'admin', exp: Date.now() + 1000 * 60 * 60 * 12 }));
+function makeAdminCookie(secret, subject) {
+  const payload = b64url(JSON.stringify({ role: 'admin', ...(subject?{sub:subject}:{}), exp: Date.now() + 1000 * 60 * 60 * 12 }));
   return `${payload}.${sign(payload, secret)}`;
 }
 
 function verifyAdminCookie(token, secret) {
-  if (!token || !token.includes('.')) return false;
+  if (!secret || secret.length<32 || !token || !token.includes('.') || token.split('.').length!==2) return false;
   const [payload, signature] = token.split('.');
   const expected = sign(payload, secret);
   const a = Buffer.from(signature);

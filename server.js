@@ -16,7 +16,8 @@ const { makeAdminCookie, verifyAdminCookie, parseCookies } = require('./src/auth
 const store = makeStore(config);
 const messenger = makeMessenger(config, store);
 const ai = makeAi(config);
-const automation = makeAutomation(config, store, messenger);
+const central = require('./src/core/routes')(config, store);
+const automation = central.automation;
 const PUBLIC = path.join(__dirname, 'public');
 const hits = new Map();
 let automationTimer = null;
@@ -25,7 +26,9 @@ function securityHeaders(extra={}) {
   return {
     'X-Content-Type-Options':'nosniff',
     'X-Frame-Options':'SAMEORIGIN',
-    'Referrer-Policy':'strict-origin-when-cross-origin',
+    'Referrer-Policy':'no-referrer',
+    'Strict-Transport-Security':'max-age=31536000',
+    'Cache-Control':'no-store',
     'Permissions-Policy':'camera=(), microphone=(), geolocation=()',
     'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; frame-ancestors 'self'; base-uri 'self'",
     ...extra
@@ -35,7 +38,7 @@ function send(res,status,body,type='text/html; charset=utf-8',extra={}) { res.wr
 function json(res,status,obj,extra={}) { send(res,status,JSON.stringify(obj),'application/json; charset=utf-8',extra); }
 function redirect(res,to,extra={}) { send(res,302,'','text/plain; charset=utf-8',{'Location':to,...extra}); }
 function safeEq(a,b) { const A=Buffer.from(String(a)),B=Buffer.from(String(b)); return A.length===B.length && crypto.timingSafeEqual(A,B); }
-function isAdmin(req) { return verifyAdminCookie(parseCookies(req.headers.cookie||'').aba_admin, config.cookieSecret); }
+function isAdmin(req) { return req.memberDenied!==true && verifyAdminCookie(parseCookies(req.headers.cookie||'').aba_admin, config.cookieSecret); }
 function rateOk(req,key,limit,windowMs) {
   const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'x').split(',')[0].trim();
   const k = `${key}:${ip}`; const t=Date.now();
@@ -78,6 +81,13 @@ const server = http.createServer(async (req,res) => {
     const u = new URL(req.url, config.baseUrl);
     const p = u.pathname;
     if (staticFile(p,res)) return;
+    const adminToken=parseCookies(req.headers.cookie||'').aba_admin;
+    if (verifyAdminCookie(adminToken,config.cookieSecret)) {
+      const claims=JSON.parse(Buffer.from(adminToken.split('.')[0],'base64url').toString());
+      if (claims.sub) { const member=await central.db('member',{id:claims.sub}); req.memberDenied=!member||!['owner','admin'].includes(member.role); }
+    }
+    if(await central.routes(req,res,{send,json,isAdmin,redirect,sameOrigin})) return;
+    if(req.method==='GET' && p==='/admin' && isAdmin(req)) return redirect(res,'/cockpit');
 
     if(req.method==='GET' && p==='/health') {
       try {
@@ -90,7 +100,7 @@ const server = http.createServer(async (req,res) => {
       return json(res,200,{ok:true,source:'wix-bookings',updatedAt:bookingCatalog.UPDATED_AT,services:bookingCatalog.publicServices()},{'Cache-Control':'public, max-age=300'});
     }
 
-    if(req.method==='GET' && p==='/') return send(res,200,html.publicHome(config.business,{ai:ai.ready}));
+    if(req.method==='GET' && p==='/') return redirect(res,'/boeken');
 
     if(req.method==='POST' && p==='/api/leads') {
       if(!rateOk(req,'lead',20,60000)) return json(res,429,{error:'Te veel aanvragen. Probeer later opnieuw.'});
@@ -126,9 +136,9 @@ const server = http.createServer(async (req,res) => {
       if(!sameOrigin(req)) return send(res,403,'Ongeldige oorsprong','text/plain; charset=utf-8');
       if(!rateOk(req,'login',10,15*60000)) return send(res,429,'Te veel pogingen','text/plain; charset=utf-8');
       const b=await body(req);
-      if(!safeEq(b.password||'',config.adminPassword)) return send(res,401,html.loginPage(config.business,'Onjuist wachtwoord.'));
+      if(!config.adminPassword || !safeEq(b.password||'',config.adminPassword)) return send(res,401,html.loginPage(config.business,'Onjuist wachtwoord.'));
       const token=makeAdminCookie(config.cookieSecret);
-      return redirect(res,'/admin',{'Set-Cookie':`aba_admin=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200${config.production?'; Secure':''}`});
+      return redirect(res,'/cockpit',{'Set-Cookie':`aba_admin=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200${config.production?'; Secure':''}`});
     }
     if(req.method==='POST' && p==='/admin/logout') return json(res,200,{ok:true},{'Set-Cookie':'aba_admin=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'});
     if(p.startsWith('/admin') && !isAdmin(req)) return redirect(res,'/admin/login');
@@ -159,7 +169,8 @@ const server = http.createServer(async (req,res) => {
       const patch=Object.fromEntries(Object.entries(b).filter(([k])=>allowed.includes(k)));
       const row=await store.updateLead(mLead[1],patch); return row?json(res,200,row):json(res,404,{error:'Lead niet gevonden'});
     }
-    if(req.method==='POST' && p==='/api/admin/appointments') {
+    if(req.method==='POST' && p==='/api/admin/appointments') return json(res,410,{error:'Gebruik het centrale dashboard voor een veilige boeking.'});
+    if(false) {
       const b=await body(req); if(!b.lead_id||!b.starts_at) return json(res,400,{error:'Klant en datum/tijd zijn verplicht'});
       const lead=await store.getLead(b.lead_id); if(!lead) return json(res,404,{error:'Lead niet gevonden'});
       const starts=new Date(b.starts_at); if(Number.isNaN(starts.getTime())) return json(res,400,{error:'Ongeldige datum/tijd'});
@@ -167,15 +178,16 @@ const server = http.createServer(async (req,res) => {
       await store.updateLead(b.lead_id,{status:'won',next_action:'Afspraak gepland'}); return json(res,201,row);
     }
     const mAppt=p.match(/^\/api\/admin\/appointments\/([a-f0-9-]+)$/);
-    if(req.method==='PATCH' && mAppt) {
+    if(req.method==='PATCH' && mAppt) return json(res,410,{error:'Gebruik het centrale dashboard.'});
+    if(false) {
       const b=await body(req); const allowed=['status','reminder_sent_at','completed_at'];
       const patch=Object.fromEntries(Object.entries(b).filter(([k])=>allowed.includes(k)));
       const row=await store.updateAppointment(mAppt[1],patch); return row?json(res,200,row):json(res,404,{error:'Afspraak niet gevonden'});
     }
     if(req.method==='POST' && p==='/api/admin/automation/run') return json(res,200,await automation.run());
     if(req.method==='POST' && p==='/api/cron/run') {
-      const supplied=req.headers['x-cron-secret']||u.searchParams.get('secret')||'';
-      if(!safeEq(supplied,config.cronSecret)) return json(res,401,{error:'Ongeldige cron secret'});
+      const supplied=req.headers['x-cron-secret']||'';
+      if(!config.cronSecret || !safeEq(supplied,config.cronSecret)) return json(res,401,{error:'Ongeldige cron secret'});
       return json(res,200,await automation.run());
     }
     return send(res,404,'Niet gevonden','text/plain; charset=utf-8');
@@ -187,6 +199,8 @@ const server = http.createServer(async (req,res) => {
 
 async function start() {
   await store.init();
+  await central.db('health');
+  console.log('LuxWash integration configuration',JSON.stringify({database:true,ai:Boolean(config.openaiKey),email:Boolean(config.resend.apiKey&&config.resend.from),inboundEmail:Boolean(process.env.RESEND_WEBHOOK_SECRET),stripe:Boolean(process.env.STRIPE_WEBHOOK_SECRET),version:'central-1'}));
   server.listen(config.port,'0.0.0.0',()=>console.log(`AI Business Automation productie draait op ${config.baseUrl}`));
   if(config.automationIntervalMinutes > 0) {
     automationTimer=setInterval(()=>automation.run().catch(e=>console.error('Automation error:',e)),config.automationIntervalMinutes*60*1000);
@@ -198,5 +212,8 @@ async function shutdown() {
   server.close(async()=>{ await store.close().catch(()=>{}); process.exit(0); });
   setTimeout(()=>process.exit(1),10000).unref();
 }
-process.on('SIGTERM',shutdown); process.on('SIGINT',shutdown);
-start().catch(e=>{ console.error('Startup failed:',e); process.exit(1); });
+module.exports = {server,start};
+if (require.main === module) {
+ process.on('SIGTERM',shutdown); process.on('SIGINT',shutdown);
+ start().catch(e=>{ console.error('Startup failed:',e); process.exit(1); });
+}

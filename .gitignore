@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.*
+!.env.example
+public/central.js
+__pycache__/
+.sites-runtime/
+
+supabase/.temp/
