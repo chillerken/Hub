@@ -22,7 +22,7 @@ module.exports=function central(config,legacyStore){
    if(req.method!=='POST')throw Object.assign(new Error('POST vereist'),{status:405});
    if(p==='/api/webhooks/resend'){
     if(!verifySvix(raw,req.headers,process.env.RESEND_WEBHOOK_SECRET))throw Object.assign(new Error('Ongeldige webhookhandtekening'),{status:401});
-    const claim=await db('webhook_claim',{id:req.headers['svix-id'],provider:'resend'});if(!claim.claimed){json(res,200,{ok:true});return true;}
+    const claim=await db('webhook_claim',{id:req.headers['svix-id'],provider:'resend'});if(!claim.claimed){json(res,claim.completed?200:503,claim.completed?{ok:true}:{error:'Gebeurtenis wordt nog verwerkt; probeer opnieuw'});return true;}
     if(b.type==='email.received'){
      const r=await fetch('https://api.resend.com/emails/receiving/'+encodeURIComponent(b.data.email_id),{headers:{Authorization:`Bearer ${config.resend.apiKey}`},signal:AbortSignal.timeout(15000)});const mail=await r.json();if(!r.ok)throw new Error('E-mail ophalen mislukt');
      const sender=String(mail.from||'').match(/<([^>]+)>/)?.[1]||String(mail.from||'');
