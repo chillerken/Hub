@@ -37,7 +37,7 @@ app=FastAPI(title='LuxWash Lina',version='2.0.0',lifespan=lifespan)
 @app.get('/health')
 def health():
     required={'OPENAI_API_KEY':bool(KEY),'OPENAI_WEBHOOK_SECRET':bool(SECRET),'SUPABASE_APP_SECRET':bool(central.SECRET)}
-    return {'ok':all(required.values()) and getattr(app.state,'bridge_ready',False),'central_bridge':getattr(app.state,'bridge_ready',False),'required':required,'recording':False,'live_call_verified':False,'model_status':getattr(app.state,'model_status',None),'model_error':getattr(app.state,'model_error',None),'provider':'SIP via OpenAI','route_verified':False,'active_calls':len(tasks)}
+    return {'ok':all(required.values()) and getattr(app.state,'bridge_ready',False) and getattr(app.state,'model_error',None) not in ('invalid_api_key','invalid_organization','invalid_project'),'central_bridge':getattr(app.state,'bridge_ready',False),'required':required,'recording':False,'live_call_verified':False,'model_status':getattr(app.state,'model_status',None),'model_error':getattr(app.state,'model_error',None),'provider':'SIP via OpenAI','route_verified':False,'active_calls':len(tasks)}
 async def db(action,payload): return await asyncio.to_thread(central.event,action,payload)
 def accept(call_id,settings):
     tools=[{k:v for k,v in t.items() if k!='strict'} for t in settings['tools']]

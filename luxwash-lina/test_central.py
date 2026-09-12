@@ -57,3 +57,11 @@ def test_completed_webhook_replay_is_acknowledged(monkeypatch):
     monkeypatch.setattr(app,'db',db)
     response=TestClient(app.app).post('/openai/realtime-webhook',content='{}')
     assert response.status_code==200
+
+def test_invalid_live_key_cannot_report_ready(monkeypatch):
+    monkeypatch.setattr(app,'KEY','test-only')
+    monkeypatch.setattr(app,'SECRET','test-only')
+    monkeypatch.setattr(app.central,'SECRET','test-only')
+    monkeypatch.setattr(app.app.state,'bridge_ready',True,raising=False)
+    monkeypatch.setattr(app.app.state,'model_error','invalid_api_key',raising=False)
+    assert app.health()['ok'] is False
