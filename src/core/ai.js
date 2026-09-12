@@ -11,9 +11,9 @@ module.exports=function makeAI(config,db){
  async function answer(message,token){
   if(!config.openaiKey)throw Object.assign(new Error('AI is nog niet gekoppeld'),{status:503});
   const session=await db('session',{token_hash:hash(token)});const settings=await db('settings');
-  await db('message',{conversation_id:session.id,direction:'inbound',content:message});
+  await db('message',{conversation_id:session.id,customer_id:session.customer_id,direction:'inbound',content:message});
   const input=[...session.messages.map(m=>({role:m.direction==='inbound'?'user':'assistant',content:m.content})),{role:'user',content:message}];
-  const ctx={source:'website',sessionId:session.id};
+  const ctx={source:'website',sessionId:session.id,customerId:session.customer_id};
   for(let round=0;round<8;round++){
    const r=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${config.openaiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:config.openaiModel,instructions:instructions(settings),input,tools:tools.definitions,parallel_tool_calls:false,store:false,max_output_tokens:1200}),signal:AbortSignal.timeout(45000)});
    const d=await r.json();if(!r.ok)throw Object.assign(new Error('AI is tijdelijk niet bereikbaar'),{status:502});

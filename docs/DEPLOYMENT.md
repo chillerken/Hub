@@ -19,7 +19,7 @@ Both existing Render services use the free plan and can sleep. This cannot meet 
 
 New tables have RLS and explicit read policies tied to enabled membership. Privileged writes go through the server's existing high-entropy app-secret RPC guard. Supabase advisors warn about the intentionally callable SECURITY DEFINER gateway; direct private dispatch and tables are not anonymously accessible, and incorrect-secret/RLS tests pass. Migration to a scoped server credential and retirement of the legacy RPC remain hardening work; do not present an all-clear external security audit.
 
-No audio recordings. Transcript TTL 30 days; message TTL 90 days. Cleanup runs with the automation worker; sleeping services do not run timers. A non-sleeping scheduler is necessary to guarantee TTL and reminder punctuality. Owner must verify processor agreements, transfer safeguards, financial retention periods and privacy notice accuracy. This implementation is not a legal compliance certification.
+No audio recordings. Transcript TTL 30 days; message TTL 90 days. Cleanup is independently scheduled every 15 minutes with Supabase pg_cron. Reminders still require a non-sleeping runtime for punctual delivery. Owner must verify processor agreements, transfer safeguards, financial retention periods and privacy notice accuracy. This implementation is not a legal compliance certification.
 
 ## Verification distinction
 
@@ -30,8 +30,10 @@ No audio recordings. Transcript TTL 30 days; message TTL 90 days. Cleanup runs w
 
 ## Unsupported / incomplete acceptance areas
 
-Google Calendar synchronization, WhatsApp templates, SMS delivery, automatically generated quote line items, full role-specific admin UI, provider-side audio recording, invoice PDF generation, automatic external review detection, and full advanced analytics are not yet complete. The database supports them but schema presence is not implementation.
+Optional Google Calendar synchronization, WhatsApp templates, SMS delivery, full role-specific admin UI, provider-side audio recording, invoice PDF generation, automatic external review detection, cohort analysis and employee-specific capacity planning are not yet complete. The database supports them but schema presence is not implementation.
 
 ## Release safety
 
 Apply migrations before app deployment. Ship Node backend before the Python phone gateway and Sites proxy. Keep existing provider secrets. On backend failure, leave the current website public form and phone provider fallback available. Do not restore the legacy endpoint that could create appointments without a verified duration.
+
+Migration filenames match the versions actually recorded by Supabase. This repository extends an existing project; earlier remote migrations predate this implementation and include historical secret rotations. Do not run these additions against an empty database or blindly use CLI db push without first reconciling the existing baseline in a secure workspace.

@@ -1,6 +1,7 @@
+begin;
 -- Run in a transaction and ROLLBACK: test customers never enter production data.
 do $$ declare svc uuid; cust uuid; ap uuid; r jsonb; t timestamptz; count_before int; begin
-select id into svc from public.services limit 1;
+select id into svc from public.services where duration_minutes is not null and price_mode<>'quote' limit 1;
 t:=((current_date+3)::text||' 10:00 Europe/Brussels')::timestamptz;
 update public.settings set value=value||jsonb_build_object('allowed_postcodes',jsonb_build_array('9300'),'lead_hours',0) where key='planning';
 insert into public.availability(starts_at,ends_at,kind) values(t-interval '1 hour',t+interval '9 hours','open');
@@ -21,6 +22,10 @@ if (select count(*) from public.automation_jobs where appointment_id=ap and stat
 r:=private.luxwash_dispatch('appointment_change',jsonb_build_object('id',ap,'admin',true,'status','completed'));
 if not exists(select 1 from public.review_requests where appointment_id=ap) then raise exception 'TEST reviews'; end if;
 if not exists(select 1 from public.repeat_booking_suggestions where appointment_id=ap) then raise exception 'TEST repeat'; end if;
+r:=private.luxwash_dispatch('book',jsonb_build_object('name','TEST transaction rollback','email','test@example.invalid','service_id',svc,'starts_at',t,'postcode','9300','address','TEST','source','phone','idempotency_key','test-cancel-1','manage_token_hash','cancel-hash'));
+ap:=(r->'appointment'->>'id')::uuid;
+r:=private.luxwash_dispatch('appointment_change',jsonb_build_object('id',ap,'token_hash','cancel-hash','status','cancelled'));
+if r->>'status'<>'cancelled' or not private.available(svc,t,'9300') then raise exception 'TEST cancellation';end if;
 r:=private.luxwash_dispatch('claim_jobs','{}');
 if r is null then raise exception 'TEST jobs'; end if;
 if (select count(*) from public.customers where id=cust)<>1 then raise exception 'TEST customer'; end if;
@@ -41,3 +46,5 @@ set local role authenticated;
 do $$ begin if (select count(*) from public.customers)<>0 then raise exception 'TEST authenticated leak';end if;end $$;
 reset role;
 select 'PASS: booking, identity reuse, conflict, move, capability auth, reminder, completion, review, repeat, jobs, call dedup, rate limit, RLS' as test_result;
+
+rollback;

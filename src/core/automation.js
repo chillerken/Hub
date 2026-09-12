@@ -9,13 +9,17 @@ function formatMessage(context,settings,config){
  const v=kinds[job.kind];if(!v)throw new Error('Onbekende berichtsoort');return {subject:v[0],text:`Dag ${c.name},\n\n${v[1]}\n\nLuxWash\n${settings.business.phone}\n${settings.business.email}`};
 }
 module.exports=function automation(config,db){
+ const classify=require('./classify')(config);
  async function run(){
  const jobs=await db('claim_jobs');const settings=await db('settings');const results=[];
  for(const job of jobs){
   let status='sent',provider_id='',error='';
   try{
    const ctx=await db('job_context',{id:job.id});const c=ctx.customer,a=ctx.appointment;
-   if(!c||c.status!=='active')status='skipped';
+   if(job.kind==='classify'){
+    const message=await db('message_get',{id:job.payload.message_id});
+    if(!message)status='skipped';else {const classification=await classify(message.content);if(!classification.available)throw new Error('AI-classificatie tijdelijk niet beschikbaar');await db('message_classified',{id:message.id,...classification});status='completed';}
+   }else if(!c||c.status!=='active')status='skipped';
    else if(job.kind==='repeat'&&!c.marketing_consent)status='skipped';
    else if(job.kind==='reminder'&&(!['confirmed','scheduled'].includes(a.status)||new Date(a.starts_at)<=new Date()))status='skipped';
    else if(['confirmation','request_received'].includes(job.kind)&&['cancelled','completed'].includes(a.status))status='skipped';

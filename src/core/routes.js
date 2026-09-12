@@ -3,6 +3,7 @@ const {z,booking,contact,planning,safeEqual}=require('./validation');const {hash
 const shell=title=>`<!doctype html><html lang="nl-BE"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${title} · LuxWash</title><link rel="stylesheet" href="/central.css"><script src="/central.js" defer></script></head><body><div id="root"></div></body></html>`;
 async function rawBody(req){let data='';for await(const c of req){data+=c;if(Buffer.byteLength(data)>100000)throw Object.assign(new Error('Aanvraag te groot'),{status:413});}return data;}
 module.exports=function central(config,legacyStore){
+ const classify=require('./classify')(config);
  const db=require('./db')(config),ai=require('./ai')(config,db),automation=require('./automation')(config,db);
  async function routes(req,res,helpers){
  const {send,json,isAdmin,redirect,sameOrigin}=helpers;const url=new URL(req.url,config.baseUrl),p=url.pathname;
@@ -25,7 +26,7 @@ module.exports=function central(config,legacyStore){
     if(b.type==='email.received'){
      const r=await fetch('https://api.resend.com/emails/receiving/'+encodeURIComponent(b.data.email_id),{headers:{Authorization:`Bearer ${config.resend.apiKey}`},signal:AbortSignal.timeout(15000)});const mail=await r.json();if(!r.ok)throw new Error('E-mail ophalen mislukt');
      const sender=String(mail.from||'').match(/<([^>]+)>/)?.[1]||String(mail.from||'');
-     await db('inbound_email',{sender,recipient:(mail.to||[]).join(','),subject:String(mail.subject||'').slice(0,300),body:String(mail.text||'').slice(0,12000),provider_id:b.data.email_id,intent:'unclassified',priority:'normal'});
+     await db('inbound_email',{sender,recipient:(mail.to||[]).join(','),subject:String(mail.subject||'').slice(0,300),body:String(mail.text||'').slice(0,12000),provider_id:b.data.email_id,priority:'normal'});
     }else if(['email.delivered','email.bounced','email.complained'].includes(b.type))await db('delivery_status',{provider_id:b.data.email_id,status:b.type.split('.')[1]});
     await db('webhook_finish',{id:req.headers['svix-id']});json(res,200,{ok:true});return true;
    }
@@ -38,9 +39,14 @@ module.exports=function central(config,legacyStore){
   if(p.startsWith('/api/lina/')){
    const ts=req.headers['x-luxwash-timestamp'];const expected=crypto.createHmac('sha256',config.supabase.appSecret).update(`${ts}.${raw}`).digest('hex');
    if(!ts||Math.abs(Date.now()/1000-Number(ts))>120||!safeEqual(expected,req.headers['x-luxwash-signature']))throw Object.assign(new Error('Niet gemachtigd'),{status:401});
-   if(p==='/api/lina/bootstrap')json(res,200,{instructions:ai.instructions(await db('settings')),tools:ai.tools.definitions});
+   if(p==='/api/lina/summary'){
+    const v=z.object({provider_call_id:z.string().max(180),transcript:z.string().max(24000)}).parse(b);const summary=await classify(v.transcript);
+    const call=await db('call_update',{provider_call_id:v.provider_call_id,...summary,...(summary.handoff?{escalated:true}:{})});
+    if(summary.handoff&&call?.id)await db('handoff',{phone_call_id:call.id,customer_id:call.customer_id,summary:summary.summary,priority:summary.priority});
+    json(res,200,{ok:true});
+   }else if(p==='/api/lina/bootstrap')json(res,200,{instructions:ai.instructions(await db('settings')),tools:ai.tools.definitions});
    else if(p==='/api/lina/tool'){
-    const ctx=z.object({sessionId:z.string().max(160),toolCallId:z.string().max(160),phoneCallId:z.string().uuid().optional(),customerId:z.string().uuid().optional()}).parse(b.context);json(res,200,await ai.tools.execute(b.name,b.arguments,{...ctx,source:'phone'}));
+    const ctx=z.object({sessionId:z.string().max(160),toolCallId:z.string().max(160),phoneCallId:z.string().uuid().optional(),customerId:z.string().uuid().optional()}).parse(b.context);const call=await db('call_start',{provider_call_id:ctx.sessionId});ctx.customerId=call?.customer_id||ctx.customerId;json(res,200,await ai.tools.execute(b.name,b.arguments,{...ctx,source:'phone'}));
    }else if(p==='/api/lina/event'){
     const allowed=['call_start','call_update','transcript','tool_claim','tool_finish','webhook_claim','webhook_finish','handoff'];if(!allowed.includes(b.action))throw new Error('Onbekende actie');json(res,200,await db(b.action,b.payload));
    }else json(res,404,{error:'Niet gevonden'});return true;
@@ -75,6 +81,8 @@ module.exports=function central(config,legacyStore){
    const r=await fetch(`${config.supabase.url}/auth/v1/token?grant_type=password`,{method:'POST',headers:{apikey:config.supabase.publishableKey,'Content-Type':'application/json'},body:JSON.stringify(v),signal:AbortSignal.timeout(15000)});const data=await r.json();
    const member=r.ok?await db('member',{id:data.user.id}):null;if(!member||!['owner','admin'].includes(member.role))throw Object.assign(new Error('Geen toegang tot LuxWash-beheer'),{status:401});
    json(res,200,{ok:true},{'Set-Cookie':`aba_admin=${encodeURIComponent(makeAdminCookie(config.cookieSecret,member.id))}; HttpOnly; SameSite=Strict; Secure; Path=/; Max-Age=43200`});
+  }else if(req.method==='GET'&&p==='/api/core/admin/analytics')json(res,200,await db('analytics'));
+  else if(req.method==='POST'&&p==='/api/core/admin/quote-draft'){const v=z.object({customer_id:z.string().uuid(),brief:z.string().min(10).max(3000)}).parse(b);const proposal=await require('./quote')(config)(v.brief,await db('catalog'));json(res,201,await db('quote_draft',{...proposal,customer_id:v.customer_id}));
   }else if(req.method==='GET'&&p==='/api/core/admin/status'){
    const s=await db('settings');let voice={reachable:false};try{const r=await fetch('https://luxwash-lina-phone-agent.onrender.com/health',{signal:AbortSignal.timeout(5000)});voice={reachable:r.ok,...await r.json()};}catch{}
    json(res,200,{database:true,ai_configured:Boolean(config.openaiKey),email_configured:automation.ready,voice,planning_configured:s.planning.opening_hours.length>0&&s.planning.allowed_postcodes.length>0,settings:s});
