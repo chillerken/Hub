@@ -9,6 +9,7 @@ const makeStore = require('./src/store');
 const makeMessenger = require('./src/messaging');
 const makeAi = require('./src/ai');
 const makeAutomation = require('./src/automation');
+const bookingCatalog = require('./src/bookingCatalog');
 const html = require('./src/html');
 const { makeAdminCookie, verifyAdminCookie, parseCookies } = require('./src/auth');
 
@@ -83,6 +84,10 @@ const server = http.createServer(async (req,res) => {
         const db = await store.health();
         return json(res, db?200:503, { ok:Boolean(db), database:Boolean(db), ai:ai.ready, email:messenger.emailReady, whatsapp:messenger.whatsappReady, service:'ai-business-automation-production' });
       } catch(e) { return json(res,503,{ok:false,database:false,error:'Database niet bereikbaar'}); }
+    }
+
+    if(req.method==='GET' && p==='/api/booking/services') {
+      return json(res,200,{ok:true,source:'wix-bookings',updatedAt:bookingCatalog.UPDATED_AT,services:bookingCatalog.publicServices()},{'Cache-Control':'public, max-age=300'});
     }
 
     if(req.method==='GET' && p==='/') return send(res,200,html.publicHome(config.business,{ai:ai.ready}));
