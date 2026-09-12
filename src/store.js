@@ -42,6 +42,15 @@ class Store {
   async createEvent(d) { return await this.rpc('create_event', d); }
   async listEvents(limit = 100) { return await this.rpc('list_events', { limit }); }
 
+  async createJob(d) { return await this.rpc('create_job', d); }
+  async listDueJobs(limit = 50) { return await this.rpc('list_due_jobs', { limit }); }
+  async updateJob(id, patch) { return await this.rpc('update_job', { id, ...patch }); }
+  async createSocialPost(d) { return await this.rpc('create_social_post', d); }
+  async listSocialPosts(limit = 100) { return await this.rpc('list_social_posts', { limit }); }
+  async updateSocialPost(id, patch) { return await this.rpc('update_social_post', { id, ...patch }); }
+  async suppressContact(d) { return await this.rpc('suppress_contact', d); }
+  async isSuppressed(d) { return Boolean((await this.rpc('is_suppressed', d))?.suppressed); }
+
   async withAutomationLock(fn) {
     return fn();
   }
