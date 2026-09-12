@@ -15,11 +15,23 @@ module.exports=function makeAI(config,db){
   await db('message',{conversation_id:session.id,customer_id:session.customer_id,direction:'inbound',content:message});
   const input=[...session.messages.map(m=>({role:m.direction==='inbound'?'user':'assistant',content:m.content})),{role:'user',content:message}];
   const ctx={source:'website',sessionId:session.id,customerId:session.customer_id};
+  async function unavailable(code){
+   const description=require('./provider-errors').explain(code);
+   await db('handoff',{summary:`Websitechat ${session.id}: ${description}. Lees het gesprek en neem contact op zodra contactgegevens bekend zijn.`,customer_id:ctx.customerId,priority:'high'});
+   await db('save',{table:'ai_actions',data:{source:'website',action:'answer',reason:description,status:'failed',result:{error_code:code},...(ctx.customerId?{customer_id:ctx.customerId}:{})}});
+   const answer='Mijn automatische verwerking is momenteel niet beschikbaar. Uw bericht is opgeslagen en LuxWash heeft een opvolgtaak gekregen. Vul het aanvraagformulier met uw contactgegevens in zodat LuxWash u kan bereiken, of bel '+settings.business.phone+'.';
+   await db('message',{conversation_id:session.id,customer_id:ctx.customerId,direction:'outbound',content:answer});
+   return {answer,session_token:token,handoff:true};
+  }
   for(let round=0;round<8;round++){
-   const r=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${config.openaiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:config.openaiModel,instructions:instructions(settings),input,tools:tools.definitions,parallel_tool_calls:false,store:false,max_output_tokens:1200}),signal:AbortSignal.timeout(45000)});
-   const d=await r.json();if(!r.ok)throw Object.assign(new Error('AI is tijdelijk niet bereikbaar'),{status:502});
+   let r,d;try{
+    r=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${config.openaiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:config.openaiModel,instructions:instructions(settings),input,tools:tools.definitions,parallel_tool_calls:false,store:false,max_output_tokens:2000}),signal:AbortSignal.timeout(45000)});
+    d=await r.json();
+   }catch(e){return unavailable(require('./provider-errors').transportError(e));}
+   if(!r.ok)return unavailable(require('./provider-errors').providerError(r.status,d));
+   if(d.status==='incomplete')return unavailable('incomplete_output');
    const calls=(d.output||[]).filter(x=>x.type==='function_call');
-   if(!calls.length){const answer=(d.output||[]).flatMap(x=>x.content||[]).filter(x=>x.type==='output_text').map(x=>x.text).join('\n');if(!answer)throw new Error('Geen antwoord ontvangen');await db('message',{conversation_id:session.id,customer_id:ctx.customerId,direction:'outbound',content:answer});return {answer,session_token:token};}
+   if(!calls.length){const answer=(d.output||[]).flatMap(x=>x.content||[]).filter(x=>x.type==='output_text').map(x=>x.text).join('\n');if(!answer)return unavailable('invalid_output');await db('message',{conversation_id:session.id,customer_id:ctx.customerId,direction:'outbound',content:answer});return {answer,session_token:token};}
    input.push(...d.output);
    for(const c of calls){let result;try{ctx.toolCallId=c.call_id;result=await tools.execute(c.name,JSON.parse(c.arguments),ctx);}catch(e){result={ok:false,error:e.code==='23P01'?'Tijdslot is intussen bezet':'Actie niet voltooid. Vraag om menselijke opvolging.'};}input.push({type:'function_call_output',call_id:c.call_id,output:JSON.stringify(result)});}
   }

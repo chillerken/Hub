@@ -18,7 +18,7 @@ module.exports=function automation(config,db){
    const ctx=await db('job_context',{id:job.id});const c=ctx.customer,a=ctx.appointment;
    if(job.kind==='classify'){
     const message=await db('message_get',{id:job.payload.message_id});
-    if(!message)status='skipped';else {const classification=await classify(message.content);if(!classification.available)throw new Error(`${require('./provider-errors').explain(classification.error_code)} (${classification.error_code})`);await db('message_classified',{id:message.id,...classification});status='completed';}
+    if(!message)status='skipped';else {const classification=await classify(message.content);if(!classification.available)throw Object.assign(new Error(`${require('./provider-errors').explain(classification.error_code)} (${classification.error_code})`),{nonRetryable:['insufficient_quota','invalid_api_key','model_not_found'].includes(classification.error_code)});await db('message_classified',{id:message.id,...classification});status='completed';}
    }else if(!c||c.status!=='active')status='skipped';
    else if(job.kind==='repeat'&&!c.marketing_consent)status='skipped';
    else if(job.kind==='reminder'&&(!['confirmed','scheduled'].includes(a.status)||new Date(a.starts_at)<=new Date()))status='skipped';
@@ -37,7 +37,7 @@ module.exports=function automation(config,db){
     // This journal write is idempotent; after a crash Resend receives the same key.
     try{await db('save',{table:'emails',data:{customer_id:c.id,subject:message.subject,body:message.text,direction:'outbound',recipient:c.email,sender:config.resend.from,provider_id,status:'sent'}});}catch(e){if(e.code!=='23505')throw e;}
    }
-  }catch(e){status=e.deliveryUncertain||job.attempts>=5?'dead':'queued';error=String(e.message).slice(0,300);}
+  }catch(e){status=e.nonRetryable||e.deliveryUncertain||job.attempts>=5?'dead':'queued';error=String(e.message).slice(0,300);}
   await db('finish_job',{id:job.id,lease_token:job.lease_token,status,provider_id,error});results.push({id:job.id,status});
  }
  await db('retention');return {processed:results.length,jobs:results};

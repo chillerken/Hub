@@ -2,7 +2,7 @@
 // Never log keys, provider response bodies or customer data.
 let latest=null;
 module.exports=async function diagnostics(config){
- const result={openai:{configured:Boolean(config.openaiKey),model:config.openaiModel},email:{configured:Boolean(config.resend.apiKey&&config.resend.from)}};
+ const result={access:{admin_password_configured:Boolean(config.adminPassword&&config.adminPassword.length>=12),cookie_secret_configured:Boolean(config.cookieSecret&&config.cookieSecret.length>=32)},openai:{configured:Boolean(config.openaiKey),model:config.openaiModel},email:{configured:Boolean(config.resend.apiKey&&config.resend.from)}};
  await Promise.allSettled([
   (async()=>{if(!config.openaiKey)return;try{const r=await fetch('https://api.openai.com/v1/models/'+encodeURIComponent(config.openaiModel),{headers:{Authorization:`Bearer ${config.openaiKey}`},signal:AbortSignal.timeout(10000)});result.openai.model_accessible=r.ok;result.openai.status=r.status;}catch{result.openai.model_accessible=false;result.openai.status='timeout';}})(),
   (async()=>{const probe=await require('./classify')(config)('Ik wil informatie over autoreiniging.');result.openai.inference_available=probe.available;result.openai.inference_error=probe.error_code||null;})(),

@@ -1,5 +1,5 @@
 const fs=require('node:fs');const path=require('node:path');const crypto=require('node:crypto');
-const {z,booking,contact,planning,safeEqual,quoteSlot,quoteBooking}=require('./validation');const {hash}=require('./db');const {parseCookies,makeAdminCookie}=require('../auth');
+const {z,booking,contact,planning,safeEqual,quoteSlot,quoteBooking,intakeDetails}=require('./validation');const {hash}=require('./db');const {parseCookies,makeAdminCookie}=require('../auth');
 const shell=title=>`<!doctype html><html lang="nl-BE"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${title} · LuxWash</title><link rel="stylesheet" href="/central.css"><script src="/central.js" defer></script></head><body><div id="root"></div></body></html>`;
 async function rawBody(req){let data='';for await(const c of req){data+=c;if(Buffer.byteLength(data)>100000)throw Object.assign(new Error('Aanvraag te groot'),{status:413});}return data;}
 module.exports=function central(config,legacyStore){
@@ -40,7 +40,7 @@ module.exports=function central(config,legacyStore){
    const ts=req.headers['x-luxwash-timestamp'];const expected=crypto.createHmac('sha256',config.supabase.appSecret).update(`${ts}.${raw}`).digest('hex');
    if(!ts||Math.abs(Date.now()/1000-Number(ts))>120||!safeEqual(expected,req.headers['x-luxwash-signature']))throw Object.assign(new Error('Niet gemachtigd'),{status:401});
    if(p==='/api/lina/summary'){
-    const v=z.object({provider_call_id:z.string().max(180),transcript:z.string().max(24000)}).parse(b);const summary=await classify(v.transcript);
+    const v=z.object({provider_call_id:z.string().max(180),transcript:z.string().max(24000)}).parse(b);const summary=await classify(v.transcript);if(!summary.available){summary.handoff=true;summary.summary='Automatische samenvatting mislukt. Lees het transcript en volg de beller persoonlijk op.';}
     const call=await db('call_update',{provider_call_id:v.provider_call_id,...summary,...(summary.handoff?{escalated:true}:{})});
     if(summary.handoff&&call?.id)await db('handoff',{phone_call_id:call.id,customer_id:call.customer_id,summary:summary.summary,priority:summary.priority});
     json(res,200,{ok:true});
@@ -68,7 +68,7 @@ module.exports=function central(config,legacyStore){
    const r=await db('book',{...v,source:'website',manage_token_hash:hash(token)});const a=r.appointment;
    json(res,201,{ok:true,id:a.id,status:a.status,starts_at:a.starts_at,price_cents:a.price_cents,price_mode:a.price_mode,manage_token:token,confirmation:'queued'});
   }else if(req.method==='POST'&&p==='/api/core/request'){
-   const v=contact.parse(b);const key=z.string().min(16).max(120).parse(b.idempotency_key);const l=await db('intake',{...v,idempotency_key:key,service:String(b.service||'').slice(0,160),message:String(b.message||'').slice(0,1500)});json(res,201,{ok:true,...l});
+   const v=contact.parse(b);const details=intakeDetails.parse(b);const key=z.string().min(16).max(120).parse(b.idempotency_key);const l=await db('intake',{...v,intake_details:details,idempotency_key:key,service:String(b.service||'').slice(0,160),message:String(b.message||'').slice(0,1500)});json(res,201,{ok:true,...l});
   }else if(req.method==='POST'&&p==='/api/chat'){
    const v=z.object({message:z.string().trim().min(1).max(2000),session_token:z.string().min(32).max(120).optional()}).parse(b);json(res,200,await ai.answer(v.message,v.session_token||crypto.randomBytes(32).toString('base64url')));
   }else if(req.method==='POST'&&p==='/api/core/manage'){
