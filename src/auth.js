@@ -32,7 +32,8 @@ function parseCookies(header = '') {
   return Object.fromEntries(header.split(';').map(v => v.trim()).filter(Boolean).map(pair => {
     const idx = pair.indexOf('=');
     if (idx < 0) return [pair, ''];
-    return [decodeURIComponent(pair.slice(0, idx)), decodeURIComponent(pair.slice(idx + 1))];
+    try{return [decodeURIComponent(pair.slice(0, idx)), decodeURIComponent(pair.slice(idx + 1))];}
+    catch{return [pair.slice(0,idx),''];}
   }));
 }
 

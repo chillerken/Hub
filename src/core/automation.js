@@ -18,7 +18,7 @@ module.exports=function automation(config,db){
    const ctx=await db('job_context',{id:job.id});const c=ctx.customer,a=ctx.appointment;
    if(job.kind==='classify'){
     const message=await db('message_get',{id:job.payload.message_id});
-    if(!message)status='skipped';else {const classification=await classify(message.content);if(!classification.available)throw new Error('AI-classificatie tijdelijk niet beschikbaar');await db('message_classified',{id:message.id,...classification});status='completed';}
+    if(!message)status='skipped';else {const classification=await classify(message.content);if(!classification.available)throw new Error(`${require('./provider-errors').explain(classification.error_code)} (${classification.error_code})`);await db('message_classified',{id:message.id,...classification});status='completed';}
    }else if(!c||c.status!=='active')status='skipped';
    else if(job.kind==='repeat'&&!c.marketing_consent)status='skipped';
    else if(job.kind==='reminder'&&(!['confirmed','scheduled'].includes(a.status)||new Date(a.starts_at)<=new Date()))status='skipped';

@@ -1,5 +1,5 @@
 const fs=require('node:fs');const path=require('node:path');const crypto=require('node:crypto');
-const {z,booking,contact,planning,safeEqual}=require('./validation');const {hash}=require('./db');const {parseCookies,makeAdminCookie}=require('../auth');
+const {z,booking,contact,planning,safeEqual,quoteSlot,quoteBooking}=require('./validation');const {hash}=require('./db');const {parseCookies,makeAdminCookie}=require('../auth');
 const shell=title=>`<!doctype html><html lang="nl-BE"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${title} · LuxWash</title><link rel="stylesheet" href="/central.css"><script src="/central.js" defer></script></head><body><div id="root"></div></body></html>`;
 async function rawBody(req){let data='';for await(const c of req){data+=c;if(Buffer.byteLength(data)>100000)throw Object.assign(new Error('Aanvraag te groot'),{status:413});}return data;}
 module.exports=function central(config,legacyStore){
@@ -85,11 +85,16 @@ module.exports=function central(config,legacyStore){
   else if(req.method==='POST'&&p==='/api/core/admin/quote-draft'){const v=z.object({customer_id:z.string().uuid(),brief:z.string().min(10).max(3000)}).parse(b);const proposal=await require('./quote')(config)(v.brief,await db('catalog'));json(res,201,await db('quote_draft',{...proposal,customer_id:v.customer_id}));
   }else if(req.method==='GET'&&p==='/api/core/admin/status'){
    const s=await db('settings');let voice={reachable:false};try{const r=await fetch('https://luxwash-lina-phone-agent.onrender.com/health',{signal:AbortSignal.timeout(5000)});voice={reachable:r.ok,...await r.json()};}catch{}
-   json(res,200,{database:true,ai_configured:Boolean(config.openaiKey),email_configured:automation.ready,voice,planning_configured:s.planning.opening_hours.length>0&&s.planning.allowed_postcodes.length>0,settings:s});
+   json(res,200,{database:true,ai_configured:Boolean(config.openaiKey),email_configured:automation.ready,voice,provider_checks:require('./diagnostics').getLatest(),planning_configured:Boolean((s.planning.open_24_7||s.planning.opening_hours.length>0)&&(s.planning.all_postcodes||s.planning.allowed_postcodes.length>0)),settings:s});
   }else if(req.method==='GET'&&p==='/api/core/admin/list')json(res,200,{rows:await db('list',{table:url.searchParams.get('table')})});
   else if(req.method==='POST'&&p==='/api/core/admin/save'){
    if(b.table==='users')throw Object.assign(new Error('Gebruikersrechten worden door de eigenaar toegekend via Supabase'),{status:403});
    json(res,200,{row:await db('save',{table:b.table,id:b.id,data:b.data})});
+  }else if(req.method==='POST'&&p==='/api/core/admin/quote-slots'){
+   json(res,200,{slots:await db('quote_slots',{...quoteSlot.parse(b),admin:true})});
+  }else if(req.method==='POST'&&p==='/api/core/admin/quote-book'){
+   const v=quoteBooking.parse(b);const token=crypto.createHmac('sha256',config.cookieSecret).update(v.idempotency_key).digest('base64url');
+   const r=await db('quote_book',{...v,manage_token_hash:hash(token),admin:true});json(res,201,{...r,manage_token:token});
   }else if(req.method==='POST'&&p==='/api/core/admin/settings'){
    let value=b.value;if(b.key==='planning')value=planning.parse(value);
    else if(b.key==='business')value=z.object({name:z.string().min(2).max(100),phone:z.string().max(30),email:z.string().email(),website:z.string().url(),review_url:z.string().url(),timezone:z.literal('Europe/Brussels'),area:z.string().max(500)}).strict().parse(value);

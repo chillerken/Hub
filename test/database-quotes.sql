@@ -1,0 +1,38 @@
+begin;
+select set_config('luxwash.actor','qa:quote-booking',true);
+update public.settings set value=value||'{"all_postcodes":true,"open_24_7":true}'::jsonb where key='planning';
+do $$
+declare c uuid; svc uuid; q uuid; q2 uuid; a uuid; t timestamptz; p jsonb; r jsonb; slots jsonb; blocked uuid;
+begin
+ insert into public.customers(name,email) values('Transactional QA','rollback@example.invalid') returning id into c;
+ insert into public.services(name,duration_minutes,price_mode) values('Transactional quoted work',null,'quote') returning id into svc;
+ insert into public.quotes(customer_id,title,total_cents) values(c,'Transactional QA quote',9000) returning id into q;
+ t:=(((now() at time zone 'Europe/Brussels')::date+20)+time '09:00') at time zone 'Europe/Brussels';
+ p:=jsonb_build_object('admin',true,'quote_id',q,'service_id',svc,'duration_minutes',90,'postcode','9340','address','Voorbeeldstraat 1, Lede','starts_at',t,'idempotency_key','qa-quote-'||q,'manage_token_hash',repeat('a',64),'confirmed_by_customer',true);
+ begin perform private.luxwash_dispatch('quote_book',p);raise exception 'TEST draft quote accepted';exception when others then if sqlerrm not like 'Keur eerst%' then raise;end if;end;
+ perform private.luxwash_dispatch('quote_approve',jsonb_build_object('id',q));
+ begin perform private.luxwash_dispatch('quote_book',p||'{"admin":false}');raise exception 'TEST unprivileged quote booking';exception when insufficient_privilege then null;end;
+ begin perform private.luxwash_dispatch('quote_book',p||'{"confirmed_by_customer":false}');raise exception 'TEST customer consent bypass';exception when others then if sqlerrm not like 'Bevestig eerst%' then raise;end if;end;
+ insert into public.availability(starts_at,ends_at,kind) values(t+interval '90 minutes',t+interval '2 hours','blocked') returning id into blocked;
+ slots:=private.luxwash_dispatch('quote_slots',p||jsonb_build_object('from',t,'to',t));
+ if jsonb_array_length(slots)<>0 then raise exception 'TEST buffer conflict ignored';end if;
+ delete from public.availability where id=blocked;
+ slots:=private.luxwash_dispatch('quote_slots',p||jsonb_build_object('from',t,'to',t));
+ if jsonb_array_length(slots)<>1 then raise exception 'TEST quote availability';end if;
+ r:=private.luxwash_dispatch('quote_book',p);a:=(r->'appointment'->>'id')::uuid;
+ if r->'appointment'->>'status'<>'confirmed' or (r->'appointment'->>'price_cents')::int<>9000 then raise exception 'TEST approved price booking';end if;
+ if (r->'appointment'->>'ends_at')::timestamptz<>t+interval '90 minutes' then raise exception 'TEST agreed duration';end if;
+ if not (private.luxwash_dispatch('quote_book',p)->>'replayed')::boolean then raise exception 'TEST idempotency';end if;
+ if (select count(*) from public.appointments where quote_id=q)<>1 then raise exception 'TEST duplicate quote';end if;
+ if not exists(select 1 from public.automation_jobs where appointment_id=a and kind='confirmation') or not exists(select 1 from public.automation_jobs where appointment_id=a and kind='reminder') then raise exception 'TEST delivery jobs missing';end if;
+ insert into public.quotes(customer_id,title,total_cents,status,approved_at) values(c,'Overlap quote',5000,'approved',now()) returning id into q2;
+ begin perform private.luxwash_dispatch('quote_book',p||jsonb_build_object('quote_id',q2,'idempotency_key','qa-quote-'||q2));raise exception 'TEST overlapping booking accepted';exception when exclusion_violation then null;end;
+ begin perform private.luxwash_dispatch('save',jsonb_build_object('table','quotes','id',q,'data',jsonb_build_object('total_cents',1)));raise exception 'TEST accepted quote edited';exception when others then if sqlerrm not like 'Goedgekeurde offertes%' then raise;end if;end;
+ r:=private.luxwash_dispatch('appointment_change',jsonb_build_object('id',a,'token_hash',repeat('a',64),'starts_at',t+interval '1 day'));
+ if (r->>'ends_at')::timestamptz-(r->>'starts_at')::timestamptz<>interval '90 minutes' then raise exception 'TEST quoted move duration';end if;
+ perform private.luxwash_dispatch('appointment_change',jsonb_build_object('id',a,'token_hash',repeat('a',64),'status','cancelled'));
+ r:=private.luxwash_dispatch('quote_book',p);
+ if r->'appointment'->>'status'<>'cancelled' then raise exception 'TEST cancelled booking reopened';end if;
+ if has_function_privilege('anon','private.available_window(timestamptz,integer,integer,text,uuid)','execute') or has_function_privilege('authenticated','private.luxwash_dispatch(text,jsonb)','execute') then raise exception 'TEST private permission leak';end if;
+end $$;
+rollback;
