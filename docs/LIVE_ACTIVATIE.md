@@ -57,3 +57,19 @@ Volledige gebruikersprovisioning, Google Calendar, WhatsApp/SMS, factuur-PDF's, 
 Na activatie: bel het bestaande nummer, laat Lina echte diensten/prijzen en beschikbaarheid opvragen, geef akkoord op een moment en controleer de geslaagde boeking, klant, agenda, transcript, opvolging en daadwerkelijk ontvangen e-mail. Tot die test slaagt, blijft telefonie ongeaccepteerd voor productie.
 
 Bronnen: [Render Free: slapen na 15 minuten](https://render.com/docs/free), [OpenAI SIP-telefonie](https://developers.openai.com/api/docs/guides/voice-sip).
+
+## Laatste live controle — 13:28 UTC
+
+Beide gewijzigde diensten zijn live uitgerold:
+
+- Centraal: commit e19c99fe264699f0d0b58e38c77cc997d3591653, deployment dep-dail6fp5efls73e0094g.
+- Lina: commit 1853cf460704328d47c7f436ed480cf13b93a410, deployment dep-dail451594qs7396v4hg.
+- Lina haalde de tien CRM-tools succesvol op; OpenAI-modeltoegang gaf HTTP 200.
+- Echte centrale antwoordgeneratie geeft nu de concrete fout insufficient_quota. De bestaande classificatietaak is één keer herprobeerd en met dezelfde oorzaak gestopt. Eerst OpenAI-tegoed/projectbudget herstellen, daarna de taak opnieuw proberen.
+- ADMIN_PASSWORD en COOKIE_SECRET zijn voldoende lang ingesteld. Hun waarden zijn niet opgevraagd, getoond of gewijzigd.
+- Nul echte telefoongesprekken, nul achtergebleven testklanten en nul testjobs. De terrasafspraak blijft geannuleerd.
+- De bestaande regressietest voor 24/7-planning, gewone diensten, middernacht en postcodebeperkingen slaagde opnieuw na de wijziging.
+
+Concreet hostingvoorstel, nog niet goedgekeurd: de twee bestaande webservices elk op Starter, dus 2 × US$7 = US$14 per maand voor compute, exclusief eventuele belastingen en extra verbruik. AI-, telefoon- en eventuele mailkosten komen daar afzonderlijk bij. De bestaande services en sleutels blijven behouden. Zie [actuele Starter-prijs bij Render](https://render.com/articles/render-vs-railway).
+
+Voor het AI-account: [OpenAI Billing](https://platform.openai.com/settings/organization/billing/overview). Er is geen tegoed gekocht of limiet verhoogd.
