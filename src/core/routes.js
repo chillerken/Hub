@@ -1,15 +1,16 @@
 const fs=require('node:fs');const path=require('node:path');const crypto=require('node:crypto');
 const {z,booking,contact,planning,safeEqual,quoteSlot,quoteBooking,intakeDetails}=require('./validation');const {hash}=require('./db');const {parseCookies,makeAdminCookie}=require('../auth');
-const shell=title=>`<!doctype html><html lang="nl-BE"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${title} · LuxWash</title><link rel="stylesheet" href="/central.css"><script src="/central.js" defer></script></head><body><div id="root"></div></body></html>`;
+const shell=title=>`<!doctype html><html lang="nl-BE"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${title} · LuxWash</title><link rel="stylesheet" href="/central.css"><link rel="stylesheet" href="/flow.css"><script src="/central.js" defer></script></head><body><div id="root"></div></body></html>`;
 async function rawBody(req){let data='';for await(const c of req){data+=c;if(Buffer.byteLength(data)>100000)throw Object.assign(new Error('Aanvraag te groot'),{status:413});}return data;}
 module.exports=function central(config,legacyStore){
  const classify=require('./classify')(config);
  const db=require('./db')(config),ai=require('./ai')(config,db),automation=require('./automation')(config,db);
+ const flowRoutes=require('./flow')(config,db);
  async function routes(req,res,helpers){
  const {send,json,isAdmin,redirect,sameOrigin}=helpers;const url=new URL(req.url,config.baseUrl),p=url.pathname;
  const write=['POST','PUT','PATCH','DELETE'].includes(req.method);
- if(['/central.js','/central.css'].includes(p)){send(res,200,fs.readFileSync(path.join(__dirname,'../../public',p.slice(1))),p.endsWith('css')?'text/css':'application/javascript',{'Cache-Control':'no-cache'});return true;}
- if(['/cockpit','/boeken','/boeking','/voorkeuren'].includes(p)&&req.method==='GET'){
+ if(['/central.js','/central.css','/flow.css'].includes(p)){send(res,200,fs.readFileSync(path.join(__dirname,'../../public',p.slice(1))),p.endsWith('css')?'text/css':'application/javascript',{'Cache-Control':'no-cache'});return true;}
+ if(['/cockpit','/boeken','/boeking','/voorkeuren','/offerte'].includes(p)&&req.method==='GET'){
  if(p==='/cockpit'&&!isAdmin(req)){redirect(res,'/admin/login');return true;}
  send(res,200,shell(p==='/cockpit'?'Bedrijfsoverzicht':'Afspraak'),undefined,{'Cache-Control':'no-store'});return true;
  }
@@ -59,6 +60,7 @@ module.exports=function central(config,legacyStore){
    const ip=String(req.headers['x-forwarded-for']||req.socket.remoteAddress).split(',').at(-1).trim();
    const r=await db('rate',{key:hash(`${ip}:${p}`),limit:p==='/api/chat'?25:60,seconds:60});if(!r.allowed)throw Object.assign(new Error('Te veel aanvragen. Probeer over een minuut opnieuw.'),{status:429});
   }
+  if(await flowRoutes(req,res,{json,send},p,b))return true;
   if(req.method==='GET'&&['/api/core/catalog','/api/booking/services'].includes(p))json(res,200,{services:await db('catalog')});
   else if(req.method==='GET'&&p==='/api/core/settings'){const s=await db('settings');json(res,200,{business:s.business,ai:s.ai});}
   else if(req.method==='GET'&&p==='/api/core/slots'){

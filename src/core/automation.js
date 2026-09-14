@@ -4,13 +4,14 @@ function formatMessage(context,settings,config){
  const manage=a?.idempotency_key?crypto.createHmac('sha256',config.cookieSecret).update(a.idempotency_key).digest('base64url'):null;
  const link=manage?`${config.baseUrl}/boeking#${a.id}/${manage}`:'';
  const details=a?`${s?.name||'Reiniging'}\n${when}\n${a.address||''}\n${a.vehicle||''}\n${a.price_mode==='fixed'?'Prijs':'Prijsindicatie'}: €${(a.price_cents/100).toFixed(2)}\n${s?.preparation||''}`:'';
- const kinds={confirmation:[`Afspraak bevestigd — LuxWash`,`Uw afspraak is bevestigd.\n${details}\nBeheren: ${link}`],request_received:[`Aanvraag ontvangen — LuxWash`,`Uw voorkeursmoment is opgeslagen. LuxWash bevestigt de definitieve prijs en afspraak nog persoonlijk.\n${details}\nBeheren: ${link}`],reminder:[`Herinnering aan uw LuxWash-afspraak`,`${details}\nBeheren: ${link}`],cancellation:[`Afspraak geannuleerd — LuxWash`,`Uw afspraak op ${when} is geannuleerd.`],aftercare:[`Hoe was uw LuxWash-beurt?`,`Bedankt dat u voor LuxWash koos. Laat ons weten of alles naar wens was; u kunt op deze mail antwoorden. U kunt uw eerlijke ervaring ook delen op Google: ${settings.business.review_url}`],repeat:[`Opnieuw een frisse wagen?`,`Het is ongeveer ${settings.planning.repeat_weeks} weken geleden sinds uw laatste beurt. Zullen we opnieuw een moment zoeken? ${config.baseUrl}/boeken\nGeen uitnodigingen meer? ${config.baseUrl}/voorkeuren#${a?.id}/${manage}`]};
+ const kinds={lead_ack:[`Aanvraag ontvangen — LuxWash`,`Uw aanvraag${job.payload?.service?' voor '+job.payload.service:''} is veilig opgeslagen. LuxWash bekijkt uw vraag en neemt contact met u op. Dit is nog geen afspraakbevestiging. U kunt antwoorden op deze e-mail.`],confirmation:[`Afspraak bevestigd — LuxWash`,`Uw afspraak is bevestigd.\n${details}\nBeheren: ${link}`],request_received:[`Aanvraag ontvangen — LuxWash`,`Uw voorkeursmoment is opgeslagen. LuxWash bevestigt de definitieve prijs en afspraak nog persoonlijk.\n${details}\nBeheren: ${link}`],reminder:[`Herinnering aan uw LuxWash-afspraak`,`${details}\nBeheren: ${link}`],cancellation:[`Afspraak geannuleerd — LuxWash`,`Uw afspraak op ${when} is geannuleerd.`],aftercare:[`Hoe was uw LuxWash-beurt?`,`Bedankt dat u voor LuxWash koos. Laat ons weten of alles naar wens was; u kunt op deze mail antwoorden. U kunt uw eerlijke ervaring ook delen op Google: ${settings.business.review_url}`],repeat:[`Opnieuw een frisse wagen?`,`Het is ongeveer ${settings.planning.repeat_weeks} weken geleden sinds uw laatste beurt. Zullen we opnieuw een moment zoeken? ${config.baseUrl}/boeken\nGeen uitnodigingen meer? ${config.baseUrl}/voorkeuren#${a?.id}/${manage}`]};
  if(job.kind==='email')return {subject:job.payload.subject,text:job.payload.text};
  const v=kinds[job.kind];if(!v)throw new Error('Onbekende berichtsoort');return {subject:v[0],text:`Dag ${c.name},\n\n${v[1]}\n\nLuxWash\n${settings.business.phone}\n${settings.business.email}`};
 }
 module.exports=function automation(config,db){
  const classify=require('./classify')(config);
  async function run(){
+ await db('flow_schedule');
  const jobs=await db('claim_jobs');const settings=await db('settings');const results=[];
  for(const job of jobs){
   let status='sent',provider_id='',error='';
@@ -25,6 +26,8 @@ module.exports=function automation(config,db){
    else if(['confirmation','request_received'].includes(job.kind)&&['cancelled','completed'].includes(a.status))status='skipped';
    else if(job.attempts>1&&Date.now()-new Date(job.first_attempt_at).getTime()>23*3600000)throw Object.assign(new Error('Bezorging onzeker: controleer provider voordat u opnieuw verstuurt'),{deliveryUncertain:true});
    else{
+    const permission=await db('flow_delivery_allowed',{id:job.id,lease_token:job.lease_token});
+    if(permission?.allowed!==true){await db('finish_job',{id:job.id,lease_token:job.lease_token,status:'skipped',provider_id:'',error:'Verzending gestopt door opvolgings- of toestemmingscontrole'});results.push({id:job.id,status:'skipped'});continue;}
     if(!c.email)throw new Error('E-mailadres ontbreekt; klant telefonisch bevestigen');
     if(!config.resend.apiKey||!config.resend.from)throw new Error('RESEND_API_KEY en geverifieerde afzender ontbreken');
     if(a?.idempotency_key){
@@ -40,7 +43,7 @@ module.exports=function automation(config,db){
   }catch(e){status=e.nonRetryable||e.deliveryUncertain||job.attempts>=5?'dead':'queued';error=String(e.message).slice(0,300);}
   await db('finish_job',{id:job.id,lease_token:job.lease_token,status,provider_id,error});results.push({id:job.id,status});
  }
- await db('retention');return {processed:results.length,jobs:results};
+ await db('retention');await db('flow_heartbeat',{processed:results.length});return {processed:results.length,jobs:results};
  }
  return {run,ready:Boolean(config.resend.apiKey&&config.resend.from)};
 };

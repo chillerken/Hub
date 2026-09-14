@@ -8,6 +8,7 @@ for(const fail of [false,true])test(`Handmatige boeking: beheerlink ${fail?'weig
  const customer={id:'test-customer',name:'Test',email:'test@example.invalid',status:'active'};
  const job={id:'test-job',kind:'request_received',attempts:1,lease_token:'test-lease'};
  const db=async(action,p)=>{
+  if(action==='flow_delivery_allowed')return {allowed:true};
   if(action==='claim_jobs')return [job];
   if(action==='settings')return {business:{phone:'test',email:'test@example.invalid'},planning:{}};
   if(action==='job_context')return {job,appointment,customer,service:{name:'Terrasreiniging'}};

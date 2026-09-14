@@ -7,10 +7,10 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "check": "node --check server.js && node --check src/store.js && node --check src/messaging.js && node --check src/ai.js && node --check src/automation.js",
+    "check": "node --check server.js && node --check src/core/routes.js && node --check src/core/flow.js && node --check src/core/automation.js",
     "build": "esbuild ui/app.tsx --bundle --minify --outfile=public/central.js --define:process.env.NODE_ENV=\"\\\"production\\\"\"",
     "test": "node --test test/*.test.js",
-    "postinstall": "npm run build"
+    "postinstall": "npm run build && npm test"
   },
   "engines": {
     "node": ">=20"

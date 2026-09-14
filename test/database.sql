@@ -3,7 +3,7 @@ begin;
 do $$ declare svc uuid; cust uuid; ap uuid; r jsonb; t timestamptz; count_before int; begin
 select id into svc from public.services where duration_minutes is not null and price_mode<>'quote' limit 1;
 t:=((current_date+3)::text||' 10:00 Europe/Brussels')::timestamptz;
-update public.settings set value=value||jsonb_build_object('allowed_postcodes',jsonb_build_array('9300'),'lead_hours',0) where key='planning';
+update public.settings set value=value||jsonb_build_object('all_postcodes',false,'open_24_7',false,'allowed_postcodes',jsonb_build_array('9300'),'lead_hours',0) where key='planning';
 insert into public.availability(starts_at,ends_at,kind) values(t-interval '1 hour',t+interval '9 hours','open');
 if not private.available(svc,t,'9300') then raise exception 'TEST availability'; end if;
 if private.available(svc,t,'9999') then raise exception 'TEST area'; end if;
