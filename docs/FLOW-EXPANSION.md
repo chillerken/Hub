@@ -77,3 +77,45 @@ Evidence:
 - Tests were isolated; no real customer data, customer messages or production
   login credentials were used. Successful login with the user's real password
   was not directly tested. A fresh GET of `/admin/login` loads the corrected policy.
+
+## 2026-09-14: basic chat replies independent of AI quota
+
+The website's 21:26 Belgian-time "Hallo" was verified in the real message table,
+with the fallback response and an actual follow-up task. The matching AI action
+recorded `insufficient_quota`; the 21:24 provider check confirmed inference was
+unavailable despite a configured key and accessible model. The Sites `/api/chat`
+request returned HTTP 200: HTTP success did not mean successful AI generation.
+
+Added `src/core/basic-replies.js` and integrated it into the existing chat route:
+- Narrow greetings/thanks, public contact/work area, and recognized service/price
+  questions use current settings/catalog records, with no model request.
+- An area such as 35 m² is read from the user's message, and service context can
+  carry over from preceding inbound messages. Any arithmetic is explicitly an
+  indicative catalog calculation, not a quote or booking.
+- Both inbound and outbound messages still use the existing database flow.
+  A storage failure cannot produce a successful "saved" reply.
+- Basic replies return `mode: basic` and `handoff: false`, without reporting AI as
+  live or creating a high-priority incident for a greeting.
+- Booking/change/cancellation, complaints, private contact intake, unknown services,
+  safety questions and other unsupported questions continue through the existing
+  guarded AI tools or explicit human handoff. They are not implemented by keyword
+  rules. Existing handoff/database errors still fail closed.
+- No new API keys, billing changes, provider subscriptions or customer messages
+  were issued as part of validation. The full AI remains blocked by its API quota.
+
+Validation: [CI run 34888271444](https://github.com/chillerken/Hub/actions/runs/34888271444)
+passed 43 Node tests and 75 browser checks. New tests cover no-key/no-network
+greetings, stored message pairs, catalog changes, context/area preservation,
+unknown prices/services, no booking side effects, private/safety boundaries,
+database failure and preserved AI error handoff.
+The pure reply module was also exercised against a read-only snapshot of the
+actual public settings/catalog. Test records were not written to production.
+
+Render release `dep-dak4rtu1egvs7393l9jg` for `a2f98bded78260b1d818a239b55c2dbb16abbe2f` was verified
+LIVE at `2026-09-14T19:42:19.57205Z`. A post-release real end-user chat was not directly
+tested. The existing Sites proxy remains the frontend integration.
+
+Open: the clipped send button belongs to the Sites frontend, not this repository.
+No Sites code was changed: the local source/build executor is unavailable and the
+required `sites-hosting/references/publishing.md` resource returned Unknown resource.
+Do not report that mobile button or full AI generation as fixed.
