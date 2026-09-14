@@ -30,3 +30,8 @@ JavaScript syntax checked before commit. Render installation is gated by the Rea
 - Existing Render Free services may sleep: the in-process scheduler is not a guaranteed 24/7 worker. No paid plan was enabled.
 - Browser access to the live domains was refused by the web tool. No access workaround was attempted; visual/mobile browser checks and real mailbox delivery remain unverified.
 - Privacy/security controls are implemented but this is not a legal certification of GDPR compliance.
+
+## Publication check
+The database migration is applied (version 20260914175552) and the post-migration rollback suite passed. Backend source is committed. At the current check, Render still reports live commit e19c99f and has not yet started a new deployment despite autoDeploy=yes. Do not label the expanded UI or worker live until a deploy of this revision succeeds. GitHub CI independently builds React and runs isolated Node/HTTP tests; no production credentials or real provider sends are used.
+
+The security advisor notes intentional RLS-without-public-policies on server-only tables and the existing shared-secret RPC entry points. Those entry points still require a valid application secret. A mutable search_path warning belongs to the separately added LuxAI app_set_updated_at function; this expansion preserves that unrelated work. See [Supabase security-definer guidance](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable) and [search_path guidance](https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable). No GDPR certification is claimed.

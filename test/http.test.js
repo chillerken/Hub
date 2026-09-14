@@ -9,6 +9,11 @@ test('Echte HTTP-server: boekingsscherm, bundel, admin- en webhookbeveiliging',a
  const base=`http://127.0.0.1:${server.address().port}`;
  const page=await fetch(base+'/boeken');assert.equal(page.status,200);assert.match(await page.text(),/central.js/);
  const bundle=await fetch(base+'/central.js');assert.equal(bundle.status,200);assert.match(bundle.headers.get('content-type'),/javascript/);
+ const quote=await fetch(base+'/offerte');assert.equal(quote.status,200);assert.match(await quote.text(),/flow.css/);
+ const css=await fetch(base+'/flow.css');assert.equal(css.status,200);assert.match(css.headers.get('content-type'),/css/);
+ for(const path of ['/api/core/admin/flow','/api/core/admin/social','/api/core/admin/calendar.ics']){
+  const protectedPage=await fetch(base+path);assert.equal(protectedPage.status,401,path+' must require admin');
+ }
  const admin=await fetch(base+'/api/core/admin/list?table=customers');assert.equal(admin.status,401);
  const invalid=await fetch(base+'/api/lina/event',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});assert.equal(invalid.status,401);
  const cockpit=await fetch(base+'/cockpit',{redirect:'manual'});assert.equal(cockpit.status,302);
