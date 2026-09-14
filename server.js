@@ -26,7 +26,8 @@ function securityHeaders(extra={}) {
   return {
     'X-Content-Type-Options':'nosniff',
     'X-Frame-Options':'SAMEORIGIN',
-    'Referrer-Policy':'no-referrer',
+    // Keep native same-origin form POSTs identifiable; do not disclose referrers to other sites.
+    'Referrer-Policy':'same-origin',
     'Strict-Transport-Security':'max-age=31536000',
     'Cache-Control':'no-store',
     'Permissions-Policy':'camera=(), microphone=(), geolocation=()',
