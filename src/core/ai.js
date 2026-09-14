@@ -28,6 +28,12 @@ module.exports=function makeAI(config,db){
    await db('message',{conversation_id:session.id,customer_id:ctx.customerId,direction:'outbound',content:answer});
    return {answer,session_token:token,handoff:true};
   }
+  if(config.aiMode==='rules'){
+   await db('handoff',{summary:'Websitevraag buiten de vaste antwoorden. Lees het gesprek en volg persoonlijk op zodra contactgegevens bekend zijn.',customer_id:ctx.customerId,priority:'normal'});
+   const answer='Ik werk met vaste antwoorden en kan deze vraag niet automatisch afhandelen. Uw vraag en een opvolgtaak zijn opgeslagen. Vul uw contactgegevens in via het aanvraagformulier of bel '+settings.business.phone+'.';
+   await db('message',{conversation_id:session.id,customer_id:ctx.customerId,direction:'outbound',content:answer});
+   return {answer,session_token:token,mode:'rules',handoff:true};
+  }
   if(!config.openaiKey)return unavailable('not_configured');
   for(let round=0;round<8;round++){
    let r,d;try{

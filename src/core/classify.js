@@ -3,6 +3,7 @@ const {providerError,transportError}=require('./provider-errors');
 const schema=z.object({intent:z.enum(['booking','information','price','complaint','change','cancel','quote','business','spam','unknown']),priority:z.enum(['normal','high','urgent']),sentiment:z.enum(['positive','neutral','negative','unknown']),summary:z.string().max(800),handoff:z.boolean()});
 const fallback={available:false,intent:'unknown',priority:'normal',sentiment:'unknown',summary:'Automatische classificatie niet beschikbaar; lees het oorspronkelijke bericht.',handoff:false};
 module.exports=function classifier(config){return async function classify(text){
+ if(config.aiMode==='rules')return require('./free-rules').classifyRules(text);
  if(!config.openaiKey)return {...fallback,error_code:'not_configured'};
  // Avoid forwarding contact identifiers when only topic and sentiment are needed.
  const input=String(text).slice(0,12000).replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi,'[e-mail]').replace(/\+?\d[\d\s().-]{7,}\d/g,'[nummer]');

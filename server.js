@@ -31,7 +31,7 @@ function securityHeaders(extra={}) {
     'Strict-Transport-Security':'max-age=31536000',
     'Cache-Control':'no-store',
     'Permissions-Policy':'camera=(), microphone=(), geolocation=()',
-    'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; frame-ancestors 'self'; base-uri 'self'",
+    'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://www.luxwash.online; connect-src 'self'; form-action 'self'; frame-ancestors 'self'; base-uri 'self'",
     ...extra
   };
 }
@@ -39,7 +39,7 @@ function send(res,status,body,type='text/html; charset=utf-8',extra={}) { res.wr
 function json(res,status,obj,extra={}) { send(res,status,JSON.stringify(obj),'application/json; charset=utf-8',extra); }
 function redirect(res,to,extra={}) { send(res,302,'','text/plain; charset=utf-8',{'Location':to,...extra}); }
 function safeEq(a,b) { const A=Buffer.from(String(a)),B=Buffer.from(String(b)); return A.length===B.length && crypto.timingSafeEqual(A,B); }
-function isAdmin(req) { return req.memberDenied!==true && verifyAdminCookie(parseCookies(req.headers.cookie||'').aba_admin, config.cookieSecret); }
+function isAdmin(req) { if(req.url.startsWith('/api/core/admin/') && require('./src/site-bridge').bridgeAllowed(req,config))return true; return req.memberDenied!==true && verifyAdminCookie(parseCookies(req.headers.cookie||'').aba_admin, config.cookieSecret); }
 function rateOk(req,key,limit,windowMs) {
   const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'x').split(',')[0].trim();
   const k = `${key}:${ip}`; const t=Date.now();
@@ -81,19 +81,21 @@ const server = http.createServer(async (req,res) => {
   try {
     const u = new URL(req.url, config.baseUrl);
     const p = u.pathname;
+    if(config.centralDashboard&&req.method==='GET'&&(p==='/cockpit'||p==='/admin'||p.startsWith('/admin/'))){const section=p.includes('appointment')?'calendar':p.includes('leads')?'leads':p.includes('activity')?'audit_logs':'overzicht';return redirect(res,'https://www.luxwash.online/controle#'+section);}
     if (staticFile(p,res)) return;
     const adminToken=parseCookies(req.headers.cookie||'').aba_admin;
     if (verifyAdminCookie(adminToken,config.cookieSecret)) {
       const claims=JSON.parse(Buffer.from(adminToken.split('.')[0],'base64url').toString());
       if (claims.sub) { const member=await central.db('member',{id:claims.sub}); req.memberDenied=!member||!['owner','admin'].includes(member.role); }
     }
+    if(req.method==='POST' && p==='/api/leads')req.url='/api/core/legacy-request';
     if(await central.routes(req,res,{send,json,isAdmin,redirect,sameOrigin})) return;
     if(req.method==='GET' && p==='/admin' && isAdmin(req)) return redirect(res,'/cockpit');
 
     if(req.method==='GET' && p==='/health') {
       try {
         const db = await store.health();
-        return json(res, db?200:503, { ok:Boolean(db), database:Boolean(db), ai:ai.ready, email:messenger.emailReady, whatsapp:messenger.whatsappReady, service:'ai-business-automation-production' });
+        return json(res, db?200:503, { ok:Boolean(db), database:Boolean(db), ai:config.aiMode!=='rules'&&ai.ready, chatbot_mode:config.aiMode, email_configured:messenger.emailReady, whatsapp_configured:messenger.whatsappReady, service:'ai-business-automation-production' });
       } catch(e) { return json(res,503,{ok:false,database:false,error:'Database niet bereikbaar'}); }
     }
 

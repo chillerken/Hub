@@ -6,7 +6,7 @@ function integrations(config,checks){
  const checked=checks?.checked_at||null;
  return [
  {name:'Centrale database',status:'LIVE',detail:'Deze pagina is zojuist uit Supabase geladen.'},
- {name:'AI-klantenservice',status:checks?.openai?.inference_available?'LIVE':checks?.openai?.inference_error?'FOUT':'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:checks?.openai?.inference_error==='insufficient_quota'?'OpenAI meldt onvoldoende tegoed of projectbudget. Aanvragen blijven bewaard.':checks?.openai?.inference_available?'Antwoordgeneratie getest op '+checked:'Echte antwoordgeneratie moet nog slagen.',checked_at:checked},
+ config.aiMode==='rules'?{name:'Regelgebaseerde assistent',status:'INGESTELD',detail:'Vaste antwoorden en menselijke opvolging. Geen generatieve AI of betaalde AI-aanroep.'}:{name:'AI-klantenservice',status:checks?.openai?.inference_available?'LIVE':checks?.openai?.inference_error?'FOUT':'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:checks?.openai?.inference_error==='insufficient_quota'?'OpenAI meldt onvoldoende tegoed of projectbudget. Aanvragen blijven bewaard.':checks?.openai?.inference_available?'Antwoordgeneratie getest op '+checked:'Echte antwoordgeneratie moet nog slagen.',checked_at:checked},
  {name:'E-mail',status:'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:config.resend.apiKey&&config.resend.from?'Verzendconfiguratie aanwezig. Controleer verzendwachtrij en ontvangst; dit is geen aflevergarantie.':'Resend-afzender en server-side sleutel ontbreken.'},
  {name:'Inkomende e-mail',status:'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:process.env.RESEND_WEBHOOK_SECRET?'Webhookgeheim aanwezig; ontvangst van echte antwoorden nog testen.':'Webhook niet geconfigureerd. Vervolgberichten blijven handmatige taken.'},
  {name:'Google Calendar',status:'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:'Beveiligde agenda-export beschikbaar. Automatische tweerichtingssynchronisatie ontbreekt.'},
@@ -24,7 +24,7 @@ function calendarExport(appointments,customers,services){
  rows.push('END:VCALENDAR');return rows.map(fold).join('\r\n')+'\r\n';
 }
 module.exports=function makeFlow(config,db){
- async function prepare(id){const token=quoteToken(id,config.cookieSecret);const data=await db('quote_publish',{id,token_hash:hash(token)});return {...data,url:config.baseUrl+'/offerte#'+id+'/'+token};}
+ async function prepare(id){const token=quoteToken(id,config.cookieSecret);const data=await db('quote_publish',{id,token_hash:hash(token)});return {...data,url:(config.publicSiteUrl||config.baseUrl)+'/offerte#'+id+'/'+token};}
  return async function flowRoutes(req,res,{json,send},p,b){
   if(req.method==='GET'&&p==='/api/core/admin/flow'){
    const result=await db('flow_overview');json(res,200,{...result,integrations:integrations(config,require('./diagnostics').getLatest())});return true;

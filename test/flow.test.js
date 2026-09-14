@@ -42,9 +42,10 @@ for(const permitted of [true,false,null])test('Verzending hercontroleert toestem
  const job={id:'test-job',kind:'lead_ack',attempts:1,lease_token:'test-lease',payload:{service:'Terras'}};
  t.mock.method(globalThis,'fetch',async()=>{sent++;return {ok:true,json:async()=>({id:'test-mail'})}});
  const db=async(a,p)=>{
+  if(a==='email_budget')return {allowed:true};
   if(a==='claim_jobs')return[job];
   if(a==='settings')return {business:{name:'LuxWash',phone:'053896400',email:'test@example.invalid'},planning:{}};
-  if(a==='job_context')return {job,customer:{id:'c',name:'Test',email:'test@example.invalid',status:'active'}};
+  if(a==='job_context')return {job,customer:{id:'c',name:'Test',email:'qa@example.org',status:'active'}};
   if(a==='flow_delivery_allowed')return permitted===null?{}:{allowed:permitted};
   if(a==='finish_job')finished=p;
   return {};

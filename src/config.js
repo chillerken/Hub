@@ -27,6 +27,10 @@ const config = {
   adminPassword: process.env.ADMIN_PASSWORD || '',
   cookieSecret: process.env.COOKIE_SECRET || '',
   cronSecret: process.env.CRON_SECRET || '',
+  siteBridgeSecret: process.env.LUXWASH_SITE_BRIDGE_SECRET || '',
+  aiMode: process.env.AI_MODE === 'generative' ? 'generative' : 'rules',
+  publicSiteUrl: 'https://www.luxwash.online',
+  centralDashboard: process.env.CENTRAL_DASHBOARD === 'enabled',
   supabase: {
     url: process.env.SUPABASE_URL || '',
     publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || '',

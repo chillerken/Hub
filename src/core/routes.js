@@ -52,6 +52,10 @@ module.exports=function central(config,legacyStore){
     const allowed=['call_start','call_update','transcript','tool_claim','tool_finish','webhook_claim','webhook_finish','handoff'];if(!allowed.includes(b.action))throw new Error('Onbekende actie');json(res,200,await db(b.action,b.payload));
    }else json(res,404,{error:'Niet gevonden'});return true;
   }
+  if(p==='/api/core/bridge-login'){
+   if(req.method!=='POST'||!require('../site-bridge').bridgeAllowed(req,config)){json(res,401,{error:'Niet gemachtigd'});return true;}
+   const valid=safeEqual(b.password,config.adminPassword);json(res,valid?200:401,valid?{ok:true}:{error:'Ongeldige aanmelding'});return true;
+  }
   if(p.startsWith('/api/core/admin/')){
    if(!isAdmin(req))throw Object.assign(new Error('Log eerst in'),{status:401});
    if(write&&!sameOrigin(req))throw Object.assign(new Error('Ongeldige oorsprong'),{status:403});
@@ -69,8 +73,8 @@ module.exports=function central(config,legacyStore){
    const v=booking.parse(b);const token=crypto.createHmac('sha256',config.cookieSecret).update(v.idempotency_key).digest('base64url');
    const r=await db('book',{...v,source:'website',manage_token_hash:hash(token)});const a=r.appointment;
    json(res,201,{ok:true,id:a.id,status:a.status,starts_at:a.starts_at,price_cents:a.price_cents,price_mode:a.price_mode,manage_token:token,confirmation:'queued'});
-  }else if(req.method==='POST'&&p==='/api/core/request'){
-   const v=contact.parse(b);const details=intakeDetails.parse(b);const key=z.string().min(16).max(120).parse(b.idempotency_key);const l=await db('intake',{...v,intake_details:details,idempotency_key:key,service:String(b.service||'').slice(0,160),message:String(b.message||'').slice(0,1500)});json(res,201,{ok:true,...l});
+  }else if(req.method==='POST'&&['/api/core/request','/api/core/legacy-request'].includes(p)){
+   const v=contact.parse(b);const details=intakeDetails.parse(b);const key=z.string().min(16).max(120).parse(b.idempotency_key||(p==='/api/core/legacy-request'?crypto.randomUUID():undefined));const l=await db('intake',{...v,intake_details:details,idempotency_key:key,service:String(b.service||'').slice(0,160),message:String(b.message||'').slice(0,1500)});json(res,201,{ok:true,...l});
   }else if(req.method==='POST'&&p==='/api/chat'){
    const v=z.object({message:z.string().trim().min(1).max(2000),session_token:z.string().min(32).max(120).optional()}).parse(b);json(res,200,await ai.answer(v.message,v.session_token||crypto.randomBytes(32).toString('base64url')));
   }else if(req.method==='POST'&&p==='/api/core/manage'){
@@ -84,10 +88,10 @@ module.exports=function central(config,legacyStore){
    const member=r.ok?await db('member',{id:data.user.id}):null;if(!member||!['owner','admin'].includes(member.role))throw Object.assign(new Error('Geen toegang tot LuxWash-beheer'),{status:401});
    json(res,200,{ok:true},{'Set-Cookie':`aba_admin=${encodeURIComponent(makeAdminCookie(config.cookieSecret,member.id))}; HttpOnly; SameSite=Strict; Secure; Path=/; Max-Age=43200`});
   }else if(req.method==='GET'&&p==='/api/core/admin/analytics')json(res,200,await db('analytics'));
-  else if(req.method==='POST'&&p==='/api/core/admin/quote-draft'){const v=z.object({customer_id:z.string().uuid(),brief:z.string().min(10).max(3000)}).parse(b);const proposal=await require('./quote')(config)(v.brief,await db('catalog'));json(res,201,await db('quote_draft',{...proposal,customer_id:v.customer_id}));
+  else if(req.method==='POST'&&p==='/api/core/admin/quote-draft'){const v=z.object({customer_id:z.string().uuid(),brief:z.string().min(10).max(3000),service_id:z.string().uuid().optional(),quantity:z.number().positive().max(1000).optional()}).parse(b);const proposal=await require('./quote')(config)(v.brief,await db('catalog'),v);json(res,201,await db('quote_draft',{...proposal,customer_id:v.customer_id}));
   }else if(req.method==='GET'&&p==='/api/core/admin/status'){
    const s=await db('settings');let voice={reachable:false};try{const r=await fetch('https://luxwash-lina-phone-agent.onrender.com/health',{signal:AbortSignal.timeout(5000)});voice={reachable:r.ok,...await r.json()};}catch{}
-   json(res,200,{database:true,ai_configured:Boolean(config.openaiKey),email_configured:automation.ready,voice,provider_checks:require('./diagnostics').getLatest(),planning_configured:Boolean((s.planning.open_24_7||s.planning.opening_hours.length>0)&&(s.planning.all_postcodes||s.planning.allowed_postcodes.length>0)),settings:s});
+   json(res,200,{database:true,chatbot_mode:config.aiMode,email_limits:{daily:90,monthly:2700,window:'rolling'},ai_configured:Boolean(config.openaiKey),email_configured:automation.ready,voice,provider_checks:require('./diagnostics').getLatest(),planning_configured:Boolean((s.planning.open_24_7||s.planning.opening_hours.length>0)&&(s.planning.all_postcodes||s.planning.allowed_postcodes.length>0)),settings:s});
   }else if(req.method==='GET'&&p==='/api/core/admin/list')json(res,200,{rows:await db('list',{table:url.searchParams.get('table')})});
   else if(req.method==='POST'&&p==='/api/core/admin/save'){
    if(b.table==='users')throw Object.assign(new Error('Gebruikersrechten worden door de eigenaar toegekend via Supabase'),{status:403});
@@ -104,6 +108,7 @@ module.exports=function central(config,legacyStore){
    else throw new Error('Instelling niet bewerkbaar');json(res,200,{row:await db('setting_save',{key:b.key,value})});
   }else if(req.method==='POST'&&p==='/api/core/admin/delivery'){const action=z.enum(['quote_approve','quote_send','email_send','retry_job']).parse(b.action);json(res,200,await db(action,{id:z.string().uuid().parse(b.id)}));
   }else if(req.method==='POST'&&p==='/api/core/admin/appointment')json(res,200,await db('appointment_change',{...z.object({id:z.string().uuid(),starts_at:z.string().datetime({offset:true}).optional(),status:z.enum(['confirmed','completed','cancelled']).optional()}).parse(b),admin:true}));
+  else if(req.method==='POST'&&p==='/api/core/admin/message-draft'){const id=z.string().uuid().parse(b.id);const ctx=await db('job_context',{id});if(!ctx?.customer)throw new Error('Klant ontbreekt');const message=require('./automation').formatMessage(ctx,await db('settings'),config);const record=await db('save',{table:'emails',data:{customer_id:ctx.customer.id,subject:message.subject,body:message.text,direction:'outbound',recipient:ctx.customer.email||'',status:'draft'}});json(res,201,{ok:true,to:ctx.customer.email||'',...message,id:record.id,sent:false});}
   else if(req.method==='POST'&&p==='/api/core/admin/automation')json(res,200,await automation.run());
   else if(req.method==='GET'&&p==='/api/core/admin/export')json(res,200,await db('export_customer',{id:z.string().uuid().parse(url.searchParams.get('id'))}),{'Content-Disposition':'attachment; filename="luxwash-klantgegevens.json"'});
   else if(req.method==='POST'&&p==='/api/core/admin/erase'){if(b.confirm!=='VERWIJDEREN')throw new Error('Bevestiging ontbreekt');json(res,200,await db('erase_customer',{id:z.string().uuid().parse(b.id)}));}
