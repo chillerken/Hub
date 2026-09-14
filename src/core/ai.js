@@ -1,6 +1,6 @@
 const makeTools=require('./tools');
 const {hash}=require('./db');
-const {z}=require('./validation');
+const {basicReply}=require('./basic-replies');
 function instructions(settings){return `Je bent ${settings.ai.name}, de digitale assistente van ${settings.business.name}. ${settings.ai.tone}.
 Begroeting: ${settings.ai.greeting}
 Bedrijfsinformatie: ${JSON.stringify(settings.business)}
@@ -10,11 +10,16 @@ Voor bestaande afspraken is een geheime beheercode vereist. Telefoonnummerherken
 module.exports=function makeAI(config,db){
  const tools=makeTools(db,config);
  async function answer(message,token){
-  if(!config.openaiKey)throw Object.assign(new Error('AI is nog niet gekoppeld'),{status:503});
   const session=await db('session',{token_hash:hash(token)});const settings=await db('settings');
   await db('message',{conversation_id:session.id,customer_id:session.customer_id,direction:'inbound',content:message});
   const input=[...session.messages.map(m=>({role:m.direction==='inbound'?'user':'assistant',content:m.content})),{role:'user',content:message}];
   const ctx={source:'website',sessionId:session.id,customerId:session.customer_id};
+  const basic=await basicReply(message,settings,session.messages,()=>db('catalog'));
+  if(basic){
+   await db('message',{conversation_id:session.id,customer_id:ctx.customerId,direction:'outbound',content:basic.answer});
+   return {answer:basic.answer,session_token:token,mode:'basic',basic_kind:basic.kind,handoff:false};
+  }
+
   async function unavailable(code){
    const description=require('./provider-errors').explain(code);
    await db('handoff',{summary:`Websitechat ${session.id}: ${description}. Lees het gesprek en neem contact op zodra contactgegevens bekend zijn.`,customer_id:ctx.customerId,priority:'high'});
@@ -23,6 +28,7 @@ module.exports=function makeAI(config,db){
    await db('message',{conversation_id:session.id,customer_id:ctx.customerId,direction:'outbound',content:answer});
    return {answer,session_token:token,handoff:true};
   }
+  if(!config.openaiKey)return unavailable('not_configured');
   for(let round=0;round<8;round++){
    let r,d;try{
     r=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${config.openaiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:config.openaiModel,instructions:instructions(settings),input,tools:tools.definitions,parallel_tool_calls:false,store:false,max_output_tokens:2000}),signal:AbortSignal.timeout(45000)});
