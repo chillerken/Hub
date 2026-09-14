@@ -30,3 +30,9 @@ jobs:
         run: npm ci
       - name: Check backend syntax
         run: npm run check
+      - name: Install isolated browser-test tooling
+        run: npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.1
+      - name: Install test browser
+        run: npx playwright install --with-deps chromium
+      - name: Test mobile screens and browser interactions without real providers
+        run: node test/browser-smoke.cjs
