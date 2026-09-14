@@ -1,5 +1,16 @@
 # LuxWash flow expansion — 2026-09-14
 
+## Current release — 2026-09-14 18:23 UTC
+The existing Render business app is LIVE at https://ai-business-automation-production-gj.onrender.com/cockpit with product revision 45af402373028ed161ceb2301792a9be277eb7b7 (deployment dep-dak3mouq1p3s73cgi8u0). Online booking is available at /boeken. This is separate from the unchanged www.luxwash.online Sites publication.
+
+Render rebuilt successfully and passed all 35 Node tests. The worker completed recorded cycles against the real Supabase database. The previous publication follow-up task was completed after verification. The reason Git-triggered publication did not start was not established; no extra service or paid upgrade was created.
+
+[Browser QA run 34880240357](https://github.com/chillerken/Hub/actions/runs/34880240357) passed 54 checks across 360px, 390px and 1280px. It exercises local HTTP authorization, lead capture with retained area/material and marketing opt-in off, explicit quote acceptance, dashboard navigation and draft-only social saving. Social layout was also tested at 200% text size. Browser fixtures are isolated; requests to external origins are blocked. This is not end-to-end testing of real provider delivery or the separate Sites website.
+
+Fixed dark-mode label and price contrast, small essential status labels, and mobile dashboard heading overflow. Form label contrast changed from approximately 1.93:1 to 12.32:1 on the tested surface. This does not certify complete WCAG or GDPR compliance.
+
+OpenAI still reports insufficient_quota at 18:23 UTC. Metricool's last observed account limit remains unresolved. Inbound email, Google Calendar sync, WhatsApp and guaranteed 24/7 scheduling are not accepted as connected. Sites instructions can now be partially read, but required references and the source-editing execution environment are not available; the existing Sites website remains unchanged.
+
 ## Delivered on the existing architecture
 - Reuses chillerken/Hub branch ai-business-production, the existing Render Node service, and the existing Supabase database. No new hosting service, duplicate CRM, external paid plan, or new credential was created.
 - Exact email/phone matching reuses an unambiguous active contact without overwriting identity, disclosing customer data to a public caller, or granting booking management rights. Conflicting contacts require human review.
@@ -22,7 +33,7 @@ Migration and new DB flows were executed within explicit BEGIN/ROLLBACK transact
 JavaScript syntax checked before commit. Render installation is gated by the React build and all Node tests (isolated mocks and a local HTTP server with no external provider calls). Deployment evidence is recorded in Render logs.
 
 ## Not production-accepted / blockers
-- Sites www.luxwash.online remains on version 26: this session has no Sites source-editing skill/runtime. These changes target the existing central backend at https://ai-business-automation-production-gj.onrender.com/cockpit, not the separate Sites /controle page.
+- Sites www.luxwash.online remains on version 26: the complete Sites source-editing workflow is unavailable in this session. These changes target the existing central backend at https://ai-business-automation-production-gj.onrender.com/cockpit, not the separate Sites /controle page.
 - OpenAI inference reports insufficient_quota in the latest available provider check. Model visibility is not inference readiness.
 - Metricool account is connected, but the two 2026-09-14 scheduled items report the account limit reached. Imported statuses are explicitly timestamped observations, not continuous synchronization.
 - Gmail connector access does not configure runtime inbound email. Follow-up messages must stay disabled until the mailbox-to-backend chain is tested.
@@ -32,11 +43,11 @@ JavaScript syntax checked before commit. Render installation is gated by the Rea
 - Privacy/security controls are implemented but this is not a legal certification of GDPR compliance.
 
 ## Publication check
-The database migration is applied (version 20260914175552) and the post-migration rollback suite passed. Backend source is committed. At the current check, Render still reports live commit e19c99f and has not yet started a new deployment despite autoDeploy=yes. Do not label the expanded UI or worker live until a deploy of this revision succeeds. GitHub CI independently builds React and runs isolated Node/HTTP tests; no production credentials or real provider sends are used.
+The database migration is applied (version 20260914175552) and the post-migration rollback suite passed. Backend source is committed. The initial check found Render still on e19c99f despite autoDeploy=yes. This was subsequently recovered; see the current release section above. GitHub CI independently builds React and runs isolated Node/HTTP tests; no production credentials or real provider sends are used.
 
 The security advisor notes intentional RLS-without-public-policies on server-only tables and the existing shared-secret RPC entry points. Those entry points still require a valid application secret. A mutable search_path warning belongs to the separately added LuxAI app_set_updated_at function; this expansion preserves that unrelated work. See [Supabase security-definer guidance](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable) and [search_path guidance](https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable). No GDPR certification is claimed.
 
 ## Verified test result
 GitHub Actions run [34878357851](https://github.com/chillerken/Hub/actions/runs/34878357851) completed successfully for code revision 600f30c5c1d4d1ddd50d40afcd42c23ad381f035: React bundle built, 35 Node/HTTP tests passed, 0 failed, backend syntax passed. npm reported 0 vulnerabilities at this check (not a security certification). The original database regression suite also passed again after applying the migration.
 
-Existing open OpenAI tasks were preserved without duplicates. Actual Metricool quota and pending Render publication were recorded as owner follow-up tasks in the current CRM. No actual customer message, booking, review or social post was created by the tests. The two imported social rows are genuine external failure observations.
+Existing open OpenAI tasks were preserved without duplicates. Actual Metricool quota and pending Render publication were recorded as owner follow-up tasks in the current CRM; the publication task was subsequently completed after the successful release. No actual customer message, booking, review or social post was created by the tests. The two imported social rows are genuine external failure observations.
