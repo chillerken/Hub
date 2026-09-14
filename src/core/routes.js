@@ -3,7 +3,7 @@ const {z,booking,contact,planning,safeEqual,quoteSlot,quoteBooking,intakeDetails
 const shell=title=>`<!doctype html><html lang="nl-BE"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${title} · LuxWash</title><link rel="stylesheet" href="/central.css"><link rel="stylesheet" href="/flow.css"><script src="/central.js" defer></script></head><body><div id="root"></div></body></html>`;
 async function rawBody(req){let data='';for await(const c of req){data+=c;if(Buffer.byteLength(data)>100000)throw Object.assign(new Error('Aanvraag te groot'),{status:413});}return data;}
 module.exports=function central(config,legacyStore){
- const classify=require('./classify')(config);
+ const phonePolicy=require('./phone-policy');
  const db=require('./db')(config),ai=require('./ai')(config,db),automation=require('./automation')(config,db);
  const flowRoutes=require('./flow')(config,db);
  async function routes(req,res,helpers){
@@ -41,13 +41,10 @@ module.exports=function central(config,legacyStore){
    const ts=req.headers['x-luxwash-timestamp'];const expected=crypto.createHmac('sha256',config.supabase.appSecret).update(`${ts}.${raw}`).digest('hex');
    if(!ts||Math.abs(Date.now()/1000-Number(ts))>120||!safeEqual(expected,req.headers['x-luxwash-signature']))throw Object.assign(new Error('Niet gemachtigd'),{status:401});
    if(p==='/api/lina/summary'){
-    const v=z.object({provider_call_id:z.string().max(180),transcript:z.string().max(24000)}).parse(b);const summary=await classify(v.transcript);if(!summary.available){summary.handoff=true;summary.summary='Automatische samenvatting mislukt. Lees het transcript en volg de beller persoonlijk op.';}
-    const call=await db('call_update',{provider_call_id:v.provider_call_id,...summary,...(summary.handoff?{escalated:true}:{})});
-    if(summary.handoff&&call?.id)await db('handoff',{phone_call_id:call.id,customer_id:call.customer_id,summary:summary.summary,priority:summary.priority});
-    json(res,200,{ok:true});
-   }else if(p==='/api/lina/bootstrap')json(res,200,{instructions:ai.instructions(await db('settings')),tools:ai.tools.definitions});
+    json(res,200,await phonePolicy.finalize(db,b));
+   }else if(p==='/api/lina/bootstrap')json(res,200,phonePolicy.bootstrap(ai.tools));
    else if(p==='/api/lina/tool'){
-    const ctx=z.object({sessionId:z.string().max(160),toolCallId:z.string().max(160),phoneCallId:z.string().uuid().optional(),customerId:z.string().uuid().optional()}).parse(b.context);const call=await db('call_start',{provider_call_id:ctx.sessionId});ctx.customerId=call?.customer_id||ctx.customerId;json(res,200,await ai.tools.execute(b.name,b.arguments,{...ctx,source:'phone'}));
+    const ctx=z.object({sessionId:z.string().max(160),toolCallId:z.string().max(160),phoneCallId:z.string().uuid().optional(),customerId:z.string().uuid().optional()}).parse(b.context);const call=await db('call_start',{provider_call_id:ctx.sessionId});ctx.customerId=call?.customer_id||ctx.customerId;json(res,200,await phonePolicy.execute(db,ai.tools,b.name,b.arguments,{...ctx,phoneCallId:call.id,source:'phone'}));
    }else if(p==='/api/lina/event'){
     const allowed=['call_start','call_update','transcript','tool_claim','tool_finish','webhook_claim','webhook_finish','handoff'];if(!allowed.includes(b.action))throw new Error('Onbekende actie');json(res,200,await db(b.action,b.payload));
    }else json(res,404,{error:'Niet gevonden'});return true;

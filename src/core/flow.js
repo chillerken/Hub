@@ -12,7 +12,7 @@ function integrations(config,checks){
  {name:'Google Calendar',status:'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:'Beveiligde agenda-export beschikbaar. Automatische tweerichtingssynchronisatie ontbreekt.'},
  {name:'WhatsApp Business',status:'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:'Een WhatsApp-link is geen Business API-koppeling. Er is geen werkende gedeelde berichtenflow geverifieerd.'},
  {name:'Metricool in dashboard',status:'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:'De accountcontrole hieronder is een momentopname. De bestaande ChatGPT Social Agent werkt apart; dit dashboard publiceert niet zelfstandig.'},
- {name:'Telefonische assistente',status:'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:'Bestaande Lina-service. Een geslaagde echte telefoonoproep blijft vereist.'}
+ {name:'Telefonische assistente Astra',status:'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:'Astra geeft korte antwoorden, verwijst naar WhatsApp en bewaart gesprekslogs. Een geslaagde echte telefoonoproep blijft vereist.'}
  ];
 }
 function escapeICS(value){return String(value||'').replaceAll('\\','\\\\').replace(/\r?\n/g,'\\n').replaceAll(';','\\;').replaceAll(',','\\,');}
