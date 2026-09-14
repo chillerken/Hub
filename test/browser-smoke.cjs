@@ -11,6 +11,7 @@ const flow={checked_at:new Date().toISOString(),actions:[],events:[],customers:[
 let browser,lastPage,checks=0;
 async function noOverflow(page,label){
  const layout=await page.evaluate(()=>({width:innerWidth,document:document.documentElement.scrollWidth}));
+ if(layout.document>layout.width+2){layout.offenders=await page.evaluate(()=>Array.from(document.querySelectorAll('body *')).filter(el=>el.getBoundingClientRect().right>innerWidth+2).slice(0,8).map(el=>({tag:el.tagName,className:el.className,width:Math.round(el.getBoundingClientRect().width),text:el.textContent.slice(0,90)})));}
  assert.ok(layout.document<=layout.width+2,label+': horizontal overflow '+JSON.stringify(layout));checks++;
 }
 (async()=>{
@@ -47,7 +48,7 @@ async function noOverflow(page,label){
   }
   await page.goto(origin+'/cockpit');assert.equal(new URL(page.url()).pathname,'/admin/login');checks++;
   await page.goto(origin+'/boeken');
-  await page.getByLabel('Dienst',{exact:true}).selectOption(sid);
+  await page.getByRole('combobox',{name:/Dienst/}).selectOption(sid);
   await page.getByLabel('Uw naam',{exact:true}).fill('TEST ONLY');
   await page.getByLabel('E-mail',{exact:true}).fill('browser@example.invalid');
   await page.getByLabel('Telefoon',{exact:true}).fill('0468000000');
