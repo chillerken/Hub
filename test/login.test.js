@@ -6,7 +6,7 @@ Object.assign(process.env,{
  NODE_ENV:'test',SUPABASE_URL:'https://example.invalid',SUPABASE_PUBLISHABLE_KEY:'test-only',
  SUPABASE_APP_SECRET:'test-only-'.repeat(4),COOKIE_SECRET:'login-test-only-'.repeat(3),
  ADMIN_PASSWORD:'isolated-login-test-password',CRON_SECRET:'login-test-only-'.repeat(3),
- OPENAI_API_KEY:'',RESEND_API_KEY:'',WHATSAPP_TOKEN:''
+ OPENAI_API_KEY:'',RESEND_API_KEY:'',WHATSAPP_TOKEN:'',CENTRAL_DASHBOARD:''
 });
 const config=require('../src/config');
 const {server}=require('../server');
@@ -49,4 +49,14 @@ test('Beheerlogin: native-form headers, origins, password and protected session'
  assert.match(await authenticated.text(),/central.js/);
  const protectedPage=await fetch(origin+'/cockpit',{redirect:'manual'});
  assert.equal(protectedPage.status,302,'A separate client still needs authentication');
+
+ config.centralDashboard=true;
+ for(const [path,section] of [['/admin/login?token=invalid-test-token','overzicht'],['/admin/leads','leads'],['/admin/appointments','calendar'],['/admin/activity','audit_logs'],['/cockpit','overzicht']]){
+  const moved=await fetch(origin+path,{redirect:'manual'});
+  assert.equal(moved.status,302);
+  assert.equal(moved.headers.get('location'),'https://www.luxwash.online/controle#'+section);
+  assert.equal(moved.headers.get('set-cookie'),null);
+ }
+ const stillPrivate=await fetch(origin+'/api/core/admin/list?table=customers');
+ assert.equal(stillPrivate.status,401,'Consolidation must never grant access to customer data');
 });
