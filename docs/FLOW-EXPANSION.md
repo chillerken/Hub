@@ -51,3 +51,29 @@ The security advisor notes intentional RLS-without-public-policies on server-onl
 GitHub Actions run [34878357851](https://github.com/chillerken/Hub/actions/runs/34878357851) completed successfully for code revision 600f30c5c1d4d1ddd50d40afcd42c23ad381f035: React bundle built, 35 Node/HTTP tests passed, 0 failed, backend syntax passed. npm reported 0 vulnerabilities at this check (not a security certification). The original database regression suite also passed again after applying the migration.
 
 Existing open OpenAI tasks were preserved without duplicates. Actual Metricool quota and pending Render publication were recorded as owner follow-up tasks in the current CRM; the publication task was subsequently completed after the successful release. No actual customer message, booking, review or social post was created by the tests. The two imported social rows are genuine external failure observations.
+
+## 2026-09-14: native browser admin login repaired
+
+The user's native HTML login form was reproducibly rejected with HTTP 403 and
+"Ongeldige oorsprong". The page's `Referrer-Policy: no-referrer` caused Chromium
+to send `Origin: null` on a navigation-mode POST. This was not a password error.
+See [MDN's explanation](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy).
+
+Changed only the referrer policy to `same-origin`. The same-origin comparison,
+password validation, rate limit, HttpOnly/SameSite session cookies and cross-site
+rejection remain in place. No wildcard origins, trusted-null exception, password
+change or signing-key change was introduced. Referrers are not sent to other sites.
+
+Evidence:
+- Red regression run [34882424283](https://github.com/chillerken/Hub/actions/runs/34882424283):
+  native form reproduced `Origin=null`, HTTP 403 and the exact reported error.
+- Green run [34882587209](https://github.com/chillerken/Hub/actions/runs/34882587209):
+  36 Node/HTTP tests and 75 browser checks passed. Real HTML form submission with
+  test-only credentials accepted the correct password, rejected the wrong password,
+  issued the protected cookie and reached the dashboard at 360px, 390px and 1280px.
+  Foreign/null/malformed origins were rejected in HTTP tests.
+- Verified Render deployment `dep-dak41euq1p3s73chno80` became LIVE at `2026-09-14T18:46:07.520348Z`,
+  running `4d1331b994097a88e27a4e5ad000357827bbbe86`.
+- Tests were isolated; no real customer data, customer messages or production
+  login credentials were used. Successful login with the user's real password
+  was not directly tested. A fresh GET of `/admin/login` loads the corrected policy.
