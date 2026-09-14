@@ -8,7 +8,7 @@ const sid='00000000-0000-4000-8000-000000000001',qid='00000000-0000-4000-8000-00
 const quote={id:qid,title:'TEST — offerte',customer:{name:'Uitsluitend browsertest'},status:'viewed',expires_at:'2030-01-01T00:00:00Z',notes:'Synthetische gegevens voor een geïsoleerde test.',total_cents:12500,items:[{description:'TEST reiniging',quantity:1,unit_cents:12500}],business:{name:'LuxWash TEST',phone:'000',email:'test@example.invalid',website:'https://example.invalid'}};
 const catalog=[{id:sid,name:'TEST terrasreiniging',price_mode:'quote',duration_minutes:90,prices:[]}];
 const flow={checked_at:new Date().toISOString(),actions:[],events:[],customers:[],sources:[],worker:{checked_at:new Date().toISOString()},integrations:[{name:'TEST koppeling',status:'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:'Geen echte provider gebruikt.'}],metricool:{checked_at:new Date().toISOString(),publication_error:'TEST: accountlimiet'}};
-let browser,checks=0;
+let browser,lastPage,checks=0;
 async function noOverflow(page,label){
  const layout=await page.evaluate(()=>({width:innerWidth,document:document.documentElement.scrollWidth}));
  assert.ok(layout.document<=layout.width+2,label+': horizontal overflow '+JSON.stringify(layout));checks++;
@@ -20,7 +20,9 @@ async function noOverflow(page,label){
  for(const viewport of [{width:360,height:800},{width:390,height:844},{width:1280,height:900}]){
   const context=await browser.newContext({viewport});
   const page=await context.newPage(),errors=[],calls=[],social=[];
-  page.on('pageerror',e=>errors.push(e.message));
+  lastPage=page;page.setDefaultTimeout(10000);
+  page.on('pageerror',e=>{errors.push(e.message);console.error('BROWSER PAGE ERROR:',e.message)});
+  page.on('console',m=>{if(m.type()==='error')console.error('BROWSER CONSOLE:',m.text())});
   await context.route('**/*',async route=>{
    const url=new URL(route.request().url());
    if(url.origin!==origin)return route.abort('blockedbyclient');
@@ -93,4 +95,4 @@ async function noOverflow(page,label){
   await context.close();
  }
  console.log('BROWSER PASS: '+checks+' checks across 360px, 390px and 1280px; isolated fixtures, no live sends or database writes.');
-})().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));});
+})().catch(async e=>{console.error(e);if(lastPage)console.error('BROWSER STATE:',JSON.stringify(await lastPage.evaluate(()=>({url:location.pathname,title:document.title,text:document.body.innerText.slice(0,1800),scripts:Array.from(document.scripts).map(s=>s.src)})).catch(()=>({closed:true}))));process.exitCode=1}).finally(async()=>{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));});
