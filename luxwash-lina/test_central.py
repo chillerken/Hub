@@ -160,3 +160,57 @@ def test_replayed_event_for_connected_call_does_not_accept_again(monkeypatch):
     monkeypatch.setattr(app,'db',db);monkeypatch.setattr(app,'accept',no_accept)
     response=TestClient(app.app).post('/openai/realtime-webhook',content='{}')
     assert response.status_code==200 and response.json()['duplicate'] is True
+
+def test_final_log_saved_even_when_caller_hangs_up_without_speaking(monkeypatch):
+    saved=[]
+    def post(path,payload):saved.append((path,payload));return {'ok':True,'saved':True}
+    async def db(*args):raise AssertionError('No extra callback for a normal hang-up')
+    monkeypatch.setattr(app.central,'post',post);monkeypatch.setattr(app,'db',db)
+    asyncio.run(app.finalize_call('qa-empty-call','qa-crm',[],False))
+    assert saved==[('summary',{'provider_call_id':'qa-empty-call','turns':[],'failed':False})]
+
+def test_final_log_retry_is_bounded_and_keeps_customer_assistant_roles(monkeypatch):
+    saved=[]
+    turns=[{'role':'customer','content':'Mijn terras is vuil.'},{'role':'assistant','content':'Stuur een foto via WhatsApp.'}]
+    def post(path,payload):
+        saved.append(payload)
+        if len(saved)==1:raise app.central.BridgeError('timeout',True)
+        return {'ok':True,'saved':True}
+    async def sleep(*args):pass
+    async def db(*args):raise AssertionError('Recovery succeeded')
+    monkeypatch.setattr(app.central,'post',post);monkeypatch.setattr(app.asyncio,'sleep',sleep);monkeypatch.setattr(app,'db',db)
+    asyncio.run(app.finalize_call('qa-retry-call','qa-crm',turns,False))
+    assert len(saved)==2 and saved[0]==saved[1] and saved[0]['turns']==turns
+
+def test_unconfirmed_final_log_creates_visible_followup_instead_of_success(monkeypatch):
+    events=[]
+    def post(*args):return {'ok':True,'saved':False}
+    async def db(action,payload):events.append((action,payload));return {'ok':True}
+    async def sleep(*args):pass
+    monkeypatch.setattr(app.central,'post',post);monkeypatch.setattr(app.asyncio,'sleep',sleep);monkeypatch.setattr(app,'db',db)
+    asyncio.run(app.finalize_call('qa-failed-call','qa-crm',[],False))
+    assert events[0][0]=='call_update' and events[0][1]['status']=='failed'
+    assert events[1][0]=='handoff'
+
+def test_live_conversation_uses_astra_greeting_and_saves_role_aware_log(monkeypatch):
+    socket=Socket()
+    events=[{'type':'conversation.item.input_audio_transcription.completed','event_id':'qa-t1','transcript':'Ik wil mijn zetel laten reinigen.'},
+            {'type':'response.output_audio_transcript.done','event_id':'qa-t2','transcript':'U kunt een foto sturen via WhatsApp naar 053 89 64 00.'},
+            {'type':'session.closed'}]
+    class Stream:
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        async def send(self,value):await socket.send(value)
+        def __aiter__(self):return self
+        async def __anext__(self):
+            if not events:raise StopAsyncIteration
+            return json.dumps(events.pop(0))
+    stored=[]
+    async def db(action,payload):return {'ok':True}
+    def post(path,payload):stored.append(payload);return {'saved':True}
+    monkeypatch.setattr(app.websockets,'connect',lambda *args,**kwargs:Stream())
+    monkeypatch.setattr(app,'db',db);monkeypatch.setattr(app.central,'post',post)
+    asyncio.run(app.conversation('qa-stream-call','qa-crm',{'greeting':'Goeiedag, ik ben Astra. Waarmee kan ik u helpen?'}))
+    assert 'Astra' in socket.sent[0]['response']['instructions'] and 'Lina' not in socket.sent[0]['response']['instructions']
+    assert [t['role'] for t in stored[0]['turns']]==['customer','assistant']
+    assert stored[0]['failed'] is False

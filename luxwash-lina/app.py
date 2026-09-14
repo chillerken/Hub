@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from openai import OpenAI,InvalidWebhookSignatureError
 import central
 logging.basicConfig(level=logging.INFO)
-log=logging.getLogger('lina')
+log=logging.getLogger('astra')
 KEY=os.getenv('OPENAI_API_KEY','')
 SECRET=os.getenv('OPENAI_WEBHOOK_SECRET','')
 MODEL=os.getenv('OPENAI_REALTIME_MODEL','gpt-realtime-2.1')
@@ -26,6 +26,8 @@ async def bootstrap_bridge(application,attempts=1):
                 raise central.BridgeError('invalid_bootstrap')
             application.state.bridge_ready=True
             application.state.bridge_error=''
+            application.state.phone_policy_version=settings.get('policy_version','legacy')
+            application.state.assistant_name=settings.get('assistant_name','Astra')
             log.info('CRM bridge ready: tools=%s',len(settings['tools']))
             return settings
         except Exception as exc:
@@ -50,15 +52,15 @@ async def lifespan(app):
     except Exception:model_status='timeout';model_error='unavailable'
     app.state.model_status=model_status
     app.state.model_error=model_error
-    log.info('Lina configuration: openai=%s webhook=%s central_bridge=%s model_status=%s model_error=%s recording=false',bool(KEY),bool(SECRET),app.state.bridge_ready,model_status,model_error)
+    log.info('Astra configuration: openai=%s webhook=%s central_bridge=%s model_status=%s model_error=%s recording=false',bool(KEY),bool(SECRET),app.state.bridge_ready,model_status,model_error)
     yield
     for t in tuple(tasks): t.cancel()
     if tasks: await asyncio.gather(*tasks,return_exceptions=True)
-app=FastAPI(title='LuxWash Lina',version='2.0.0',lifespan=lifespan)
+app=FastAPI(title='LuxWash Astra',version='3.0.0',lifespan=lifespan)
 @app.get('/health')
 def health():
     required={'OPENAI_API_KEY':bool(KEY),'OPENAI_WEBHOOK_SECRET':bool(SECRET),'SUPABASE_APP_SECRET':bool(central.SECRET)}
-    return {'ok':all(required.values()) and getattr(app.state,'bridge_ready',False) and getattr(app.state,'model_status',None)==200,'central_bridge':getattr(app.state,'bridge_ready',False),'bridge_error':getattr(app.state,'bridge_error',None),'required':required,'recording':False,'live_call_verified':False,'model_status':getattr(app.state,'model_status',None),'model_error':getattr(app.state,'model_error',None),'provider':'SIP via OpenAI','route_verified':False,'active_calls':len(tasks)}
+    return {'ok':all(required.values()) and getattr(app.state,'bridge_ready',False) and getattr(app.state,'model_status',None)==200,'assistant_name':getattr(app.state,'assistant_name','Astra'),'phone_policy_version':getattr(app.state,'phone_policy_version',None),'call_log_format':'luxwash-crm-v1','central_bridge':getattr(app.state,'bridge_ready',False),'bridge_error':getattr(app.state,'bridge_error',None),'required':required,'recording':False,'live_call_verified':False,'model_status':getattr(app.state,'model_status',None),'model_error':getattr(app.state,'model_error',None),'provider':'SIP via OpenAI','route_verified':False,'active_calls':len(tasks)}
 async def db(action,payload): return await asyncio.to_thread(central.event,action,payload)
 def accept(call_id,settings):
     tools=[{k:v for k,v in t.items() if k!='strict'} for t in settings['tools']]
@@ -91,7 +93,8 @@ async def conversation(call_id,crm_id,settings):
     try:
         async with websockets.connect('wss://api.openai.com/v1/realtime?call_id='+call_id,additional_headers={'Authorization':'Bearer '+KEY},max_size=4000000) as ws:
             await db('call_update',{'provider_call_id':call_id,'status':'connected'})
-            await ws.send(json.dumps({'type':'response.create','response':{'instructions':'Begroet de beller als Lina, digitale assistente van LuxWash. Meld kort: uw gesprek wordt omgezet naar tekst om uw aanvraag te behandelen; er wordt geen audio-opname bewaard. Vraag waarmee u kan helpen.'}}))
+            greeting=settings.get('greeting') or 'Goeiedag, u spreekt met Astra, de digitale telefoonassistente van LuxWash; dit gesprek wordt naar tekst omgezet voor uw aanvraag, zonder audio-opname te bewaren. Waarmee kan ik u helpen?'
+            await ws.send(json.dumps({'type':'response.create','response':{'instructions':'Zeg uitsluitend deze begroeting, in twee korte zinnen: '+greeting}}))
             async for raw in ws:
                 e=json.loads(raw);et=e.get('type')
                 # Consume one canonical tool event only; persistent claim also protects reconnects/retries.
@@ -99,8 +102,11 @@ async def conversation(call_id,crm_id,settings):
                 elif et in ('conversation.item.input_audio_transcription.completed','response.output_audio_transcript.done'):
                     text=e.get('transcript','')
                     if text:
-                        transcript.append(text[:12000])
-                        await db('transcript',{'provider_call_id':call_id,'event_id':transcript_event_id(call_id,e),'role':'customer' if et.startswith('conversation') else 'assistant','content':text[:12000]})
+                        turn={'role':'customer' if et.startswith('conversation') else 'assistant','content':text[:12000]}
+                        transcript.append(turn)
+                        while len(transcript)>200 or sum(len(t['content']) for t in transcript)>24000:transcript.pop(0)
+                        try:await db('transcript',{'provider_call_id':call_id,'event_id':transcript_event_id(call_id,e),**turn})
+                        except Exception:log.warning('Transcript journal unavailable; final CRM log will retry the available conversation')
                 elif et=='error':
                     code=(e.get('error') or {}).get('code','unknown')
                     safe_code=code if code in ('insufficient_quota','rate_limit_exceeded','server_error','invalid_api_key','conversation_already_has_active_response') else 'unclassified'
@@ -114,13 +120,25 @@ async def conversation(call_id,crm_id,settings):
     except Exception:
         failed=True;log.warning('Realtime connection interrupted')
     finally:
+        await finalize_call(call_id,crm_id,transcript,failed)
+
+async def finalize_call(call_id,crm_id,turns,failed):
+    # Save a JSON log even after an immediate hang-up. The CRM does not call an AI provider.
+    saved=False
+    for attempt in range(2):
         try:
-            await db('call_update',{'provider_call_id':call_id,'status':'failed' if failed else 'completed','escalated':failed})
-            if transcript:
-                try:await asyncio.to_thread(central.post,'summary',{'provider_call_id':call_id,'transcript':'\n'.join(transcript)[-24000:]})
-                except Exception:log.warning('Summary unavailable; original transcript retained')
-            if failed:await db('handoff',{'phone_call_id':crm_id,'summary':'Telefoongesprek onderbroken. Controleer transcript en bel terug.','priority':'high'})
+            result=await asyncio.to_thread(central.post,'summary',{'provider_call_id':call_id,'turns':turns,'failed':failed})
+            if not result.get('saved'):raise central.BridgeError('log_not_confirmed')
+            saved=True;break
+        except Exception:
+            log.warning('Final CRM log unavailable: attempt=%s',attempt+1)
+            if attempt==0:await asyncio.sleep(1)
+    if not saved:
+        try:await db('call_update',{'provider_call_id':call_id,'status':'failed','escalated':True})
         except Exception:log.error('Call persistence unavailable; check provider logs')
+    if failed or not saved:
+        try:await db('handoff',{'phone_call_id':crm_id,'summary':'Telefoongesprek onderbroken of gesprekslog niet bevestigd. Controleer transcript en telefoonlog.','priority':'high'})
+        except Exception:log.error('Callback persistence unavailable; check provider logs')
 @app.post('/openai/realtime-webhook')
 async def webhook(request:Request):
     if not client:raise HTTPException(503,'Voice credentials ontbreken')
@@ -163,6 +181,6 @@ async def webhook(request:Request):
         log.warning('Unable to accept incoming call')
         try:
             await db('call_update',{'provider_call_id':call_id,'status':'failed','escalated':True})
-            await db('handoff',{'summary':'Lina kon een inkomende oproep niet aannemen; controleer telefoonlog.','priority':'high'})
+            await db('handoff',{'summary':'Astra kon een inkomende oproep niet aannemen; controleer telefoonlog.','priority':'high'})
         except Exception:pass
         raise HTTPException(503,'Unable to accept call')
