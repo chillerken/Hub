@@ -3,7 +3,6 @@ const assert=require('node:assert/strict');
 Object.assign(process.env,{NODE_ENV:'test',SUPABASE_URL:'https://example.invalid',SUPABASE_PUBLISHABLE_KEY:'test-only',SUPABASE_APP_SECRET:'test-only-'.repeat(4),COOKIE_SECRET:'browser-test-only-'.repeat(3),ADMIN_PASSWORD:'browser-test-password',CRON_SECRET:'browser-test-only-'.repeat(3),OPENAI_API_KEY:'',RESEND_API_KEY:'',WHATSAPP_TOKEN:''});
 const {chromium}=require('playwright');
 const {server}=require('../server');
-const {makeAdminCookie}=require('../src/auth');
 const sid='00000000-0000-4000-8000-000000000001',qid='00000000-0000-4000-8000-000000000002';
 const quote={id:qid,title:'TEST — offerte',customer:{name:'Uitsluitend browsertest'},status:'viewed',expires_at:'2030-01-01T00:00:00Z',notes:'Synthetische gegevens voor een geïsoleerde test.',total_cents:12500,items:[{description:'TEST reiniging',quantity:1,unit_cents:12500}],business:{name:'LuxWash TEST',phone:'000',email:'test@example.invalid',website:'https://example.invalid'}};
 const catalog=[{id:sid,name:'TEST terrasreiniging',price_mode:'quote',duration_minutes:90,prices:[]}];
@@ -17,6 +16,7 @@ async function noOverflow(page,label){
 (async()=>{
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const origin='http://127.0.0.1:'+server.address().port;
+ require('../src/config').baseUrl=origin;
  browser=await chromium.launch({headless:true});
  for(const viewport of [{width:360,height:800},{width:390,height:844},{width:1280,height:900}]){
   const context=await browser.newContext({viewport});
@@ -75,8 +75,30 @@ async function noOverflow(page,label){
   await page.getByRole('checkbox').check();await accept.click();
   await page.getByText('Uw akkoord is opgeslagen.',{exact:false}).waitFor();
   assert.ok(calls.some(c=>c.path==='/api/core/quote'&&c.body.decision==='accepted'&&c.body.confirmed===true));checks++;
-  await context.addCookies([{name:'aba_admin',value:makeAdminCookie(process.env.COOKIE_SECRET),url:origin,httpOnly:true,sameSite:'Strict'}]);
-  await page.goto(origin+'/cockpit');
+  // Exercise the real native HTML form, including browser-generated Origin headers.
+  // Never inject an admin cookie: this must work exactly like the user's mobile login.
+  await page.goto(origin+'/admin/login');
+  await noOverflow(page,'login '+viewport.width);
+  await page.getByLabel('Wachtwoord',{exact:true}).fill('not-the-test-password');
+  let submitted=page.waitForResponse(r=>r.url()===origin+'/admin/login'&&r.request().method()==='POST');
+  await page.getByRole('button',{name:'Inloggen',exact:true}).click();
+  let loginResponse=await submitted;
+  let requestOrigin=await loginResponse.request().headerValue('origin');
+  assert.equal(loginResponse.status(),401,'A same-origin wrong password reaches password validation; Origin='+requestOrigin);checks++;
+  assert.equal(requestOrigin,origin,'Native form retains its real Origin');checks++;
+  await page.getByText('Onjuist wachtwoord.',{exact:true}).waitFor();
+  assert.equal((await context.cookies()).some(c=>c.name==='aba_admin'),false);checks++;
+  await page.getByLabel('Wachtwoord',{exact:true}).fill(process.env.ADMIN_PASSWORD);
+  submitted=page.waitForResponse(r=>r.url()===origin+'/admin/login'&&r.request().method()==='POST');
+  await page.getByRole('button',{name:'Inloggen',exact:true}).click();
+  loginResponse=await submitted;
+  assert.equal(loginResponse.status(),302,'Native password login redirects to the dashboard');checks++;
+  assert.equal(loginResponse.headers()['referrer-policy'],'same-origin');checks++;
+  await page.waitForURL(origin+'/cockpit');
+  const session=(await context.cookies()).find(c=>c.name==='aba_admin');
+  assert.ok(session&&session.httpOnly&&session.sameSite==='Strict','Server issues the protected admin session cookie');checks++;
+  console.log('LOGIN PASS: native form, wrong password rejected, correct password accepted, dashboard session; '+viewport.width+'px');
+
   await page.getByRole('heading',{name:'Vandaag bij LuxWash'}).waitFor();
   await page.getByRole('heading',{name:/Actie vereist/}).waitFor();
   await noOverflow(page,'dashboard '+viewport.width);
