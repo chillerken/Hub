@@ -60,6 +60,8 @@ async function noOverflow(page,label){
   await page.getByLabel('Materiaal',{exact:true}).fill('Betontegels');
   await page.getByLabel('Zoeken vanaf',{exact:true}).fill('2030-01-01');
   await noOverflow(page,'booking '+viewport.width);
+  const labelStyle=await page.getByRole('combobox',{name:/Dienst/}).evaluate(el=>getComputedStyle(el.closest('label')).color);
+  assert.equal(labelStyle,'rgb(228, 232, 217)','Dark-mode form labels stay readable');checks++;
   assert.equal(await page.getByLabel('Stuur mij af en toe een onderhoudsuitnodiging (optioneel)').isChecked(),false);checks++;
   await page.getByRole('button',{name:'Offerte aanvragen',exact:true}).click();
   await page.getByRole('heading',{name:'Uw aanvraag is ontvangen.'}).waitFor();
