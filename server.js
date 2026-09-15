@@ -13,6 +13,7 @@ const bookingCatalog = require('./src/bookingCatalog');
 const html = require('./src/html');
 const makeReplyLoop = require('./src/lead-recovery');
 const makeReplyLoopOps = require('./src/replyloop-ops');
+const makeReplyLoopHome = require('./src/replyloop-home');
 const { makeAdminCookie, verifyAdminCookie, parseCookies } = require('./src/auth');
 
 const store = makeStore(config);
@@ -22,6 +23,7 @@ const central = require('./src/core/routes')(config, store);
 const automation = central.automation;
 const replyLoop = makeReplyLoop(config, store);
 const replyLoopOps = makeReplyLoopOps(config, store);
+const replyLoopHome = makeReplyLoopHome(config);
 const PUBLIC = path.join(__dirname, 'public');
 const hits = new Map();
 let automationTimer = null;
@@ -87,6 +89,7 @@ const server = http.createServer(async (req,res) => {
     const p = u.pathname;
     if(config.centralDashboard&&req.method==='GET'&&(p==='/cockpit'||p==='/admin'||p.startsWith('/admin/'))){const section=p.includes('appointment')?'calendar':p.includes('leads')?'leads':p.includes('activity')?'audit_logs':'overzicht';return redirect(res,'https://www.luxwash.online/controle#'+section);}
     if (staticFile(p,res)) return;
+    if(await replyLoopHome.routes(req,res,{send,json,redirect,sameOrigin})) return;
     if(await replyLoopOps.routes(req,res,{send,json,redirect,sameOrigin})) return;
     if(await replyLoop.routes(req,res,{send,json,redirect,sameOrigin})) return;
     const adminToken=parseCookies(req.headers.cookie||'').aba_admin;
