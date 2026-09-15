@@ -11,6 +11,7 @@ const makeAi = require('./src/ai');
 const makeAutomation = require('./src/automation');
 const bookingCatalog = require('./src/bookingCatalog');
 const html = require('./src/html');
+const makeReplyLoop = require('./src/lead-recovery');
 const { makeAdminCookie, verifyAdminCookie, parseCookies } = require('./src/auth');
 
 const store = makeStore(config);
@@ -18,6 +19,7 @@ const messenger = makeMessenger(config, store);
 const ai = makeAi(config);
 const central = require('./src/core/routes')(config, store);
 const automation = central.automation;
+const replyLoop = makeReplyLoop(config, store);
 const PUBLIC = path.join(__dirname, 'public');
 const hits = new Map();
 let automationTimer = null;
@@ -83,6 +85,7 @@ const server = http.createServer(async (req,res) => {
     const p = u.pathname;
     if(config.centralDashboard&&req.method==='GET'&&(p==='/cockpit'||p==='/admin'||p.startsWith('/admin/'))){const section=p.includes('appointment')?'calendar':p.includes('leads')?'leads':p.includes('activity')?'audit_logs':'overzicht';return redirect(res,'https://www.luxwash.online/controle#'+section);}
     if (staticFile(p,res)) return;
+    if(await replyLoop.routes(req,res,{send,json,redirect,sameOrigin})) return;
     const adminToken=parseCookies(req.headers.cookie||'').aba_admin;
     if (verifyAdminCookie(adminToken,config.cookieSecret)) {
       const claims=JSON.parse(Buffer.from(adminToken.split('.')[0],'base64url').toString());
@@ -95,7 +98,7 @@ const server = http.createServer(async (req,res) => {
     if(req.method==='GET' && p==='/health') {
       try {
         const db = await store.health();
-        return json(res, db?200:503, { ok:Boolean(db), database:Boolean(db), ai:config.aiMode!=='rules'&&ai.ready, chatbot_mode:config.aiMode, email_configured:messenger.emailReady, whatsapp_configured:messenger.whatsappReady, service:'ai-business-automation-production' });
+        return json(res, db?200:503, { ok:Boolean(db), database:Boolean(db), ai:config.aiMode!=='rules'&&ai.ready, chatbot_mode:config.aiMode, email_configured:messenger.emailReady, whatsapp_configured:messenger.whatsappReady, replyloop:true, service:'ai-business-automation-production' });
       } catch(e) { return json(res,503,{ok:false,database:false,error:'Database niet bereikbaar'}); }
     }
 
@@ -203,12 +206,16 @@ const server = http.createServer(async (req,res) => {
 async function start() {
   await store.init();
   await central.db('health');
-  console.log('LuxWash integration configuration',JSON.stringify({database:true,ai:Boolean(config.openaiKey),email:Boolean(config.resend.apiKey&&config.resend.from),inboundEmail:Boolean(process.env.RESEND_WEBHOOK_SECRET),stripe:Boolean(process.env.STRIPE_WEBHOOK_SECRET),version:'central-1'}));
+  console.log('LuxWash integration configuration',JSON.stringify({database:true,ai:Boolean(config.openaiKey),email:Boolean(config.resend.apiKey&&config.resend.from),inboundEmail:Boolean(process.env.RESEND_WEBHOOK_SECRET),stripe:Boolean(process.env.STRIPE_WEBHOOK_SECRET),replyloop:true,version:'central-1'}));
   require('./src/core/diagnostics')(config).then(report=>console.log('LuxWash provider checks',JSON.stringify(report))).catch(()=>{});
   server.listen(config.port,'0.0.0.0',()=>console.log(`AI Business Automation productie draait op ${config.baseUrl}`));
   if(config.automationIntervalMinutes > 0) {
     automation.run().catch(e=>console.error('Automation startup failed:',e.message));
-    automationTimer=setInterval(()=>automation.run().catch(e=>console.error('Automation error:',e)),config.automationIntervalMinutes*60*1000);
+    replyLoop.runAutomation().catch(e=>console.error('ReplyLoop startup automation failed:',e.message));
+    automationTimer=setInterval(()=>{
+      automation.run().catch(e=>console.error('Automation error:',e));
+      replyLoop.runAutomation().catch(e=>console.error('ReplyLoop automation error:',e));
+    },config.automationIntervalMinutes*60*1000);
     automationTimer.unref();
   }
 }
