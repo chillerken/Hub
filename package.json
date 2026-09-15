@@ -2,12 +2,12 @@
   "name": "ai-business-automation-production",
   "version": "3.0.0",
   "private": true,
-  "description": "Production AI business automation for local businesses",
-  "main": "server.js",
+  "description": "Production AI business automation for local businesses plus Lead Autopilot SaaS",
+  "main": "autopilot-entry.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "check": "node --check server.js && node --check src/core/routes.js && node --check src/core/flow.js && node --check src/core/automation.js",
+    "start": "node autopilot-entry.js",
+    "dev": "node --watch autopilot-entry.js",
+    "check": "node --check autopilot-entry.js && node --check server.js && node --check src/autopilot/index.js && node --check src/autopilot/auth.js && node --check src/autopilot/db.js && node --check src/autopilot/mailer.js && node --check src/autopilot/stripe.js && node --check src/core/routes.js && node --check src/core/flow.js && node --check src/core/automation.js",
     "build": "esbuild ui/app.tsx --bundle --minify --outfile=public/central.js --define:process.env.NODE_ENV=\"\\\"production\\\"\"",
     "test": "node --test test/*.test.js",
     "postinstall": "npm run build && npm test"
