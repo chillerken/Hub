@@ -12,13 +12,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore Android source
+      - name: Restore v1 source and apply v1.1 LAN patch
         shell: bash
         run: |
-          cat tradebot_v11_part00.txt tradebot_v11_part01.txt tradebot_v11_part02.txt tradebot_v11_part03.txt | base64 -d > tradebot_android_src.zip
+          base64 -d tradebot_android_src.zip.b64 > tradebot_android_src.zip
           unzip -o tradebot_android_src.zip
+          cp tradebot_v11/Discovery.java app/src/main/java/online/luxwash/tradebot/Discovery.java
+          python tradebot_v11/patch_v11.py
           test -f app/src/main/AndroidManifest.xml
           test -f app/src/main/java/online/luxwash/tradebot/MainActivity.java
+          grep -q "ZOEK BACKEND" app/src/main/java/online/luxwash/tradebot/MainActivity.java
           grep -q "versionName '1.1.0'" app/build.gradle
 
       - name: Set up Java
