@@ -6,10 +6,13 @@ import { fileURLToPath } from 'node:url';
 const DIR = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 const appSource = readFileSync(join(DIR, 'app.js'), 'utf8');
+const pricingPatchSource = readFileSync(join(DIR, 'pricing-patch.js'), 'utf8');
 const parseableApp = appSource.replace(/^import\s+.*?;\s*$/gm, '');
 new Function(parseableApp);
+new Function(pricingPatchSource);
 const files = {
   '/app.js': Buffer.from(appSource),
+  '/pricing-patch.js': Buffer.from(pricingPatchSource),
   '/styles.css': readFileSync(join(DIR, 'styles.css')),
   '/': readFileSync(join(DIR, 'index.html')),
 };
@@ -18,7 +21,7 @@ const mime = { '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; chars
 http.createServer((req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-    return res.end(JSON.stringify({ ok: true, service: 'Tafel&Go', appSyntax: 'ok' }));
+    return res.end(JSON.stringify({ ok: true, service: 'Tafel&Go', appSyntax: 'ok', pricingPatchSyntax: 'ok' }));
   }
   if (req.url === '/favicon.ico') { res.writeHead(204); return res.end(); }
   if (req.method !== 'GET' && req.method !== 'HEAD') {
