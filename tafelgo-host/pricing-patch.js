@@ -1,6 +1,7 @@
 const replacements = [
   ['+ 0,5% Tafel&Go-fee alleen op online QR-betalingen. Stripe-verwerkingskosten apart.', 'Geen Tafel&Go-transactiecommissie. Alleen de gewone Stripe-verwerkingskosten zijn voor het restaurant.'],
-  ['Tafel&Go rekent 0,5% op online QR-betalingen; Stripe-verwerkingskosten zijn apart.', 'Tafel&Go rekent geen transactiekost op online QR-betalingen. Alleen de gewone Stripe-verwerkingskosten zijn voor het restaurant.']
+  ['Tafel&Go rekent 0,5% op online QR-betalingen; Stripe-verwerkingskosten zijn apart.', 'Tafel&Go rekent geen transactiekost op online QR-betalingen. Alleen de gewone Stripe-verwerkingskosten zijn voor het restaurant.'],
+  ['Testmodus: er wordt nog geen echt abonnementsgeld geïnd.', 'Live betalingen actief. Na de proefperiode wordt €39 per maand automatisch via Stripe geïnd.']
 ];
 
 function patchPricingCopy() {
