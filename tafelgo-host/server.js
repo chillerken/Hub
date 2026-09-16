@@ -32,7 +32,7 @@ http.createServer((req, res) => {
     'x-content-type-options': 'nosniff',
     'referrer-policy': 'strict-origin-when-cross-origin',
     'permissions-policy': 'camera=(), microphone=(), geolocation=()',
-    'content-security-policy': "default-src 'self'; script-src 'self' https://esm.sh; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://nahwlhptgdkwhjcfkhkt.supabase.co https://esm.sh; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://buy.stripe.com;"
+    'content-security-policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://nahwlhptgdkwhjcfkhkt.supabase.co https://esm.sh; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://buy.stripe.com;"
   });
   if (req.method === 'HEAD') return res.end();
   res.end(body);
