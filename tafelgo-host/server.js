@@ -7,9 +7,9 @@ const DIR = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 const appSource = readFileSync(join(DIR, 'app.js'), 'utf8');
 const pricingPatchSource = readFileSync(join(DIR, 'pricing-patch.js'), 'utf8');
-const parseableApp = appSource.replace(/^import\s+.*?;\s*$/gm, '');
-new Function(parseableApp);
-new Function(pricingPatchSource);
+const stripModuleImports = source => source.replace(/^import\s+.*?;\s*$/gm, '');
+new Function(stripModuleImports(appSource));
+new Function(stripModuleImports(pricingPatchSource));
 const files = {
   '/app.js': Buffer.from(appSource),
   '/pricing-patch.js': Buffer.from(pricingPatchSource),
