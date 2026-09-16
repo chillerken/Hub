@@ -15,10 +15,11 @@ jobs:
       - name: Restore Android source
         shell: bash
         run: |
-          base64 -d tradebot_android_src.zip.b64 > tradebot_android_src.zip
+          cat tradebot_v11_part00.txt tradebot_v11_part01.txt tradebot_v11_part02.txt tradebot_v11_part03.txt | base64 -d > tradebot_android_src.zip
           unzip -o tradebot_android_src.zip
           test -f app/src/main/AndroidManifest.xml
           test -f app/src/main/java/online/luxwash/tradebot/MainActivity.java
+          grep -q "versionName '1.1.0'" app/build.gradle
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -50,6 +51,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: tradebot-control-apk
+          name: tradebot-control-apk-v1.1
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
