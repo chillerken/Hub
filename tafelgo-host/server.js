@@ -19,17 +19,25 @@ const files = {
 const mime = { '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8' };
 
 http.createServer((req, res) => {
-  if (req.url === '/health') {
+  const parsed = new URL(req.url, 'https://local.invalid');
+  if (parsed.pathname === '/health') {
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
     return res.end(JSON.stringify({ ok: true, service: 'Tafel&Go', appSyntax: 'ok', pricingPatchSyntax: 'ok' }));
   }
-  if (req.url === '/favicon.ico') { res.writeHead(204); return res.end(); }
+  if (parsed.pathname === '/start') {
+    res.writeHead(302, { location: '/?app=1&signup=1', 'cache-control': 'no-store' });
+    return res.end();
+  }
+  if (parsed.pathname === '/login') {
+    res.writeHead(302, { location: '/?app=1', 'cache-control': 'no-store' });
+    return res.end();
+  }
+  if (parsed.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.writeHead(405, { 'content-type': 'text/plain; charset=utf-8', allow: 'GET, HEAD' });
     return res.end('Method not allowed');
   }
-  const path = new URL(req.url, 'https://local.invalid').pathname;
-  const key = files[path] ? path : '/';
+  const key = files[parsed.pathname] ? parsed.pathname : '/';
   const body = files[key];
   const ext = key === '/' ? '.html' : extname(key);
   res.writeHead(200, {
