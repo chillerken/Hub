@@ -1,4 +1,4 @@
-const http = require('http');
+import http from 'node:http';
 
 const PORT = process.env.PORT || 3000;
 const UPSTREAM = 'https://nahwlhptgdkwhjcfkhkt.supabase.co/functions/v1/leadpilot-site';
