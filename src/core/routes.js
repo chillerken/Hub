@@ -21,13 +21,6 @@ module.exports=function central(config,legacyStore){
    last_inbound_at:now,
    metadata
   });
-  const email=String(v.email||b.email||'').trim().toLowerCase();
-  const name=String(v.name||b.name||'klant').trim();
-  if(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)&&config.resend.apiKey&&config.resend.from){
-   const payload={from:config.resend.from,to:[email],reply_to:config.business.email,subject:'Aanvraag ontvangen — LuxWash',text:`Dag ${name},\n\nBedankt voor uw aanvraag bij LuxWash. We hebben uw bericht goed ontvangen. Prijs en planning worden persoonlijk gecontroleerd en bevestigd. U hoeft uw aanvraag niet opnieuw te sturen.\n\nLuxWash`};
-   const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${config.resend.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(15000)}).catch(()=>null);
-   if(response&&!response.ok)console.error('ReplyLoop demo confirmation failed',response.status);
-  }
   return updated;
  }
  async function routes(req,res,helpers){
