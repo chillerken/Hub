@@ -6,6 +6,30 @@ module.exports=function central(config,legacyStore){
  const phonePolicy=require('./phone-policy');
  const db=require('./db')(config),ai=require('./ai')(config,db),automation=require('./automation')(config,db);
  const flowRoutes=require('./flow')(config,db);
+ const replyLoopDemoAccountId=String(process.env.LR_LUXWASH_DEMO_ACCOUNT_ID||'').trim();
+ async function mirrorLuxwashIntoReplyLoop(v,b,intake){
+  if(!/^[a-f0-9-]{36}$/i.test(replyLoopDemoAccountId)||!intake?.id)return null;
+  const lead=await legacyStore.getLead(intake.id).catch(()=>null);
+  if(!lead)return null;
+  if(lead.metadata?.replyloop_account_id===replyLoopDemoAccountId)return lead;
+  const now=new Date().toISOString();
+  const metadata={...(lead.metadata||{}),replyloop_account_id:replyLoopDemoAccountId,replyloop_demo:true,replyloop_source:'luxwash-live'};
+  const updated=await legacyStore.updateLead(lead.id,{
+   next_action:'ReplyLoop follow-up 1',
+   follow_up_at:new Date(Date.now()+24*3600e3).toISOString(),
+   consent_basis:'inbound_request',
+   last_inbound_at:now,
+   metadata
+  });
+  const email=String(v.email||b.email||'').trim().toLowerCase();
+  const name=String(v.name||b.name||'klant').trim();
+  if(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)&&config.resend.apiKey&&config.resend.from){
+   const payload={from:config.resend.from,to:[email],reply_to:config.business.email,subject:'Aanvraag ontvangen — LuxWash',text:`Dag ${name},\n\nBedankt voor uw aanvraag bij LuxWash. We hebben uw bericht goed ontvangen. Prijs en planning worden persoonlijk gecontroleerd en bevestigd. U hoeft uw aanvraag niet opnieuw te sturen.\n\nLuxWash`};
+   const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${config.resend.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(15000)}).catch(()=>null);
+   if(response&&!response.ok)console.error('ReplyLoop demo confirmation failed',response.status);
+  }
+  return updated;
+ }
  async function routes(req,res,helpers){
  const {send,json,isAdmin,redirect,sameOrigin}=helpers;const url=new URL(req.url,config.baseUrl),p=url.pathname;
  const write=['POST','PUT','PATCH','DELETE'].includes(req.method);
@@ -71,7 +95,7 @@ module.exports=function central(config,legacyStore){
    const r=await db('book',{...v,source:'website',manage_token_hash:hash(token)});const a=r.appointment;
    json(res,201,{ok:true,id:a.id,status:a.status,starts_at:a.starts_at,price_cents:a.price_cents,price_mode:a.price_mode,manage_token:token,confirmation:'queued'});
   }else if(req.method==='POST'&&['/api/core/request','/api/core/legacy-request'].includes(p)){
-   const v=contact.parse(b);const details=intakeDetails.parse(b);const key=z.string().min(16).max(120).parse(b.idempotency_key||(p==='/api/core/legacy-request'?crypto.randomUUID():undefined));const l=await db('intake',{...v,intake_details:details,idempotency_key:key,service:String(b.service||'').slice(0,160),message:String(b.message||'').slice(0,1500)});json(res,201,{ok:true,...l});
+   const v=contact.parse(b);const details=intakeDetails.parse(b);const key=z.string().min(16).max(120).parse(b.idempotency_key||(p==='/api/core/legacy-request'?crypto.randomUUID():undefined));const l=await db('intake',{...v,intake_details:details,idempotency_key:key,service:String(b.service||'').slice(0,160),message:String(b.message||'').slice(0,1500)});let mirrored=null;try{mirrored=await mirrorLuxwashIntoReplyLoop(v,b,l);}catch(e){console.error('ReplyLoop LuxWash mirror failed',e.message);}json(res,201,{ok:true,...l,replyloop_mirrored:Boolean(mirrored)});
   }else if(req.method==='POST'&&p==='/api/chat'){
    const v=z.object({message:z.string().trim().min(1).max(2000),session_token:z.string().min(32).max(120).optional()}).parse(b);json(res,200,await ai.answer(v.message,v.session_token||crypto.randomBytes(32).toString('base64url')));
   }else if(req.method==='POST'&&p==='/api/core/manage'){
