@@ -51,7 +51,8 @@ test('ReplyLoop homepage and CSS routes are server-rendered without provider cal
   const handled=await app.routes({method:'GET',url:'/replyloop',headers:{}},res,helpers);
   assert.equal(handled,true);
   assert.match(replies.at(-1).b,/Laat geen warme lead koud worden/);
-  assert.match(replies.at(-1).b,/Stripe sandbox actief/);
+  if(process.env.LR_BILLING_MODE==='live') assert.doesNotMatch(replies.at(-1).b,/Stripe sandbox actief/);
+  else assert.match(replies.at(-1).b,/Stripe sandbox actief/);
 
   replies.length=0;
   await app.routes({method:'GET',url:'/replyloop.css',headers:{}},res,helpers);
