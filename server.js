@@ -13,6 +13,7 @@ const bookingCatalog = require('./src/bookingCatalog');
 const html = require('./src/html');
 const makeReplyLoop = require('./src/lead-recovery');
 const makeReplyLoopOps = require('./src/replyloop-ops');
+const makeReplyLoopUpgrades = require('./src/replyloop-upgrades');
 const makeReplyLoopHome = require('./src/replyloop-home');
 const { makeAdminCookie, verifyAdminCookie, parseCookies } = require('./src/auth');
 
@@ -23,6 +24,7 @@ const central = require('./src/core/routes')(config, store);
 const automation = central.automation;
 const replyLoop = makeReplyLoop(config, store);
 const replyLoopOps = makeReplyLoopOps(config, store);
+const replyLoopUpgrades = makeReplyLoopUpgrades(config, store);
 const replyLoopHome = makeReplyLoopHome(config);
 const PUBLIC = path.join(__dirname, 'public');
 const hits = new Map();
@@ -91,6 +93,7 @@ const server = http.createServer(async (req,res) => {
     if (staticFile(p,res)) return;
     if(await replyLoopHome.routes(req,res,{send,json,redirect,sameOrigin})) return;
     if(await replyLoopOps.routes(req,res,{send,json,redirect,sameOrigin})) return;
+    if(await replyLoopUpgrades.routes(req,res,{send,json,redirect,sameOrigin})) return;
     if(await replyLoop.routes(req,res,{send,json,redirect,sameOrigin})) return;
     const adminToken=parseCookies(req.headers.cookie||'').aba_admin;
     if (verifyAdminCookie(adminToken,config.cookieSecret)) {
@@ -219,10 +222,12 @@ async function start() {
     automation.run().catch(e=>console.error('Automation startup failed:',e.message));
     replyLoop.runAutomation().catch(e=>console.error('ReplyLoop startup automation failed:',e.message));
     replyLoopOps.runAutomation().catch(e=>console.error('ReplyLoop ops startup automation failed:',e.message));
+    replyLoopUpgrades.runAutomation().then(r=>console.log('ReplyLoop upgrades startup',JSON.stringify(r))).catch(e=>console.error('ReplyLoop upgrades startup failed:',e.message));
     automationTimer=setInterval(()=>{
       automation.run().catch(e=>console.error('Automation error:',e));
       replyLoop.runAutomation().catch(e=>console.error('ReplyLoop automation error:',e));
       replyLoopOps.runAutomation().catch(e=>console.error('ReplyLoop ops automation error:',e));
+      replyLoopUpgrades.runAutomation().catch(e=>console.error('ReplyLoop upgrades automation error:',e));
     },config.automationIntervalMinutes*60*1000);
     automationTimer.unref();
   }
