@@ -9,16 +9,16 @@ test('Belgische boeking gebruikt zomer- en winteroffset onafhankelijk van het to
  assert.throws(()=>brusselsInstant('2026-10-25T02:30'),/tweemaal/);
 });
 test('Ongeldig gecodeerde cookie veroorzaakt geen serverfout',()=>{assert.equal(parseCookies('aba_admin=%E0%A4%A; other=valid').other,'valid');assert.equal(parseCookies('aba_admin=%E0%A4%A').aba_admin,'');});
-test('Classificatie maakt quota- en onvolledige antwoorden zichtbaar zonder providertekst te lekken',async t=>{
+test('Classificatie valt bij quota- en onvolledige antwoorden veilig terug op lokale regels',async t=>{
  const {providerError}=require('../src/core/provider-errors');
  assert.equal(providerError(429,{error:{type:'insufficient_quota'}}),'insufficient_quota');
  assert.equal(providerError(429,{error:'No API credits remain. Add credits to continue.'}),'insufficient_quota');
  assert.equal(providerError(429,{error:{message:'Rate limit exceeded for requests per min'}}),'rate_limit_exceeded');
  const old=global.fetch;t.after(()=>global.fetch=old);const classify=require('../src/core/classify')({openaiKey:'unit-only',openaiModel:'unit-only'});
  global.fetch=async()=>new Response(JSON.stringify({error:{code:'insufficient_quota',message:'sensitive provider response'}}),{status:429});
- const limited=await classify('Ik wil een afspraak');assert.equal(limited.available,false);assert.equal(limited.error_code,'insufficient_quota');assert.equal(JSON.stringify(limited).includes('sensitive'),false);
- global.fetch=async()=>new Response(JSON.stringify({status:'incomplete',output:[]}));assert.equal((await classify('Boeking')).error_code,'incomplete_output');
- global.fetch=async()=>new Response(JSON.stringify({output:[{content:[{type:'output_text',text:JSON.stringify({intent:'booking',priority:'normal',sentiment:'neutral',summary:'Klant vraagt een afspraak.',handoff:false})}]}]}));assert.equal((await classify('Boeking')).available,true);
+ const limited=await classify('Ik wil een afspraak');assert.equal(limited.available,true);assert.equal(limited.mode,'rules');assert.equal(limited.fallback_from,'insufficient_quota');assert.equal(limited.intent,'booking');assert.equal(JSON.stringify(limited).includes('sensitive'),false);
+ global.fetch=async()=>new Response(JSON.stringify({status:'incomplete',output:[]}));const incomplete=await classify('Boeking');assert.equal(incomplete.available,true);assert.equal(incomplete.mode,'rules');assert.equal(incomplete.fallback_from,'incomplete_output');
+ global.fetch=async()=>new Response(JSON.stringify({output:[{content:[{type:'output_text',text:JSON.stringify({intent:'booking',priority:'normal',sentiment:'neutral',summary:'Klant vraagt een afspraak.',handoff:false})}]}]}));const ok=await classify('Boeking');assert.equal(ok.available,true);assert.equal(ok.mode,'ai');
 });
 test('Offerteboeking vereist expliciet klantakkoord en accepteert geen prijs van browser',()=>{
  const {quoteBooking}=require('../src/core/validation');const crypto=require('node:crypto');
