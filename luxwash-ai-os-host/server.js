@@ -1,5 +1,5 @@
-const http = require('http');
-const crypto = require('crypto');
+import http from 'node:http';
+import crypto from 'node:crypto';
 
 const PORT = process.env.PORT || 10000;
 const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '';
