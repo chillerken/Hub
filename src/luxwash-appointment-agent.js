@@ -51,19 +51,6 @@ function makeAppointmentAgent(config) {
       .join('\n');
   }
 
-  async function sendEmail(to, subject, text) {
-    if (!to || !config.resend.apiKey || !config.resend.from) return {ok:false, reason:'email_unavailable'};
-    const r = await fetch('https://api.resend.com/emails', {
-      method:'POST',
-      headers:{Authorization:`Bearer ${config.resend.apiKey}`,'Content-Type':'application/json'},
-      body:JSON.stringify({from:config.resend.from,to:[to],subject,text}),
-      signal:AbortSignal.timeout(15000),
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) return {ok:false, reason:data?.message || `resend_${r.status}`};
-    return {ok:true,id:data?.id || ''};
-  }
-
   function uniqueKey(...parts) {
     return crypto.createHash('sha256').update(parts.join('|')).digest('hex').slice(0,48);
   }
@@ -145,16 +132,17 @@ function makeAppointmentAgent(config) {
     const manageToken = crypto.createHmac('sha256',config.cookieSecret).update(candidate.idempotency_key).digest('base64url');
     const result = await db('book',{...candidate,source:'appointment_ai',manage_token_hash:hash(manageToken)});
     const appt = result?.appointment || result;
-    let emailResult = {ok:false,reason:'no_email'};
-    if (candidate.email && appt?.starts_at) {
-      const when = new Date(appt.starts_at).toLocaleString('nl-BE',{timeZone:'Europe/Brussels',dateStyle:'full',timeStyle:'short'});
-      emailResult = await sendEmail(
-        candidate.email,
-        'LuxWash afspraak bevestigd',
-        `Dag ${candidate.name},\n\nJe LuxWash-afspraak is ingepland voor ${when}.\n\nAdres: ${candidate.address}\nPostcode: ${candidate.postcode}\n\nHeb je nog een vraag? Antwoord op deze e-mail of neem contact op via ${config.business.phone || 'www.luxwash.online'}.\n\nLuxWash`
-      );
-    }
-    return {ok:true,booking:appt,confirmation_email_queued_or_sent:Boolean(emailResult.ok),manage_token:manageToken};
+    return {
+      ok:true,
+      booking:{
+        id:appt?.id || null,
+        status:appt?.status || 'requested',
+        starts_at:appt?.starts_at || candidate.starts_at,
+        ends_at:appt?.ends_at || null,
+        service_id:appt?.catalog_service_id || appt?.service_id || candidate.service_id,
+      },
+      confirmation:'queued'
+    };
   }
 
   const tools = [
