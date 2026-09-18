@@ -15,6 +15,7 @@ const makeReplyLoop = require('./src/lead-recovery');
 const makeReplyLoopOps = require('./src/replyloop-ops');
 const makeReplyLoopUpgrades = require('./src/replyloop-upgrades');
 const makeReplyLoopHome = require('./src/replyloop-home');
+const makeAppointmentAgent = require('./src/luxwash-appointment-agent');
 const { makeAdminCookie, verifyAdminCookie, parseCookies } = require('./src/auth');
 
 const store = makeStore(config);
@@ -26,6 +27,7 @@ const replyLoop = makeReplyLoop(config, store);
 const replyLoopOps = makeReplyLoopOps(config, store);
 const replyLoopUpgrades = makeReplyLoopUpgrades(config, store);
 const replyLoopHome = makeReplyLoopHome(config);
+const appointmentAgent = makeAppointmentAgent(config);
 const PUBLIC = path.join(__dirname, 'public');
 const hits = new Map();
 let automationTimer = null;
@@ -95,6 +97,7 @@ const server = http.createServer(async (req,res) => {
     if(await replyLoopOps.routes(req,res,{send,json,redirect,sameOrigin})) return;
     if(await replyLoopUpgrades.routes(req,res,{send,json,redirect,sameOrigin})) return;
     if(await replyLoop.routes(req,res,{send,json,redirect,sameOrigin})) return;
+    if(await appointmentAgent.routes(req,res,{send,json,body,rateOk,sameOrigin})) return;
     const adminToken=parseCookies(req.headers.cookie||'').aba_admin;
     if (verifyAdminCookie(adminToken,config.cookieSecret)) {
       const claims=JSON.parse(Buffer.from(adminToken.split('.')[0],'base64url').toString());
@@ -107,7 +110,7 @@ const server = http.createServer(async (req,res) => {
     if(req.method==='GET' && p==='/health') {
       try {
         const db = await store.health();
-        return json(res, db?200:503, { ok:Boolean(db), database:Boolean(db), ai:config.aiMode!=='rules'&&ai.ready, chatbot_mode:config.aiMode, email_configured:messenger.emailReady, whatsapp_configured:messenger.whatsappReady, replyloop:true, service:'ai-business-automation-production' });
+        return json(res, db?200:503, { ok:Boolean(db), database:Boolean(db), ai:config.aiMode!=='rules'&&ai.ready, chatbot_mode:config.aiMode, email_configured:messenger.emailReady, whatsapp_configured:messenger.whatsappReady, replyloop:true, appointment_agent:appointmentAgent.ready, service:'ai-business-automation-production' });
       } catch(e) { return json(res,503,{ok:false,database:false,error:'Database niet bereikbaar'}); }
     }
 
@@ -223,11 +226,13 @@ async function start() {
     replyLoop.runAutomation().catch(e=>console.error('ReplyLoop startup automation failed:',e.message));
     replyLoopOps.runAutomation().catch(e=>console.error('ReplyLoop ops startup automation failed:',e.message));
     replyLoopUpgrades.runAutomation().then(r=>console.log('ReplyLoop upgrades startup',JSON.stringify(r))).catch(e=>console.error('ReplyLoop upgrades startup failed:',e.message));
+    appointmentAgent.runAutomation().catch(e=>console.error('Appointment agent startup cleanup failed:',e.message));
     automationTimer=setInterval(()=>{
       automation.run().catch(e=>console.error('Automation error:',e));
       replyLoop.runAutomation().catch(e=>console.error('ReplyLoop automation error:',e));
       replyLoopOps.runAutomation().catch(e=>console.error('ReplyLoop ops automation error:',e));
       replyLoopUpgrades.runAutomation().catch(e=>console.error('ReplyLoop upgrades automation error:',e));
+      appointmentAgent.runAutomation().catch(e=>console.error('Appointment agent automation error:',e));
     },config.automationIntervalMinutes*60*1000);
     automationTimer.unref();
   }
