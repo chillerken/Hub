@@ -218,7 +218,7 @@ const server = http.createServer(async (req,res) => {
 async function start() {
   await store.init();
   await central.db('health');
-  console.log('LuxWash integration configuration',JSON.stringify({database:true,ai:Boolean(config.openaiKey),email:Boolean(config.resend.apiKey&&config.resend.from),inboundEmail:Boolean(process.env.RESEND_WEBHOOK_SECRET),stripe:Boolean(process.env.STRIPE_WEBHOOK_SECRET),replyloop:true,version:'central-1'}));
+  console.log('LuxWash integration configuration',JSON.stringify({database:true,ai:Boolean(config.openaiKey),email:Boolean(config.resend.apiKey&&config.resend.from||config.connectors.gmail||config.connectors.outlook),inboundEmail:Boolean(process.env.RESEND_WEBHOOK_SECRET||config.connectors.gmail||config.connectors.outlook),stripe:Boolean(process.env.STRIPE_WEBHOOK_SECRET||process.env.LR_STRIPE_WEBHOOK_SECRET),replyloop:true,version:'central-1'}));
   require('./src/core/diagnostics')(config).then(report=>console.log('LuxWash provider checks',JSON.stringify(report))).catch(()=>{});
   server.listen(config.port,'0.0.0.0',()=>console.log(`AI Business Automation productie draait op ${config.baseUrl}`));
   if(config.automationIntervalMinutes > 0) {
