@@ -47,6 +47,16 @@ const config = {
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
     apiVersion: process.env.WHATSAPP_API_VERSION || 'v23.0'
   },
+  connectors: {
+    gmail: /^(1|true|yes|on)$/i.test(process.env.CHATGPT_GMAIL_CONNECTED || ''),
+    outlook: /^(1|true|yes|on)$/i.test(process.env.CHATGPT_OUTLOOK_CONNECTED || ''),
+    calendar: /^(1|true|yes|on)$/i.test(process.env.CHATGPT_CALENDAR_CONNECTED || ''),
+    metricool: /^(1|true|yes|on)$/i.test(process.env.CHATGPT_METRICOOL_CONNECTED || ''),
+    gbp: /^(1|true|yes|on)$/i.test(process.env.CHATGPT_GBP_CONNECTED || ''),
+    crm: /^(1|true|yes|on)$/i.test(process.env.CHATGPT_CRM_CONNECTED || ''),
+    website: /^(1|true|yes|on)$/i.test(process.env.CHATGPT_WEBSITE_CONNECTED || ''),
+    whatsapp: /^(1|true|yes|on)$/i.test(process.env.CHATGPT_WHATSAPP_CONNECTED || '')
+  },
   business: {
     name: process.env.BUSINESS_NAME || 'Lokale zaak',
     email: process.env.BUSINESS_EMAIL || '',
