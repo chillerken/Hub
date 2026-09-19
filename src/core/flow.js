@@ -2,17 +2,17 @@ const crypto=require('node:crypto');
 const {z}=require('./validation');
 const {hash}=require('./db');
 function quoteToken(id,secret){if(!secret||secret.length<32)throw new Error('Beveiligde offertelinks zijn niet geconfigureerd');return crypto.createHmac('sha256',secret).update('luxwash-quote:'+id).digest('base64url');}
-function envFlag(name){return /^(1|true|yes|on)$/i.test(String(process.env[name]||'').trim());}
 function integrations(config,checks){
  const checked=checks?.checked_at||null;
- const gmail=envFlag('CHATGPT_GMAIL_CONNECTED');
- const outlook=envFlag('CHATGPT_OUTLOOK_CONNECTED');
- const calendar=envFlag('CHATGPT_CALENDAR_CONNECTED');
- const metricool=envFlag('CHATGPT_METRICOOL_CONNECTED');
- const gbp=envFlag('CHATGPT_GBP_CONNECTED');
- const whatsapp=envFlag('CHATGPT_WHATSAPP_CONNECTED');
- const website=envFlag('CHATGPT_WEBSITE_CONNECTED');
- const crm=envFlag('CHATGPT_CRM_CONNECTED');
+ const connector=config.connectors||{};
+ const gmail=Boolean(connector.gmail);
+ const outlook=Boolean(connector.outlook);
+ const calendar=Boolean(connector.calendar);
+ const metricool=Boolean(connector.metricool);
+ const gbp=Boolean(connector.gbp);
+ const whatsapp=Boolean(connector.whatsapp);
+ const website=Boolean(connector.website);
+ const crm=Boolean(connector.crm);
  return [
  {name:'Website',status:website?'LIVE':'INGESTELD',detail:website?'LuxWash website/intake is actief en gekoppeld aan de bedrijfsflow.':'Website is voorbereid; intakekoppeling nog niet als actief gemarkeerd.'},
  {name:'CRM',status:crm?'LIVE':'INGESTELD',detail:crm?'LuxWash CRM is actief als centrale bron voor leads en klanten.':'CRM is beschikbaar maar nog niet als actief gemarkeerd.'},
@@ -20,8 +20,8 @@ function integrations(config,checks){
  config.aiMode==='rules'?{name:'Regelgebaseerde assistent',status:'INGESTELD',detail:'Vaste antwoorden en menselijke opvolging. Geen generatieve AI of betaalde AI-aanroep.'}:{name:'AI-klantenservice',status:checks?.openai?.inference_available?'LIVE':checks?.openai?.inference_error?'FOUT':'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:checks?.openai?.inference_error==='insufficient_quota'?'OpenAI meldt onvoldoende tegoed of projectbudget. Aanvragen blijven bewaard.':checks?.openai?.inference_available?'Antwoordgeneratie getest op '+checked:'Echte antwoordgeneratie moet nog slagen.',checked_at:checked},
  {name:'E-mail',status:(gmail||outlook||Boolean(config.resend.apiKey&&config.resend.from))?'LIVE':'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:gmail&&outlook?'Gmail en Outlook zijn als actieve LuxWash-kanalen geverifieerd.':gmail?'Gmail-koppeling is actief.':outlook?'Outlook-koppeling is actief.':config.resend.apiKey&&config.resend.from?'Server-side verzendconfiguratie is aanwezig.':'Geen actieve e-mailkoppeling geregistreerd.'},
  {name:'Inkomende e-mail',status:(gmail||outlook||Boolean(process.env.RESEND_WEBHOOK_SECRET))?'LIVE':'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:outlook&&gmail?'Reacties kunnen via de gekoppelde Outlook- en Gmail-flow worden opgevolgd.':process.env.RESEND_WEBHOOK_SECRET?'Webhookconfiguratie aanwezig.':'Geen inkomende e-mailkoppeling geregistreerd.'},
- {name:'Google Agenda',status:calendar?'LIVE':'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:calendar?'Google Calendar is actief voor beschikbaarheid en afspraken.':'Alleen agenda-export beschikbaar; automatische Calendar-koppeling niet actief gemarkeerd.'},
- {name:'WhatsApp',status:whatsapp?'LIVE':'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:whatsapp?'WhatsApp Business-koppeling is actief gemarkeerd.':'Nog geen werkende WhatsApp Business-koppeling geverifieerd.'},
+ {name:'Google Calendar',status:calendar?'LIVE':'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:calendar?'Google Calendar is actief voor beschikbaarheid en afspraken.':'Alleen agenda-export beschikbaar; automatische Calendar-koppeling niet actief gemarkeerd.'},
+ {name:'WhatsApp Business',status:whatsapp?'LIVE':'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:whatsapp?'WhatsApp Business-koppeling is actief gemarkeerd.':'Nog geen werkende WhatsApp Business-koppeling geverifieerd.'},
  {name:'Metricool',status:metricool?'LIVE':'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:metricool?'LuxWash Metricool-brand is gekoppeld voor social planning.':'Metricool is nog niet als actief gemarkeerd.'},
  {name:'Google Reviews',status:gbp?'LIVE':'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:gbp?'LuxWash Google Business Profile is gekoppeld; reviews kunnen worden opgevolgd.':'Google Business Profile/reviews nog niet als actief gemarkeerd.'},
  {name:'Telefonische assistente Astra',status:'GEBOUWD MAAR NOG NIET GEKOPPELD',detail:'Astra geeft korte antwoorden, verwijst naar WhatsApp en bewaart gesprekslogs. Een geslaagde echte telefoonoproep blijft vereist.'}
