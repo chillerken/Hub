@@ -43,14 +43,14 @@ public final class MainActivity extends Activity {
         sc.addView(root);
 
         TextView title = new TextView(this);
-        title.setText("LUXWASH VOICE 1.2");
+        title.setText("LUXWASH VOICE 1.3");
         title.setTextSize(28);
         title.setTextColor(Color.rgb(35,35,35));
         title.setTypeface(null,1);
         root.addView(title);
 
         TextView sub = new TextView(this);
-        sub.setText("Voice Recovery Edition\nSamsung-fix • partial recovery • systeemspraakherkenning");
+        sub.setText("Prospect Recovery Edition\nSamsung-fix • 504 fallback • multi-server bedrijfszoeker");
         sub.setTextSize(16);
         sub.setPadding(0,8,0,20);
         root.addView(sub);
@@ -116,7 +116,7 @@ public final class MainActivity extends Activity {
         save.setOnClickListener(v -> saveSettings());
 
         TextView note = new TextView(this);
-        note.setText("\nTestvolgorde: 1) geef microfoontoegang, 2) druk Test microfoon, 3) zeg ‘zoek nieuwe bedrijven’. Als de tekst onder ‘Ik hoor’ verschijnt, werkt de spraakmotor. Start daarna Hey LuxWash. Versie 1.2 gebruikt standaard de systeemspraakherkenning en bewaart tussentijdse woorden bij foutcode 7.");
+        note.setText("\nTestvolgorde: 1) geef microfoontoegang, 2) druk Test microfoon, 3) zeg ‘zoek nieuwe bedrijven’. Als de tekst onder ‘Ik hoor’ verschijnt, werkt de spraakmotor. Start daarna Hey LuxWash. Versie 1.3 gebruikt systeemspraakherkenning en schakelt automatisch tussen meerdere bedrijfszoekservers bij time-outs.");
         note.setTextSize(13);
         note.setTextColor(Color.DKGRAY);
         root.addView(note);

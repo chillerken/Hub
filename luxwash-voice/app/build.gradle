@@ -7,11 +7,11 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId "online.luxwash.voice.v12"
+        applicationId "online.luxwash.voice.v13"
         minSdk 28
         targetSdk 35
-        versionCode 3
-        versionName "1.2.0"
+        versionCode 4
+        versionName "1.3.0"
     }
 
     buildTypes {
