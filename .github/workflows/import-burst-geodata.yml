@@ -1,0 +1,50 @@
+name: Import Burst real-world geodata
+
+on:
+  push:
+    branches: [dender-county-3d]
+    paths:
+      - 'scripts/import_burst_geodata.py'
+      - '.github/workflows/import-burst-geodata.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dender-county-3d
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch and normalize real Burst geodata
+        run: python scripts/import_burst_geodata.py
+      - name: Validate generated GeoJSON
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          for f in ["burst.geojson","burst_boundaries.geojson","burst_meta.json"]:
+              p=Path("dender-county-3d/geodata")/f
+              assert p.stat().st_size > 50, f"{f} too small"
+              json.loads(p.read_text(encoding="utf-8"))
+              print("OK", f, p.stat().st_size)
+          meta=json.loads(Path("dender-county-3d/geodata/burst_meta.json").read_text())
+          assert meta["feature_count"] > 20
+          assert meta["street_count_named"] > 5
+          print("named streets", meta["street_count_named"])
+          PY
+      - name: Commit normalized geodata
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dender-county-3d/geodata
+          if git diff --cached --quiet; then
+            echo "No geodata changes"
+          else
+            git commit -m "Import real Burst road and boundary geodata"
+            git push origin HEAD:dender-county-3d
+          fi
