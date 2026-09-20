@@ -1,0 +1,57 @@
+name: Import Lede and Aalst environment
+
+on:
+  push:
+    branches: [dender-county-3d]
+    paths:
+      - 'scripts/import_neighbor_environment.py'
+      - '.github/workflows/import-neighbor-environment.yml'
+      - 'dender-county-3d/geodata/lede_meta.json'
+      - 'dender-county-3d/geodata/aalst_meta.json'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: neighbor-environment
+  cancel-in-progress: true
+
+jobs:
+  import:
+    strategy:
+      max-parallel: 1
+      matrix:
+        municipality: [lede, aalst]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dender-county-3d
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Import environment
+        run: python scripts/import_neighbor_environment.py ${{ matrix.municipality }}
+      - name: Validate if generated
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          key=os.environ["MUNI"];p=Path("dender-county-3d/geodata")/f"{key}_environment_meta.json"
+          if not p.exists():
+              print("not generated yet:",key);raise SystemExit(0)
+          m=json.loads(p.read_text())
+          assert m["counts"].get("building",0)>1000
+          print(key,m["counts"])
+          PY
+        env:
+          MUNI: ${{ matrix.municipality }}
+      - name: Commit environment if present
+        run: |
+          key="${{ matrix.municipality }}"
+          test -f "dender-county-3d/geodata/${key}_environment.geojson" || exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin dender-county-3d
+          git add "dender-county-3d/geodata/${key}_environment.geojson" "dender-county-3d/geodata/${key}_environment_meta.json"
+          if git diff --cached --quiet; then echo "No changes"; else git commit -m "Import ${key} buildings water and vegetation"; git push origin HEAD:dender-county-3d; fi
