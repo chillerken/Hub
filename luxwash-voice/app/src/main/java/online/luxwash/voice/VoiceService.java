@@ -37,7 +37,7 @@ public final class VoiceService extends Service {
         super.onCreate();
         createChannel();
         startForeground(NOTIF, notification("LuxWash Voice wordt gestart"));
-        initRecognizer(true);
+        initRecognizer(false);
         initTts();
         publish("STARTEN", "", "");
     }
@@ -169,7 +169,7 @@ public final class VoiceService extends Service {
         i.putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false);
         i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
         i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5);
-        i.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, usingOnDevice);
+        i.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false);\n        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 900L);\n        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1400L);\n        i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2200L);
 
         publish(command ? "OPDRACHT" : "WAKE", "", (command ? "Ik luister naar uw opdracht. " : "Luistert naar Hey LuxWash. ") +
                 "Taal: " + recognitionLocale + (usingOnDevice ? " • on-device" : " • systeem"));
@@ -253,6 +253,36 @@ public final class VoiceService extends Service {
             scheduleRetry(commandMode, error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ? 1400 : 450);
         }
     };
+
+    private String mergePartial(String next) {
+        String n = next == null ? "" : next.trim();
+        if (n.isEmpty()) return partialText;
+        if (partialText.isEmpty()) {
+            partialText = n;
+            return partialText;
+        }
+        String oldNorm = IntentParser.normalize(partialText);
+        String newNorm = IntentParser.normalize(n);
+        if (newNorm.contains(oldNorm)) partialText = n;
+        else if (!oldNorm.contains(newNorm)) partialText = (partialText + " " + n).trim();
+        return partialText;
+    }
+
+    private String bestResult(Bundle b) {
+        String fin = first(b).trim();
+        String part = partialText.trim();
+        if (fin.isEmpty()) return part;
+        if (part.isEmpty()) return fin;
+        String fn = IntentParser.normalize(fin);
+        String pn = IntentParser.normalize(part);
+        if (pn.contains(fn) && part.length() >= fin.length()) return part;
+        return fin;
+    }
+
+    private int wordCount(String s) {
+        String n = IntentParser.normalize(s);
+        return n.isEmpty() ? 0 : n.split(" ").length;
+    }
 
     private String first(Bundle b) {
         if (b == null) return "";
@@ -366,7 +396,7 @@ public final class VoiceService extends Service {
         Intent open = new Intent(this, MainActivity.class);
         PendingIntent pi = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CHANNEL) : new Notification.Builder(this);
-        return b.setContentTitle("LuxWash Voice 1.1").setContentText(text)
+        return b.setContentTitle("LuxWash Voice 1.2").setContentText(text)
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
                 .setOngoing(true).setContentIntent(pi).build();
     }
