@@ -1111,3 +1111,68 @@ installTrafficAssetClones06();
 function assetDebug06(){
   return [...assetManager06.status.entries()].map(([k,v])=>k+":"+v).join(" • ");
 }
+
+
+// ===== DENDER COUNTY 0.7 — RIGGED CHARACTER ASSET PIPELINE =====
+window.__DENDER_VERSION__="0.7";
+ASSETS06.player={
+  id:"khronos-riggedfigure-ccby4",
+  url:"https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/RiggedFigure/glTF-Binary/RiggedFigure.glb",
+  license:"CC-BY-4.0",
+  credit:"© 2017 Cesium — Khronos glTF Sample Assets"
+};
+
+let playerMixer07=null;
+let playerAction07=null;
+
+function fitModelHeight07(model,targetHeight=2.9){
+  let box=new THREE.Box3().setFromObject(model);
+  const size=box.getSize(new THREE.Vector3());
+  const scale=targetHeight/(size.y||1);
+  model.scale.setScalar(scale);
+  box=new THREE.Box3().setFromObject(model);
+  const center=box.getCenter(new THREE.Vector3());
+  model.position.x-=center.x;
+  model.position.z-=center.z;
+  model.position.y-=box.min.y;
+  return model;
+}
+
+function hidePrimitiveHuman07(g){
+  for(const ch of g.children){
+    if(ch.userData.asset07)continue;
+    if(ch.isMesh)ch.visible=false;
+  }
+}
+
+async function installPlayerAsset07(){
+  const gltf=await assetManager06.loadGLB(ASSETS06.player.id,ASSETS06.player.url);
+  if(!gltf)return;
+  const visual=fitModelHeight07(gltf.scene,2.9);
+  visual.userData.asset07=true;
+  visual.rotation.y=Math.PI;
+  player.add(visual);
+  hidePrimitiveHuman07(player);
+  player.userData.productionVisual07=visual;
+
+  if(gltf.animations&&gltf.animations.length){
+    playerMixer07=new THREE.AnimationMixer(visual);
+    playerAction07=playerMixer07.clipAction(gltf.animations[0]);
+    playerAction07.play();
+  }
+  toast("Rigged 3D-personage geladen");
+}
+installPlayerAsset07();
+
+let v07Prev=performance.now();
+function v07Loop(now){
+  requestAnimationFrame(v07Loop);
+  const dt=Math.min((now-v07Prev)/1000,.04);v07Prev=now;
+  if(!running)return;
+  if(playerMixer07){
+    const moving=!inVehicle&&(keys.KeyW||keys.KeyA||keys.KeyS||keys.KeyD);
+    playerMixer07.timeScale=moving?(keys.ShiftLeft?1.45:1):.16;
+    playerMixer07.update(dt);
+  }
+}
+requestAnimationFrame(v07Loop);
