@@ -55,3 +55,5 @@ jobs:
           git pull --rebase origin dender-county-3d
           git add "dender-county-3d/geodata/${key}_environment.geojson" "dender-county-3d/geodata/${key}_environment_meta.json"
           if git diff --cached --quiet; then echo "No changes"; else git commit -m "Import ${key} buildings water and vegetation"; git push origin HEAD:dender-county-3d; fi
+
+# release-trigger-3.0
