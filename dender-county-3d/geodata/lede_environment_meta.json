@@ -1,0 +1,26 @@
+{
+  "primary_building_source": "Digitaal Vlaanderen Gebouwenregister",
+  "supplement_source": "OpenStreetMap",
+  "official": {
+    "endpoint": "https://geo.api.vlaanderen.be/Gebouwenregister/ogc/features/v1",
+    "collection_id": "Gebouw",
+    "numberMatched": null,
+    "municipality_count": 21105,
+    "pages": 7
+  },
+  "counts": {
+    "building": 21105,
+    "vegetation": 406,
+    "waterway": 225,
+    "water": 118
+  },
+  "feature_count": 21854,
+  "bbox_wgs84": {
+    "south": 50.9475498,
+    "north": 50.9871703,
+    "west": 3.867538,
+    "east": 4.0240394
+  },
+  "official_attribution": "© Digitaal Vlaanderen",
+  "osm_attribution": "© OpenStreetMap contributors"
+}
