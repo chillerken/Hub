@@ -135,7 +135,7 @@ jobs:
           from pathlib import Path
           root=Path("dender-county-3d")
           m=json.loads((root/"assets-manifest.json").read_text())
-          assert m["gameVersion"]=="8.0"
+          assert m["gameVersion"]=="8.1"
           assert m["runtime"]["three"]=="0.180.0"
           sha=m["runtime"]["khronosSampleAssetsCommit"]
           assert len(sha)==40
@@ -147,6 +147,7 @@ jobs:
           game=(root/"game.js").read_text()
           assert "glTF-Sample-Assets@main" not in game
           assert game.count("requestAnimationFrame(")==1
+          assert "window.__DENDER_HEALTH__" in game
           assert (root/"sw.js").exists()
           print("manifest assets",len(m["assets"]),"single RAF OK")
           PY
