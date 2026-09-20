@@ -604,3 +604,276 @@ function v02Loop(now){
   v02MissionCheck();
 }
 requestAnimationFrame(v02Loop);
+
+
+// ===== DENDER COUNTY 0.4 — VISUAL / DRIVING / STREET LIFE UPGRADE =====
+window.__DENDER_VERSION__="0.4";
+
+const v04={
+  cameraMode:0,
+  qualityHigh:true,
+  signalPhase:0,
+  lastHorn:0,
+  rainIntensity:.72
+};
+
+function pointInRoad04(pos){
+  for(const r of roads){
+    const dx=pos.x-r.x,dz=pos.z-r.z;
+    const c=Math.cos(-r.rot),s=Math.sin(-r.rot);
+    const lx=dx*c-dz*s,lz=dx*s+dz*c;
+    if(Math.abs(lx)<=r.w/2+1.2 && Math.abs(lz)<=r.d/2+1.2)return true;
+  }
+  return false;
+}
+
+function textureSign04(text,border="#d62121",bg="#f8f8f3",fg="#151515"){
+  const c=document.createElement("canvas");c.width=c.height=256;
+  const x=c.getContext("2d");x.clearRect(0,0,256,256);
+  x.fillStyle=border;x.beginPath();x.arc(128,128,116,0,Math.PI*2);x.fill();
+  x.fillStyle=bg;x.beginPath();x.arc(128,128,91,0,Math.PI*2);x.fill();
+  x.fillStyle=fg;x.font="900 92px system-ui";x.textAlign="center";x.textBaseline="middle";x.fillText(text,128,134);
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;
+}
+function addRoadSign04(x,z,text="50",rot=0){
+  const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=rot;
+  const pm=new THREE.MeshStandardMaterial({color:0x777b7d,metalness:.7,roughness:.35});
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(.055,.07,2.8,8),pm);pole.position.y=1.4;g.add(pole);
+  const sm=new THREE.MeshBasicMaterial({map:textureSign04(text),side:THREE.DoubleSide});
+  const sign=new THREE.Mesh(new THREE.CircleGeometry(.48,32),sm);sign.position.set(0,2.55,.02);g.add(sign);
+  scene.add(g);return g;
+}
+[
+  [-32,-11,"50",0],[35,11,"50",Math.PI],[-90,-58,"30",Math.PI/2],
+  [98,55,"50",-Math.PI/2],[69,-96,"30",0],[-132,101,"50",Math.PI]
+].forEach(a=>addRoadSign04(...a));
+
+function addZebra04(x,z,axis="x",rot=0){
+  const g=new THREE.Group();g.position.set(x,.17,z);g.rotation.y=rot;
+  const white=new THREE.MeshStandardMaterial({color:0xf1efe8,roughness:.82});
+  for(let i=-4;i<=4;i++){
+    const stripe=meshBox(axis==="x"?1.15:7,.025,axis==="x"?7:1.15,white,
+      axis==="x"?i*1.55:0,.012,axis==="z"?i*1.55:0);
+    g.add(stripe);
+  }
+  scene.add(g);
+}
+addZebra04(-78,-22,"x");addZebra04(86,24,"x");addZebra04(-25,0,"z");
+
+function addBusStop04(x,z,rot=0,name="LIJN"){
+  const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=rot;
+  const metal=new THREE.MeshStandardMaterial({color:0x4b5054,metalness:.6,roughness:.4});
+  const glass=new THREE.MeshStandardMaterial({color:0x9fc0ce,transparent:true,opacity:.28,roughness:.15,metalness:.05});
+  addBox(g,4,.18,1.8,metal,0,2.6,0);
+  addBox(g,.12,2.6,1.8,metal,-2,1.3,0);addBox(g,.12,2.6,1.8,metal,2,1.3,0);
+  addBox(g,4,2.2,.08,glass,0,1.25,-.85);
+  addBox(g,2.3,.45,.6,new THREE.MeshStandardMaterial({color:0x43484b,roughness:.8}),0,.55,0);
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(.05,.06,2.8,8),metal);pole.position.set(2.6,1.4,0);g.add(pole);
+  const tex=textureSign04("H","#f5d429","#f5d429","#171717");
+  const s=new THREE.Mesh(new THREE.CircleGeometry(.32,24),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));
+  s.position.set(2.6,2.55,.02);g.add(s);scene.add(g);
+}
+addBusStop04(-42,12,Math.PI);addBusStop04(103,-55,-Math.PI/2);addBusStop04(-91,75,Math.PI/2);
+
+function addRoundabout04(x,z,r=10){
+  const roadM=new THREE.MeshStandardMaterial({color:0x24282b,roughness:.9});
+  const ring=new THREE.Mesh(new THREE.RingGeometry(r-3.2,r+3.2,64),roadM);
+  ring.rotation.x=-Math.PI/2;ring.position.set(x,.16,z);ring.receiveShadow=true;scene.add(ring);
+  const island=new THREE.Mesh(new THREE.CylinderGeometry(r-3.5,r-3.5,.45,48),new THREE.MeshStandardMaterial({color:0x537645,roughness:1}));
+  island.position.set(x,.22,z);island.receiveShadow=true;scene.add(island);
+  const curb=new THREE.Mesh(new THREE.TorusGeometry(r-3.4,.22,8,64),new THREE.MeshStandardMaterial({color:0xbdb8aa,roughness:.9}));
+  curb.rotation.x=Math.PI/2;curb.position.set(x,.46,z);scene.add(curb);
+  for(let a=0;a<Math.PI*2;a+=Math.PI/3){
+    const shrub=new THREE.Mesh(new THREE.IcosahedronGeometry(1.05,1),new THREE.MeshStandardMaterial({color:0x365b32,roughness:1}));
+    shrub.scale.y=.7;shrub.position.set(x+Math.cos(a)*4,.95,z+Math.sin(a)*4);shrub.castShadow=true;scene.add(shrub);
+  }
+}
+addRoundabout04(20,96,9);
+
+const puddleMat04=new THREE.MeshStandardMaterial({color:0x43545b,metalness:.45,roughness:.16,transparent:true,opacity:.5});
+for(let i=0;i<22;i++){
+  const p=new THREE.Mesh(new THREE.CircleGeometry(1.2+rnd()*2.4,20),puddleMat04);
+  p.rotation.x=-Math.PI/2;p.scale.y=.4+rnd()*.5;p.position.set((rnd()-.5)*320,.175,(rnd()-.5)*260);
+  scene.add(p);
+}
+
+function decorateHuman04(g,i=0){
+  if(g.userData.v04)return;g.userData.v04=true;
+  const skin=new THREE.MeshStandardMaterial({color:0xc58e69,roughness:.9});
+  const shirt=(g.children.find(o=>o.isMesh)?.material)||new THREE.MeshStandardMaterial({color:0x405a72});
+  const armL=meshBox(.22,1.22,.26,shirt,-.56,1.55,0);
+  const armR=meshBox(.22,1.22,.26,shirt,.56,1.55,0);
+  armL.geometry.translate(0,-.45,0);armR.geometry.translate(0,-.45,0);
+  g.add(armL,armR);
+  const hair=new THREE.Mesh(new THREE.SphereGeometry(.355,16,10,0,Math.PI*2,0,Math.PI*.52),new THREE.MeshStandardMaterial({color:i%3===0?0x342820:i%3===1?0x1a1817:0x6a4b2d,roughness:.95}));
+  hair.position.y=2.78;hair.castShadow=true;g.add(hair);
+  g.userData.armL=armL;g.userData.armR=armR;
+}
+decorateHuman04(player,0);pedestrians.forEach((p,i)=>decorateHuman04(p,i+1));
+
+function decorateCar04(c,i=0){
+  if(c.userData.v04)return;c.userData.v04=true;
+  const chrome=new THREE.MeshStandardMaterial({color:0xaaaeb0,metalness:.82,roughness:.22});
+  const red=new THREE.MeshStandardMaterial({color:0x4b0909,emissive:0xff1400,emissiveIntensity:.18});
+  const white=new THREE.MeshStandardMaterial({color:0xdfe7df,emissive:0xfff3d7,emissiveIntensity:.08});
+  addBox(c,2.05,.15,.15,chrome,0,.53,-2.24);
+  addBox(c,2.05,.15,.15,chrome,0,.53,2.24);
+  const bl=meshBox(.42,.2,.09,red,-.72,.83,-2.24);const br=meshBox(.42,.2,.09,red,.72,.83,-2.24);c.add(bl,br);
+  const fl=meshBox(.4,.2,.09,white,-.72,.83,2.24);const fr=meshBox(.4,.2,.09,white,.72,.83,2.24);c.add(fl,fr);
+  const mirrorM=new THREE.MeshStandardMaterial({color:0x262a2e,metalness:.55,roughness:.35});
+  addBox(c,.28,.16,.42,mirrorM,-1.23,1.23,.45);addBox(c,.28,.16,.42,mirrorM,1.23,1.23,.45);
+  c.userData.brakeLights=[bl,br];
+  c.userData.wheels=c.children.filter(o=>o.geometry?.type==="CylinderGeometry");
+}
+decorateCar04(heroCar,0);traffic.forEach((c,i)=>decorateCar04(c,i));decorateCar04(police,99);
+
+function animateHuman04(g,moving,elapsed,phase=0){
+  if(!g.userData.v04)return;
+  const swing=moving?Math.sin(elapsed*8+phase)*.5:0;
+  if(g.userData.armL)g.userData.armL.rotation.x=-swing;
+  if(g.userData.armR)g.userData.armR.rotation.x=swing;
+}
+function animateCar04(c,dt,steer=0,braking=false){
+  const speed=c.userData.speed||0;
+  if(c.userData.wheels){
+    for(const w of c.userData.wheels)w.rotation.x+=speed*dt*2.4;
+  }
+  if(c.userData.brakeLights){
+    for(const l of c.userData.brakeLights)l.material.emissiveIntensity=braking?3:.18;
+  }
+  c.rotation.z=THREE.MathUtils.lerp(c.rotation.z,-steer*Math.min(Math.abs(speed)/28,1)*.055,.12);
+}
+
+function driveHero04(dt){
+  const car=heroCar;
+  const throttle=keys.KeyW?1:0;
+  const brake=keys.KeyS?1:0;
+  const handbrake=keys.Space?1:0;
+  const onRoad=pointInRoad04(car.position);
+  const maxForward=onRoad?31:13;
+  const maxReverse=9;
+
+  if(throttle)car.userData.speed+=13.5*dt;
+  if(brake){
+    if(car.userData.speed>1)car.userData.speed-=22*dt;
+    else car.userData.speed-=8*dt;
+  }
+  const drag=onRoad?.62:.36;
+  if(!throttle&&!brake)car.userData.speed*=Math.pow(drag,dt);
+  if(handbrake)car.userData.speed*=Math.pow(.055,dt);
+
+  car.userData.speed=THREE.MathUtils.clamp(car.userData.speed,-maxReverse,maxForward);
+  const rawSteer=(keys.KeyA?1:0)-(keys.KeyD?1:0);
+  const speedAbs=Math.abs(car.userData.speed);
+  const steerAuthority=THREE.MathUtils.lerp(1.7,.72,Math.min(speedAbs/30,1));
+  if(speedAbs>.25)car.userData.heading+=rawSteer*dt*(car.userData.speed>=0?1:-1)*steerAuthority;
+  if(handbrake&&speedAbs>7)car.userData.heading+=rawSteer*dt*1.1;
+
+  car.rotation.y=car.userData.heading;
+  car.position.x+=Math.sin(car.userData.heading)*car.userData.speed*dt;
+  car.position.z+=Math.cos(car.userData.heading)*car.userData.speed*dt;
+  car.position.x=THREE.MathUtils.clamp(car.position.x,-205,205);
+  car.position.z=THREE.MathUtils.clamp(car.position.z,-205,205);
+
+  for(const t of traffic){
+    if(t.position.distanceTo(car.position)<3.0 && speedAbs>5){
+      wanted=Math.min(5,wanted+1);wantedCooldown=14;car.userData.speed*=-.12;toast("Verkeersongeval gemeld — politie onderweg");
+    }
+  }
+  animateCar04(car,dt,rawSteer,brake||handbrake);
+}
+driveHero=driveHero04;
+
+function trafficMustStop04(c,elapsed){
+  const p=c.position;
+  const nearMain=(Math.abs(p.x+78)<10||Math.abs(p.x-86)<10)&&Math.abs(p.z)<14;
+  if(!nearMain)return false;
+  const phase=Math.floor(elapsed/8)%2;
+  const horizontal=c.userData.route===routeA;
+  return horizontal?phase===0:phase===1;
+}
+function updateTraffic04(dt){
+  const elapsed=performance.now()/1000;
+  for(const c of traffic){
+    const stop=trafficMustStop04(c,elapsed);
+    c.userData.displaySpeed=stop?0:8*c.userData.routeSpeed*28;
+    if(!stop)c.userData.t=(c.userData.t+c.userData.routeSpeed*dt*8)%1;
+    const p=pathPoint(c.userData.route,c.userData.t);c.position.copy(p);
+    const next=pathPoint(c.userData.route,c.userData.t+.003);c.rotation.y=Math.atan2(next.x-p.x,next.z-p.z);
+    c.userData.speed=c.userData.displaySpeed;
+    animateCar04(c,dt,0,stop);
+  }
+}
+updateTraffic=updateTraffic04;
+
+function updateCamera04(dt){
+  const targetObject=inVehicle?heroCar:player;
+  if(v04.cameraMode===1&&inVehicle){
+    const forward=new THREE.Vector3(Math.sin(heroCar.userData.heading),0,Math.cos(heroCar.userData.heading));
+    const eye=heroCar.position.clone().add(new THREE.Vector3(0,1.55,0)).addScaledVector(forward,.15);
+    camera.position.lerp(eye,1-Math.pow(.0001,dt));
+    camera.lookAt(eye.clone().addScaledVector(forward,25));
+    return;
+  }
+  if(v04.cameraMode===2&&inVehicle){
+    const forward=new THREE.Vector3(Math.sin(heroCar.userData.heading),0,Math.cos(heroCar.userData.heading));
+    const eye=heroCar.position.clone().add(new THREE.Vector3(0,1.05,0)).addScaledVector(forward,2.7);
+    camera.position.lerp(eye,1-Math.pow(.0001,dt));
+    camera.lookAt(eye.clone().addScaledVector(forward,30));
+    return;
+  }
+  const target=targetObject.position.clone().add(new THREE.Vector3(0,inVehicle?1.5:1.7,0));
+  if(inVehicle)camYaw=THREE.MathUtils.lerp(camYaw,heroCar.userData.heading+Math.PI,.018);
+  const dist=inVehicle?10:6.5,h=inVehicle?4.35:3.2;
+  const off=new THREE.Vector3(Math.sin(camYaw)*Math.cos(camPitch)*dist,h+Math.sin(camPitch)*dist,Math.cos(camYaw)*Math.cos(camPitch)*dist);
+  camera.position.lerp(target.clone().add(off),1-Math.pow(.001,dt));camera.lookAt(target);
+}
+updateCamera=updateCamera04;
+
+function horn04(){
+  if(!v02.audioReady||performance.now()-v04.lastHorn<450)return;
+  v04.lastHorn=performance.now();
+  const ac=v02.audio.ac,o=ac.createOscillator(),g=ac.createGain();
+  o.type="square";o.frequency.value=285;g.gain.setValueAtTime(.12,ac.currentTime);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.35);
+  o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+.36);
+}
+addEventListener("keydown",e=>{
+  if(e.code==="KeyC"&&!e.repeat){v04.cameraMode=(v04.cameraMode+1)%3;toast(["CHASE CAMERA","FIRST PERSON","BUMPER CAMERA"][v04.cameraMode])}
+  if(e.code==="KeyH")horn04();
+  if(e.code==="KeyQ"&&!e.repeat){
+    v04.qualityHigh=!v04.qualityHigh;renderer.setPixelRatio(v04.qualityHigh?Math.min(devicePixelRatio,1.7):Math.min(devicePixelRatio,1));
+    sun.castShadow=v04.qualityHigh;toast(v04.qualityHigh?"KWALITEITSMODUS":"PERFORMANCEMODUS");
+  }
+});
+
+function v04MissionLayer(){
+  if(!missionData.some(m=>m.title==="Rotondeproef")){
+    missionData.splice(missionData.length-1,0,
+      {title:"Rotondeproef",text:"Rij door de nieuwe rotonde en bereik het controlepunt.",target:()=>new THREE.Vector3(20,0,96)},
+      {title:"Rustige aftocht",text:"Raak de politie kwijt en breng het wanted-niveau terug naar nul.",target:()=>new THREE.Vector3(86,0,120)}
+    );
+  }
+}
+v04MissionLayer();
+
+function v04MissionCheck(){
+  const actor=inVehicle?heroCar.position:player.position;
+  if(mission===6&&inVehicle&&actor.distanceTo(new THREE.Vector3(20,0,96))<8)completeMission();
+  if(mission===7){
+    if(wanted<1){wanted=2;wantedCooldown=12;toast("POLITIEZOEKING GESTART")}
+    if(wanted<=0.05&&actor.distanceTo(new THREE.Vector3(86,0,120))<20)completeMission();
+  }
+}
+
+let v04Prev=performance.now();
+function v04Loop04(now){
+  requestAnimationFrame(v04Loop04);
+  if(!running){v04Prev=now;return}
+  const dt=Math.min((now-v04Prev)/1000,.04);v04Prev=now;
+  const elapsed=now/1000;
+  animateHuman04(player,!inVehicle&&(keys.KeyW||keys.KeyA||keys.KeyS||keys.KeyD),elapsed,0);
+  pedestrians.forEach((p,i)=>animateHuman04(p,true,elapsed,i*.45));
+  if(police.visible){police.userData.speed=12+wanted*2;animateCar04(police,dt,0,false)}
+  v04MissionCheck();
+}
+requestAnimationFrame(v04Loop04);
