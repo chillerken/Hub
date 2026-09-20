@@ -68,9 +68,9 @@ def query_tile(b, depth=0):
 out tags geom;"""
     data=urllib.parse.urlencode({"data":q}).encode()
     last=None
-    for ep in ["https://overpass.kumi.systems/api/interpreter","https://overpass-api.de/api/interpreter"]:
-        for attempt in range(2):
-            try:return get_json(ep,data=data,timeout=105)
+    for ep in ["https://overpass.kumi.systems/api/interpreter","https://overpass.private.coffee/api/interpreter","https://overpass-api.de/api/interpreter"]:
+        for attempt in range(1):
+            try:return get_json(ep,data=data,timeout=55)
             except Exception as e:last=e
     if depth>=3:
         print("SKIP tile after recursive retries",b,"error",repr(last),flush=True)
@@ -89,7 +89,7 @@ out tags geom;"""
     return {"elements":list(merged.values())}
 
 def query(b):
-    rows, cols = 4, 4
+    rows, cols = 8, 8
     merged={}
     lat_step=(b["north"]-b["south"])/rows
     lon_step=(b["east"]-b["west"])/cols
