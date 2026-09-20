@@ -1,0 +1,22 @@
+:root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#fff;background:#090b0f}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#090b0f}button{font:inherit}
+#game{display:block;width:100%;height:100%;touch-action:none}
+#loading{position:fixed;inset:0;z-index:20;display:grid;place-content:center;text-align:center;background:
+radial-gradient(circle at 50% 35%,rgba(188,147,80,.15),transparent 35%),
+linear-gradient(180deg,#10151d,#06080b 70%);padding:24px}
+.logo{font-size:clamp(38px,9vw,86px);font-weight:900;letter-spacing:.11em}.sub{margin-top:10px;color:#c8b27c;letter-spacing:.16em;text-transform:uppercase;font-size:12px}
+#startBtn{margin:34px auto 16px;padding:15px 28px;border:1px solid #c2a76f;background:#171b20;color:#fff;border-radius:4px;cursor:pointer;letter-spacing:.12em;font-weight:800}
+#startBtn:hover{background:#c2a76f;color:#111}.hint{max-width:620px;color:#9aa2ad;font-size:13px;line-height:1.6}.hidden{display:none!important}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:10;text-shadow:0 2px 10px #000}
+.topbar{position:absolute;left:22px;right:22px;top:18px;display:flex;justify-content:space-between;align-items:flex-start}
+#district{font-size:13px;font-weight:900;letter-spacing:.18em;color:#e5d6ab}#clock{font-size:12px;color:#ccd2da;margin-top:4px}
+#wanted{font-size:20px;letter-spacing:.1em;color:#f0d37b}
+#missionBox{position:absolute;left:22px;top:82px;width:min(360px,calc(100vw - 44px));background:rgba(8,10,14,.72);backdrop-filter:blur(8px);border-left:3px solid #c7aa68;padding:12px 14px}
+.eyebrow{font-size:10px;letter-spacing:.17em;color:#c7aa68;font-weight:900}.missionBox h3{margin:4px 0}
+#missionTitle{font-size:18px;font-weight:850;margin-top:3px}#missionText{font-size:13px;color:#d4d8de;margin-top:4px;line-height:1.4}
+#minimap{position:absolute;right:20px;bottom:20px;width:180px;height:180px;border-radius:50%;border:2px solid rgba(255,255,255,.65);background:rgba(8,10,14,.82);box-shadow:0 8px 30px rgba(0,0,0,.45)}
+#speed{position:absolute;right:225px;bottom:34px;font-size:28px;font-weight:900}
+#prompt{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);background:rgba(6,8,11,.75);padding:9px 14px;border-radius:4px;font-size:13px}
+#toast{position:absolute;left:50%;top:20%;transform:translateX(-50%);background:rgba(6,8,11,.86);padding:12px 18px;border:1px solid rgba(255,255,255,.15);opacity:0;transition:opacity .25s}
+#mobile{display:none;position:absolute;inset:0}.pad{position:absolute;left:16px;bottom:16px;pointer-events:auto}.pad>button{display:block;margin:auto}.pad div{display:flex}.pad button,.actions button{width:56px;height:56px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(10,12,16,.6);color:#fff;font-weight:900}.actions{position:absolute;right:18px;bottom:18px;display:flex;gap:10px;pointer-events:auto}.actions button{width:64px;height:64px}
+@media (max-width:900px),(pointer:coarse){#mobile{display:block}#minimap{width:132px;height:132px}#speed{right:165px;bottom:26px;font-size:20px}#prompt{bottom:100px}#missionBox{top:72px;width:min(300px,calc(100vw - 44px))}}
