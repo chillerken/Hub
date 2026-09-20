@@ -1,0 +1,70 @@
+{
+  "schema": "dender-county-assets-v1",
+  "gameVersion": "7.2",
+  "runtime": {
+    "three": "0.180.0",
+    "khronosSampleAssetsCommit": "c6a6bd13ab2b3c685c7903d03561b8a9392f38b8"
+  },
+  "assets": [
+    {
+      "id": "khronos-toycar-cc0",
+      "kind": "vehicle",
+      "license": "CC0-1.0",
+      "attribution": "Guido Odendahl / Eric Chadwick, Khronos glTF Sample Assets",
+      "url": "https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@c6a6bd13ab2b3c685c7903d03561b8a9392f38b8/Models/ToyCar/glTF-Binary/ToyCar.glb"
+    },
+    {
+      "id": "khronos-riggedfigure-ccby4",
+      "kind": "character",
+      "license": "CC-BY-4.0",
+      "attribution": "© 2017 Cesium — Khronos glTF Sample Assets",
+      "url": "https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@c6a6bd13ab2b3c685c7903d03561b8a9392f38b8/Models/RiggedFigure/glTF-Binary/RiggedFigure.glb"
+    },
+    {
+      "id": "khronos-cesium-milktruck-ccby4",
+      "kind": "vehicle",
+      "license": "CC-BY-4.0",
+      "attribution": "© 2017 Cesium — Khronos glTF Sample Assets",
+      "url": "https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@c6a6bd13ab2b3c685c7903d03561b8a9392f38b8/Models/CesiumMilkTruck/glTF-Binary/CesiumMilkTruck.glb"
+    },
+    {
+      "id": "polyhaven-asphalt-01",
+      "kind": "pbr-texture",
+      "license": "CC0-1.0",
+      "attribution": "Poly Haven",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/asphalt_01/"
+    },
+    {
+      "id": "polyhaven-brick-wall-07",
+      "kind": "pbr-texture",
+      "license": "CC0-1.0",
+      "attribution": "Poly Haven",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/brick_wall_07/"
+    },
+    {
+      "id": "polyhaven-covered-car",
+      "kind": "prop",
+      "license": "CC0-1.0",
+      "attribution": "Poly Haven",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/covered_car/covered_car_1k.gltf"
+    }
+  ],
+  "geodata": [
+    {
+      "source": "Digitaal Vlaanderen Wegenregister",
+      "use": "roads/routing",
+      "attribution": "© Digitaal Vlaanderen"
+    },
+    {
+      "source": "Digitaal Vlaanderen Gebouwenregister",
+      "use": "building footprints",
+      "attribution": "© Digitaal Vlaanderen"
+    },
+    {
+      "source": "OpenStreetMap",
+      "use": "rail/stations/places/water/vegetation supplements",
+      "license": "ODbL",
+      "attribution": "© OpenStreetMap contributors"
+    }
+  ]
+}

@@ -128,6 +128,28 @@ jobs:
               assert len(m["chunks"])>10
               print(key,"chunks",len(m["chunks"]),"features",total)
           PY
+      - name: Validate reproducible asset manifest
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("dender-county-3d")
+          m=json.loads((root/"assets-manifest.json").read_text())
+          assert m["gameVersion"]=="7.2"
+          assert m["runtime"]["three"]=="0.180.0"
+          sha=m["runtime"]["khronosSampleAssetsCommit"]
+          assert len(sha)==40
+          for a in m["assets"]:
+              assert a["license"]
+              assert a["attribution"]
+              if "KhronosGroup" in a["url"]:
+                  assert "@"+sha+"/" in a["url"]
+          game=(root/"game.js").read_text()
+          assert "glTF-Sample-Assets@main" not in game
+          assert game.count("requestAnimationFrame(")==1
+          assert (root/"sw.js").exists()
+          print("manifest assets",len(m["assets"]),"single RAF OK")
+          PY
       - name: Verify required game files
         run: |
           test -s dender-county-3d/index.html
@@ -167,7 +189,7 @@ jobs:
         run: |
           curl -L --fail --retry 2 --max-time 30 \
             -o /tmp/toycar.glb \
-            https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/ToyCar/glTF-Binary/ToyCar.glb
+            https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@c6a6bd13ab2b3c685c7903d03561b8a9392f38b8/Models/ToyCar/glTF-Binary/ToyCar.glb
           test -s /tmp/toycar.glb
           python3 - <<'PY'
           from pathlib import Path
@@ -177,7 +199,7 @@ jobs:
           PY
           curl -L --fail --retry 2 --max-time 30 \
             -o /tmp/riggedfigure.glb \
-            https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/RiggedFigure/glTF-Binary/RiggedFigure.glb
+            https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@c6a6bd13ab2b3c685c7903d03561b8a9392f38b8/Models/RiggedFigure/glTF-Binary/RiggedFigure.glb
           test -s /tmp/riggedfigure.glb
           python3 - <<'PY'
           from pathlib import Path
@@ -187,7 +209,7 @@ jobs:
           PY
           curl -L --fail --retry 2 --max-time 30 \
             -o /tmp/deliverytruck.glb \
-            https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/CesiumMilkTruck/glTF-Binary/CesiumMilkTruck.glb
+            https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@c6a6bd13ab2b3c685c7903d03561b8a9392f38b8/Models/CesiumMilkTruck/glTF-Binary/CesiumMilkTruck.glb
           test -s /tmp/deliverytruck.glb
           python3 - <<'PY'
           from pathlib import Path

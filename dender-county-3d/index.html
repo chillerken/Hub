@@ -62,5 +62,16 @@
   </script>
   <script type="module" src="./game.js?v=0.6"></script>
 <!-- regional-data-ready-3.1 -->
+<script>
+if("serviceWorker" in navigator){
+  addEventListener("load",()=>navigator.serviceWorker.register("./sw.js?v=7.2").catch(()=>{}));
+}
+const netBadge=document.createElement("div");
+netBadge.id="networkStatus72";
+netBadge.style.cssText="position:fixed;right:14px;bottom:8px;z-index:40;padding:4px 7px;border-radius:5px;background:rgba(8,10,14,.62);color:#ccd3db;font:700 9px system-ui;letter-spacing:.06em;pointer-events:none";
+document.body.appendChild(netBadge);
+function updateNet72(){netBadge.textContent=navigator.onLine?"ONLINE • CHUNK CACHE ACTIEF":"OFFLINE • CACHED SECTORS";}
+addEventListener("online",updateNet72);addEventListener("offline",updateNet72);updateNet72();
+</script>
 </body>
 </html>

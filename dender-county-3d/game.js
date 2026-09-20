@@ -1044,7 +1044,7 @@ assetManager06.init();
 const ASSETS06={
   heroCar:{
     id:"khronos-toycar-cc0",
-    url:"https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/ToyCar/glTF-Binary/ToyCar.glb",
+    url:"https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@c6a6bd13ab2b3c685c7903d03561b8a9392f38b8/Models/ToyCar/glTF-Binary/ToyCar.glb",
     license:"CC0-1.0",
     credit:"Guido Odendahl / Eric Chadwick, Khronos glTF Sample Assets"
   }
@@ -1113,7 +1113,7 @@ function assetDebug06(){
 window.__DENDER_VERSION__="0.7";
 ASSETS06.player={
   id:"khronos-riggedfigure-ccby4",
-  url:"https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/RiggedFigure/glTF-Binary/RiggedFigure.glb",
+  url:"https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@c6a6bd13ab2b3c685c7903d03561b8a9392f38b8/Models/RiggedFigure/glTF-Binary/RiggedFigure.glb",
   license:"CC-BY-4.0",
   credit:"© 2017 Cesium — Khronos glTF Sample Assets"
 };
@@ -2949,7 +2949,7 @@ installRiggedNPCs40();
 // Additional free CC-BY delivery-truck visual, stripped of obvious logo nodes and covered by blank side panels.
 ASSETS06.deliveryTruck={
   id:"khronos-cesium-milktruck-ccby4",
-  url:"https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/CesiumMilkTruck/glTF-Binary/CesiumMilkTruck.glb",
+  url:"https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@c6a6bd13ab2b3c685c7903d03561b8a9392f38b8/Models/CesiumMilkTruck/glTF-Binary/CesiumMilkTruck.glb",
   license:"CC-BY-4.0",
   credit:"© 2017 Cesium — Khronos glTF Sample Assets"
 };
