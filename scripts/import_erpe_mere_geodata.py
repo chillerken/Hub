@@ -88,6 +88,8 @@ def official_roads(b,boundary):
                 "road_class":p.get("morfologischeWegklasse"),
                 "road_category":p.get("wegcategorie"),
                 "access":p.get("toegangsbeperking"),
+                "begin_node":p.get("beginknoopObjectId"),
+                "end_node":p.get("eindknoopObjectId"),
                 "manager":p.get("labelWegbeheerder"),
             },
             "geometry":ft.get("geometry"),
