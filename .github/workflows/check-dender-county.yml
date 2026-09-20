@@ -59,6 +59,25 @@ jobs:
           assert "streamEnvironment20" in game and "updatePeds20" in game
           print("Erpe-Mere roads",len(roads),"routed",len(routed),"named",meta["named_street_count"])
           PY
+      - name: Validate streamed environment data when present
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("dender-county-3d/geodata")
+          p=root/"erpe_mere_environment.geojson"
+          m=root/"erpe_mere_environment_meta.json"
+          if not p.exists():
+              print("Environment import pending; runtime fallback remains valid.")
+          else:
+              fc=json.loads(p.read_text())
+              meta=json.loads(m.read_text())
+              buildings=[f for f in fc["features"] if f.get("properties",{}).get("kind")=="building"]
+              assert len(buildings)>1000, len(buildings)
+              assert meta["feature_count"]==len(fc["features"])
+              assert "Digitaal Vlaanderen" in meta.get("primary_building_source","")
+              print("environment features",len(fc["features"]),"buildings",len(buildings),meta.get("counts"))
+          PY
       - name: Verify required game files
         run: |
           test -s dender-county-3d/index.html
