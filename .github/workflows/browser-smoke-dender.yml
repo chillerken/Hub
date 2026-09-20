@@ -50,8 +50,26 @@ jobs:
             await page.waitForFunction(()=>window.__DENDER_HEALTH__?.geoActive===true,{timeout:120000});
             await page.waitForTimeout(9000);
             const health=await page.evaluate(()=>window.__DENDER_HEALTH__);
+            const visual=await page.evaluate(()=>{
+              const canvas=document.querySelector('#game').getBoundingClientRect();
+              const body=getComputedStyle(document.body);
+              const mission=getComputedStyle(document.querySelector('#missionBox'));
+              const loading=document.querySelector('#loading');
+              return {
+                canvasW:canvas.width,canvasH:canvas.height,
+                overflow:body.overflow,
+                bodyBg:body.backgroundColor,
+                missionPos:mission.position,
+                loadingHidden:loading.classList.contains('hidden')
+              };
+            });
             console.log('HEALTH',JSON.stringify(health));
+            console.log('VISUAL',JSON.stringify(visual));
             await page.screenshot({path:'/tmp/dender-smoke.png',fullPage:true});
+            if(visual.canvasW<1200||visual.canvasH<680)throw new Error('canvas does not fill viewport');
+            if(visual.overflow!=='hidden')throw new Error('visual shell broken: body overflow '+visual.overflow);
+            if(visual.missionPos!=='absolute')throw new Error('HUD stylesheet missing');
+            if(!visual.loadingHidden)throw new Error('loading overlay did not hide');
             if(!health.started)throw new Error('game did not start');
             if(!health.geoActive)throw new Error('real-world geography inactive');
             if(health.masterFrames<5)throw new Error('master loop not advancing');
