@@ -37,7 +37,7 @@ def height(fid):
 
 def official_buildings(b,boundary):
     base="https://geo.api.vlaanderen.be/Gebouwenregister/ogc/features/v1";cid="Gebouw"
-    params={"bbox":f'{b["west"]},{b["south"]},{b["east"]},{b["north"]}',"bbox-crs":CRS84,"crs":CRS84,"limit":1000,"f":"json"}
+    params={"bbox":f'{b["west"]},{b["south"]},{b["east"]},{b["north"]}',"bbox-crs":CRS84,"crs":CRS84,"limit":5000,"f":"json"}
     url=f"{base}/collections/{cid}/items?"+urllib.parse.urlencode(params)
     out=[];pages=0;seen=set();matched=None
     while url and url not in seen and pages<150:
