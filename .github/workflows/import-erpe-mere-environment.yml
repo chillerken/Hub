@@ -1,0 +1,48 @@
+name: Import Erpe-Mere environment
+
+on:
+  push:
+    branches: [dender-county-3d]
+    paths:
+      - 'scripts/import_erpe_mere_environment.py'
+      - '.github/workflows/import-erpe-mere-environment.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dender-county-3d
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch buildings water and vegetation
+        run: python scripts/import_erpe_mere_environment.py
+      - name: Validate environment
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("dender-county-3d/geodata")
+          fc=json.loads((root/"erpe_mere_environment.geojson").read_text())
+          m=json.loads((root/"erpe_mere_environment_meta.json").read_text())
+          assert m["counts"].get("building",0)>1000
+          assert m["feature_count"]==len(fc["features"])
+          assert all(f.get("geometry") for f in fc["features"])
+          print(m["counts"])
+          PY
+      - name: Commit environment geodata
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dender-county-3d/geodata/erpe_mere_environment*
+          if git diff --cached --quiet; then
+            echo "No environment changes"
+          else
+            git commit -m "Import Erpe-Mere buildings water and vegetation"
+            git push origin HEAD:dender-county-3d
+          fi
