@@ -20,6 +20,25 @@ jobs:
         run: |
           cp dender-county-3d/game.js /tmp/dender-game.mjs
           node --check /tmp/dender-game.mjs
+      - name: Validate real-world geography data
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("dender-county-3d/geodata")
+          runtime=json.loads((root/"burst_runtime.geojson").read_text())
+          meta=json.loads((root/"burst_meta.json").read_text())
+          bounds=json.loads((root/"burst_boundaries.geojson").read_text())
+          assert runtime["type"]=="FeatureCollection"
+          roads=[f for f in runtime["features"] if f.get("properties",{}).get("kind")=="road"]
+          stations=[f for f in runtime["features"] if f.get("properties",{}).get("kind")=="station"]
+          assert len(roads)>100
+          assert len(stations)>=1
+          assert meta["wegenregister"]["reachable"] is True
+          assert meta["wegenregister"]["sector_feature_count"]==len(roads)
+          assert any(f.get("geometry",{}).get("type") in ("Polygon","MultiPolygon") for f in bounds["features"])
+          print("real roads",len(roads),"named streets",meta["street_count_named"],"station",stations[0]["properties"].get("name"))
+          PY
       - name: Verify required game files
         run: |
           test -s dender-county-3d/index.html

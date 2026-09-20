@@ -1269,3 +1269,311 @@ const polyHavenBadge08=document.createElement("div");
 polyHavenBadge08.textContent="PBR & environment assets: Poly Haven • CC0";
 polyHavenBadge08.style.cssText="position:fixed;right:14px;top:48px;z-index:11;font:600 10px system-ui;color:#d5d9df;background:rgba(8,10,14,.55);padding:5px 8px;border-radius:4px;pointer-events:none";
 document.body.appendChild(polyHavenBadge08);
+
+
+// ===== DENDER COUNTY 0.9 — REAL BURST / OFFICIAL WEGENREGISTER 1:1 PILOT =====
+window.__DENDER_VERSION__="0.9";
+const GEO09={
+  active:false,
+  origin:{lat:50.91365,lon:3.92037},
+  bbox:{south:50.895,west:3.895,north:50.932,east:3.947},
+  metersLat:111320,
+  metersLon:111320*Math.cos(50.91365*Math.PI/180),
+  group:new THREE.Group(),
+  segments:[],
+  boundaries:null,
+  currentStreet:"",
+  missionIndex:0,
+  missionTargets:[],
+  station:null,
+  lastStreetCheck:0
+};
+GEO09.group.userData.realGeo09=true;
+scene.add(GEO09.group);
+
+function geoToLocal09(coord){
+  return new THREE.Vector3(
+    (coord[0]-GEO09.origin.lon)*GEO09.metersLon,
+    0,
+    -(coord[1]-GEO09.origin.lat)*GEO09.metersLat
+  );
+}
+function localToGeo09(pos){
+  return [
+    GEO09.origin.lon+pos.x/GEO09.metersLon,
+    GEO09.origin.lat-pos.z/GEO09.metersLat
+  ];
+}
+function widthForRoad09(p){
+  const s=((p.road_class||"")+" "+(p.road_category||"")).toLowerCase();
+  if(s.includes("autosnel")||s.includes("hoofdweg"))return 11;
+  if(s.includes("gescheiden rijban"))return 8;
+  if(s.includes("verkeersplein"))return 7;
+  if(s.includes("wandel")||s.includes("fietsweg"))return 2.2;
+  if(s.includes("lokale")||s.includes("één rijbaan")||s.includes("een rijbaan"))return 5.6;
+  return 4.8;
+}
+function linesFromGeometry09(g){
+  if(!g)return [];
+  if(g.type==="LineString")return [g.coordinates];
+  if(g.type==="MultiLineString")return g.coordinates;
+  return [];
+}
+function makeInstancedSegments09(items,material){
+  if(!items.length)return;
+  const geo=new THREE.BoxGeometry(1,1,1);
+  const mesh=new THREE.InstancedMesh(geo,material,items.length);
+  mesh.receiveShadow=true;
+  const pos=new THREE.Vector3(),quat=new THREE.Quaternion(),scale=new THREE.Vector3(),mat4=new THREE.Matrix4();
+  const yAxis=new THREE.Vector3(0,1,0);
+  items.forEach((s,i)=>{
+    const dx=s.x2-s.x1,dz=s.z2-s.z1,len=Math.hypot(dx,dz);
+    pos.set((s.x1+s.x2)/2,.08,(s.z1+s.z2)/2);
+    quat.setFromAxisAngle(yAxis,Math.atan2(dx,dz));
+    scale.set(s.width,.12,len+.35);
+    mat4.compose(pos,quat,scale);mesh.setMatrixAt(i,mat4);
+  });
+  mesh.instanceMatrix.needsUpdate=true;
+  GEO09.group.add(mesh);
+}
+function buildRealRoads09(fc){
+  const buckets=new Map();
+  const railSegments=[];
+  const stationFeature=(fc.features||[]).find(f=>f.properties?.kind==="station");
+  if(stationFeature)GEO09.station=geoToLocal09(stationFeature.geometry.coordinates);
+
+  for(const ft of fc.features||[]){
+    const p=ft.properties||{};
+    if(p.kind==="road"){
+      const width=widthForRoad09(p);
+      const bucket=width<=2.3?2.2:width<=5?4.8:width<=6?5.6:width<=8?8:11;
+      if(!buckets.has(bucket))buckets.set(bucket,[]);
+      for(const line of linesFromGeometry09(ft.geometry)){
+        for(let i=1;i<line.length;i++){
+          const a=geoToLocal09(line[i-1]),b=geoToLocal09(line[i]);
+          const seg={x1:a.x,z1:a.z,x2:b.x,z2:b.z,width,name:p.name||"",props:p};
+          buckets.get(bucket).push(seg);GEO09.segments.push(seg);
+        }
+      }
+    }else if(p.kind==="railway"){
+      for(const line of linesFromGeometry09(ft.geometry)){
+        for(let i=1;i<line.length;i++){
+          const a=geoToLocal09(line[i-1]),b=geoToLocal09(line[i]);
+          railSegments.push({x1:a.x,z1:a.z,x2:b.x,z2:b.z,width:1.8,name:p.name||"Spoorlijn",props:p});
+        }
+      }
+    }
+  }
+  const roadMaterial=mat.road.clone();roadMaterial.color.set(0xffffff);roadMaterial.roughness=.86;
+  for(const [width,items] of buckets){
+    const m=roadMaterial.clone();
+    if(width<=2.3)m.color.set(0x6e6e69);
+    makeInstancedSegments09(items,m);
+  }
+  const railMat=new THREE.MeshStandardMaterial({color:0x3d3d3d,metalness:.48,roughness:.55});
+  makeInstancedSegments09(railSegments,railMat);
+
+  const west=geoToLocal09([GEO09.bbox.west,GEO09.origin.lat]).x;
+  const east=geoToLocal09([GEO09.bbox.east,GEO09.origin.lat]).x;
+  const north=geoToLocal09([GEO09.origin.lon,GEO09.bbox.north]).z;
+  const south=geoToLocal09([GEO09.origin.lon,GEO09.bbox.south]).z;
+  GEO09.bounds={minX:Math.min(west,east),maxX:Math.max(west,east),minZ:Math.min(north,south),maxZ:Math.max(north,south)};
+
+  const groundW=GEO09.bounds.maxX-GEO09.bounds.minX+300;
+  const groundH=GEO09.bounds.maxZ-GEO09.bounds.minZ+300;
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(groundW,groundH),mat.grass.clone());
+  ground.rotation.x=-Math.PI/2;ground.position.set((GEO09.bounds.minX+GEO09.bounds.maxX)/2,-.02,(GEO09.bounds.minZ+GEO09.bounds.maxZ)/2);
+  ground.receiveShadow=true;GEO09.group.add(ground);
+}
+function hideLegacyWorld09(){
+  world.visible=false;
+  const keep=new Set([camera,hemi,sun,player,heroCar,police,rain,GEO09.group]);
+  for(const ch of scene.children){
+    if(keep.has(ch)||ch.userData?.realGeo09)continue;
+    ch.visible=false;
+  }
+  traffic.forEach(x=>x.visible=false);
+  pedestrians.forEach(x=>x.visible=false);
+  marker.visible=true;
+  buildingBoxes.length=0;
+}
+function pointSegDistSq09(px,pz,s){
+  const vx=s.x2-s.x1,vz=s.z2-s.z1,wx=px-s.x1,wz=pz-s.z1;
+  const vv=vx*vx+vz*vz||1;
+  const t=Math.max(0,Math.min(1,(wx*vx+wz*vz)/vv));
+  const dx=px-(s.x1+t*vx),dz=pz-(s.z1+t*vz);
+  return dx*dx+dz*dz;
+}
+function nearestStreet09(pos){
+  let best="",bd=Infinity;
+  for(const s of GEO09.segments){
+    if(!s.name)continue;
+    const d=pointSegDistSq09(pos.x,pos.z,s);
+    if(d<bd){bd=d;best=s.name}
+  }
+  return {name:best,dist:Math.sqrt(bd)};
+}
+function pointInRing09(lon,lat,ring){
+  let inside=false;
+  for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+    const xi=ring[i][0],yi=ring[i][1],xj=ring[j][0],yj=ring[j][1];
+    const hit=((yi>lat)!=(yj>lat))&&(lon<(xj-xi)*(lat-yi)/(yj-yi+1e-15)+xi);
+    if(hit)inside=!inside;
+  }
+  return inside;
+}
+function inBoundary09(name,pos){
+  if(!GEO09.boundaries)return false;
+  const [lon,lat]=localToGeo09(pos);
+  const ft=GEO09.boundaries.features.find(f=>(f.properties?.display_name||"").startsWith(name+","));
+  const g=ft?.geometry;if(!g)return false;
+  if(g.type==="Polygon")return pointInRing09(lon,lat,g.coordinates[0]);
+  if(g.type==="MultiPolygon")return g.coordinates.some(p=>pointInRing09(lon,lat,p[0]));
+  return false;
+}
+function realDistrict09(pos){
+  if(inBoundary09("Burst",pos))return "BURST • ERPE-MERE";
+  if(inBoundary09("Erpe-Mere",pos))return "ERPE-MERE";
+  return "OOST-VLAANDEREN";
+}
+function roadTargetByName09(name){
+  const s=GEO09.segments.find(x=>x.name===name);
+  return s?new THREE.Vector3((s.x1+s.x2)/2,0,(s.z1+s.z2)/2):null;
+}
+function setupRealMissions09(){
+  const names=["Stationsplein","Burstdorp","Stationsstraat","Ninovestraat"];
+  GEO09.missionTargets=names.map(n=>({name:n,pos:roadTargetByName09(n)})).filter(x=>x.pos);
+  GEO09.missionIndex=0;
+}
+function updateRealMissionUI09(){
+  const t=GEO09.missionTargets[GEO09.missionIndex];
+  document.querySelector("#missionTitle").textContent="REAL-WORLD BURST";
+  document.querySelector("#missionText").textContent=t
+    ? "Rij via het echte wegennet naar "+t.name+"."
+    : "Vrije verkenning op officiële Burst-geometrie.";
+}
+function updateMission09(){
+  const t=GEO09.missionTargets[GEO09.missionIndex];
+  if(!t){marker.visible=false;return}
+  marker.visible=true;marker.position.set(t.pos.x,.22,t.pos.z);
+  const actor=inVehicle?heroCar.position:player.position;
+  if(actor.distanceTo(t.pos)<12){
+    toast(t.name+" bereikt");
+    GEO09.missionIndex++;
+    updateRealMissionUI09();
+  }
+}
+function movePlayer09(dt){
+  const forward=new THREE.Vector3(Math.sin(camYaw),0,-Math.cos(camYaw));
+  const right=new THREE.Vector3(Math.cos(camYaw),0,Math.sin(camYaw));
+  tempV.set(0,0,0);
+  if(keys.KeyW)tempV.add(forward);if(keys.KeyS)tempV.sub(forward);if(keys.KeyD)tempV.add(right);if(keys.KeyA)tempV.sub(right);
+  if(tempV.lengthSq()>0){
+    tempV.normalize();player.position.addScaledVector(tempV,(keys.ShiftLeft?8.3:4.7)*dt);player.rotation.y=Math.atan2(tempV.x,tempV.z);
+  }
+  if(GEO09.bounds){
+    player.position.x=THREE.MathUtils.clamp(player.position.x,GEO09.bounds.minX,GEO09.bounds.maxX);
+    player.position.z=THREE.MathUtils.clamp(player.position.z,GEO09.bounds.minZ,GEO09.bounds.maxZ);
+  }
+}
+function driveHero09(dt){
+  const car=heroCar,throttle=keys.KeyW?1:0,brake=keys.KeyS?1:0,handbrake=keys.Space?1:0;
+  if(throttle)car.userData.speed+=13.5*dt;
+  if(brake){if(car.userData.speed>1)car.userData.speed-=22*dt;else car.userData.speed-=8*dt}
+  if(!throttle&&!brake)car.userData.speed*=Math.pow(.62,dt);
+  if(handbrake)car.userData.speed*=Math.pow(.055,dt);
+  car.userData.speed=THREE.MathUtils.clamp(car.userData.speed,-9,31);
+  const steer=(keys.KeyA?1:0)-(keys.KeyD?1:0),sa=Math.abs(car.userData.speed);
+  if(sa>.25)car.userData.heading+=steer*dt*(car.userData.speed>=0?1:-1)*THREE.MathUtils.lerp(1.7,.72,Math.min(sa/30,1));
+  if(handbrake&&sa>7)car.userData.heading+=steer*dt*1.1;
+  car.rotation.y=car.userData.heading;
+  car.position.x+=Math.sin(car.userData.heading)*car.userData.speed*dt;
+  car.position.z+=Math.cos(car.userData.heading)*car.userData.speed*dt;
+  if(GEO09.bounds){
+    car.position.x=THREE.MathUtils.clamp(car.position.x,GEO09.bounds.minX,GEO09.bounds.maxX);
+    car.position.z=THREE.MathUtils.clamp(car.position.z,GEO09.bounds.minZ,GEO09.bounds.maxZ);
+  }
+  animateCar04(car,dt,steer,brake||handbrake);
+}
+function drawMap09(){
+  const S=180,ctx09=ctx,radius=720,scale=S/(radius*2),actor=inVehicle?heroCar:player;
+  ctx09.clearRect(0,0,S,S);ctx09.fillStyle="#111a15";ctx09.fillRect(0,0,S,S);
+  ctx09.lineCap="round";
+  for(const s of GEO09.segments){
+    const x1=S/2+(s.x1-actor.position.x)*scale,z1=S/2+(s.z1-actor.position.z)*scale;
+    const x2=S/2+(s.x2-actor.position.x)*scale,z2=S/2+(s.z2-actor.position.z)*scale;
+    if((x1<0&&x2<0)||(x1>S&&x2>S)||(z1<0&&z2<0)||(z1>S&&z2>S))continue;
+    ctx09.strokeStyle=s.width<=2.3?"#777a72":"#555b5e";
+    ctx09.lineWidth=Math.max(1,s.width*scale);
+    ctx09.beginPath();ctx09.moveTo(x1,z1);ctx09.lineTo(x2,z2);ctx09.stroke();
+  }
+  const t=GEO09.missionTargets[GEO09.missionIndex];
+  if(t){
+    const x=S/2+(t.pos.x-actor.position.x)*scale,z=S/2+(t.pos.z-actor.position.z)*scale;
+    ctx09.fillStyle="#ffd36b";ctx09.beginPath();ctx09.arc(x,z,5,0,Math.PI*2);ctx09.fill();
+  }
+  ctx09.fillStyle="#fff";ctx09.beginPath();ctx09.arc(S/2,S/2,4,0,Math.PI*2);ctx09.fill();
+}
+function installGeoHUD09(){
+  let street=document.querySelector("#streetName09");
+  if(!street){
+    street=document.createElement("div");street.id="streetName09";
+    street.style.cssText="font-size:12px;color:#fff;margin-top:3px;font-weight:750;letter-spacing:.04em";
+    document.querySelector("#clock").after(street);
+  }
+  let credit=document.querySelector("#geoCredit09");
+  if(!credit){
+    credit=document.createElement("div");credit.id="geoCredit09";
+    credit.textContent="Wegen: © Digitaal Vlaanderen • aanvullingen: © OpenStreetMap contributors (ODbL)";
+    credit.style.cssText="position:fixed;left:14px;bottom:8px;z-index:11;font:600 9px system-ui;color:#ccd1d6;background:rgba(8,10,14,.58);padding:4px 7px;border-radius:4px;pointer-events:none";
+    document.body.appendChild(credit);
+  }
+}
+async function activateRealBurst09(){
+  try{
+    const [fc,bounds]=await Promise.all([
+      fetch("./geodata/burst_runtime.geojson?v=0.9").then(r=>{if(!r.ok)throw new Error("runtime geodata "+r.status);return r.json()}),
+      fetch("./geodata/burst_boundaries.geojson?v=0.9").then(r=>{if(!r.ok)throw new Error("boundary geodata "+r.status);return r.json()})
+    ]);
+    GEO09.boundaries=bounds;
+    buildRealRoads09(fc);
+    setupRealMissions09();
+    installGeoHUD09();
+    hideLegacyWorld09();
+
+    const spawn=GEO09.station||new THREE.Vector3(0,0,0);
+    player.position.copy(spawn).add(new THREE.Vector3(5,0,5));
+    heroCar.position.copy(spawn).add(new THREE.Vector3(12,0,4));
+    heroCar.userData.speed=0;heroCar.userData.heading=0;heroCar.rotation.y=0;
+    v02.playerPrev.copy(player.position);v02.carPrev.copy(heroCar.position);
+
+    mission=999;wanted=0;police.visible=false;
+    movePlayer=movePlayer09;driveHero=driveHero09;
+    updateTraffic=()=>{};updatePeds=()=>{};
+    updateMission=updateMission09;drawMap=drawMap09;
+    districtName=realDistrict09;
+    installCollisions=()=>{};
+    GEO09.active=true;
+    updateRealMissionUI09();
+    toast("Echte Burst-geografie geladen • 1:1 schaal");
+  }catch(err){
+    console.error("Real Burst geography failed; legacy fallback stays active",err);
+    toast("Geodata kon niet laden — fallbackwereld actief");
+  }
+}
+activateRealBurst09();
+
+let geoLoopPrev09=performance.now();
+function geoLoop09(now){
+  requestAnimationFrame(geoLoop09);
+  if(!running||!GEO09.active)return;
+  if(now-GEO09.lastStreetCheck>300){
+    GEO09.lastStreetCheck=now;
+    const actor=inVehicle?heroCar.position:player.position;
+    const n=nearestStreet09(actor);
+    GEO09.currentStreet=n.dist<45?n.name:"";
+    const el=document.querySelector("#streetName09");
+    if(el)el.textContent=GEO09.currentStreet||"Onbenoemde/openbare weg";
+  }
+}
+requestAnimationFrame(geoLoop09);
