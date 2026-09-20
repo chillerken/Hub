@@ -7,6 +7,10 @@ on:
       - 'scripts/import_erpe_mere_environment.py'
       - '.github/workflows/import-erpe-mere-environment.yml'
 
+concurrency:
+  group: dender-erpe-environment
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
