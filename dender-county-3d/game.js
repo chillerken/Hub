@@ -2596,3 +2596,117 @@ const regionEnvironmentPoll30=setInterval(async()=>{
   await Promise.all(REG30.municipalities.map(loadRegionEnvironment30));
   if(REG30.environmentLoaded.size===REG30.municipalities.length)clearInterval(regionEnvironmentPoll30);
 },5000);
+
+
+// ===== DENDER COUNTY 3.1 — ON-DEMAND REGIONAL ENVIRONMENT CHUNKS =====
+window.__DENDER_VERSION__="3.1";
+
+const CHUNK31={
+  manifests:new Map(),
+  loaded:new Map(),
+  loading:new Set(),
+  municipalities:["erpe_mere","lede","aalst"],
+  radius:1,
+  maxVisitedChunks:36,
+  last:0,
+  ready:false
+};
+
+function manifestLocalChunk31(actor,manifest){
+  const origin=manifest.origin_wgs84;
+  const lat0=origin.lat,lon0=origin.lon;
+  const mlon=111320*Math.cos(lat0*Math.PI/180),mlat=111320;
+  const geo=localToGeo10(actor);
+  const x=(geo[0]-lon0)*mlon;
+  const z=-(geo[1]-lat0)*mlat;
+  return {
+    cx:Math.floor(x/manifest.chunk_size_m),
+    cz:Math.floor(z/manifest.chunk_size_m)
+  };
+}
+
+async function loadManifest31(key){
+  if(CHUNK31.manifests.has(key))return CHUNK31.manifests.get(key);
+  try{
+    const r=await fetch("./geodata/chunks/"+key+"/manifest.json?v=3.1");
+    if(!r.ok)return null;
+    const m=await r.json();
+    m.index=new Map(m.chunks.map(c=>[c.cx+":"+c.cz,c]));
+    CHUNK31.manifests.set(key,m);
+    return m;
+  }catch(err){
+    console.warn("chunk manifest pending",key,err);
+    return null;
+  }
+}
+
+async function fetchChunk31(key,manifest,entry){
+  const id=key+":"+entry.cx+":"+entry.cz;
+  if(CHUNK31.loaded.has(id)||CHUNK31.loading.has(id))return;
+  CHUNK31.loading.add(id);
+  try{
+    const r=await fetch("./geodata/chunks/"+key+"/"+entry.file+"?v=3.1");
+    if(!r.ok)throw new Error("chunk "+r.status);
+    const fc=await r.json();
+    appendEnvironment30(fc,key);
+    CHUNK31.loaded.set(id,{id,key,cx:entry.cx,cz:entry.cz,lastUsed:performance.now()});
+  }catch(err){
+    console.warn("environment chunk failed",id,err);
+  }finally{
+    CHUNK31.loading.delete(id);
+  }
+}
+
+function touchNearbyChunks31(key,manifest,actor){
+  const c=manifestLocalChunk31(actor,manifest);
+  for(let dx=-CHUNK31.radius;dx<=CHUNK31.radius;dx++){
+    for(let dz=-CHUNK31.radius;dz<=CHUNK31.radius;dz++){
+      const entry=manifest.index.get((c.cx+dx)+":"+(c.cz+dz));
+      if(!entry)continue;
+      const id=key+":"+entry.cx+":"+entry.cz;
+      const loaded=CHUNK31.loaded.get(id);
+      if(loaded)loaded.lastUsed=performance.now();
+      else fetchChunk31(key,manifest,entry);
+    }
+  }
+}
+
+function pruneVisitedChunks31(){
+  if(CHUNK31.loaded.size<=CHUNK31.maxVisitedChunks)return;
+  const arr=[...CHUNK31.loaded.values()].sort((a,b)=>a.lastUsed-b.lastUsed);
+  const remove=arr.slice(0,CHUNK31.loaded.size-CHUNK31.maxVisitedChunks);
+  // Geometry is already managed by ENV20 distance streaming. Here we only
+  // release loader bookkeeping so distant chunks can be fetched again later.
+  for(const item of remove)CHUNK31.loaded.delete(item.id);
+}
+
+async function initializeChunkStreaming31(){
+  if(!GEO10.active)return false;
+  const list=await Promise.all(CHUNK31.municipalities.map(async key=>[key,await loadManifest31(key)]));
+  let count=0;
+  for(const [key,m] of list)if(m)count++;
+  if(!count)return false;
+  ENV20.ready=true;
+  // Disable legacy whole-municipality downloads once chunk manifests exist.
+  loadEnvironment20=async()=>false;
+  loadRegionEnvironment30=async()=>false;
+  CHUNK31.ready=true;
+  toast("Sectorstreaming actief • "+count+" regio's");
+  return true;
+}
+
+const chunkInitPoll31=setInterval(async()=>{
+  if(CHUNK31.ready){clearInterval(chunkInitPoll31);return}
+  if(await initializeChunkStreaming31())clearInterval(chunkInitPoll31);
+},1800);
+
+function chunkLoop31(now){
+  requestAnimationFrame(chunkLoop31);
+  if(!running||!GEO10.active||!CHUNK31.ready)return;
+  if(now-CHUNK31.last<550)return;
+  CHUNK31.last=now;
+  const actor=inVehicle?heroCar.position:player.position;
+  for(const [key,m] of CHUNK31.manifests)touchNearbyChunks31(key,m,actor);
+  pruneVisitedChunks31();
+}
+requestAnimationFrame(chunkLoop31);
