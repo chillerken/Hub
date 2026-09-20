@@ -31,6 +31,7 @@ public final class VoiceService extends Service {
     private boolean usingOnDevice;
     private String recognitionLocale = "nl-BE";
     private int retryCount;
+    private String partialText = "";
     private final Handler h = new Handler(Looper.getMainLooper());
 
     @Override public void onCreate() {
@@ -160,6 +161,7 @@ public final class VoiceService extends Service {
         }
 
         commandMode = command;
+        partialText = "";
         cancelListening();
 
         Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
