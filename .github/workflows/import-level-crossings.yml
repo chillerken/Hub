@@ -1,4 +1,4 @@
-name: Import real railway crossings
+name: Import official Infrabel railway crossings
 
 on:
   push:
@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Import exact OSM railway crossings
+      - name: Import official Infrabel railway crossings
         run: python scripts/import_level_crossings.py
       - name: Validate crossing data
         run: |

@@ -14,7 +14,7 @@ self.addEventListener("fetch",event=>{
   if(req.method!=="GET")return;
   const u=new URL(req.url);
   if(u.origin!==location.origin)return;
-  const isGeo=u.pathname.includes("/geodata/chunks/")||u.pathname.endsWith("_runtime.geojson")||u.pathname.endsWith("_meta.json");
+  const isGeo=u.pathname.includes("/geodata/chunks/")||u.pathname.endsWith("_runtime.geojson")||u.pathname.endsWith("_meta.json")||u.pathname.endsWith("/level_crossings.geojson");
   if(isGeo){
     event.respondWith(caches.open(CHUNK_CACHE).then(async cache=>{
       const hit=await cache.match(req);

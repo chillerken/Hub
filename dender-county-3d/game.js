@@ -4666,12 +4666,13 @@ function nearestRailDistance92(pos){
 }
 
 async function loadCrossings92(){
-  if(CROSS92.ready||CROSS92.loading||!GEO10.active||!SP82.edgeCount)return false;
+  if(CROSS92.ready||CROSS92.loading||!GEO10.active||!SP82.edgeCount||!SYS71.railLoaded||!SYS71.railPath)return false;
   CROSS92.loading=true;
   try{
     const r=await fetch("./geodata/level_crossings.geojson?v=9.2");
     if(!r.ok)throw new Error("crossing layer "+r.status);
     const fc=await r.json();
+    CROSS92.officialCount=(fc.features||[]).length;
     for(const ft of fc.features||[]){
       if(ft.geometry?.type!=="Point")continue;
       const pos=geoToLocal10(ft.geometry.coordinates);
@@ -4830,6 +4831,7 @@ function systems92(now){
   if(now-SAVE92.lastSave>15000)saveUnified92(false);
   if(window.__DENDER_HEALTH__){
     window.__DENDER_HEALTH__.crossings=CROSS92.crossings.length;
+    window.__DENDER_HEALTH__.officialCrossings=CROSS92.officialCount||0;
     window.__DENDER_HEALTH__.activeCrossings=CROSS92.activeCount;
     window.__DENDER_HEALTH__.saveVersion=SAVE92.version;
   }

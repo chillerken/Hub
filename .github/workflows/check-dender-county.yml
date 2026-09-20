@@ -151,6 +151,21 @@ jobs:
           assert (root/"sw.js").exists()
           print("manifest assets",len(m["assets"]),"single RAF OK")
           PY
+      - name: Validate official Infrabel crossings
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("dender-county-3d/geodata")
+          fc=json.loads((root/"level_crossings.geojson").read_text())
+          meta=json.loads((root/"level_crossings_meta.json").read_text())
+          assert meta["source"]=="Infrabel Open Data"
+          assert meta["dataset"]=="geoow"
+          assert meta["feature_count"]==len(fc["features"])
+          assert meta["feature_count"]>0
+          assert all(f.get("properties",{}).get("kind")=="level_crossing" for f in fc["features"])
+          print("official Infrabel crossings",meta["feature_count"])
+          PY
       - name: Verify required game files
         run: |
           test -s dender-county-3d/index.html

@@ -58,6 +58,12 @@
       "use": "rail/stations/places/water/vegetation supplements",
       "license": "ODbL",
       "attribution": "© OpenStreetMap contributors"
+    },
+    {
+      "source": "Infrabel Open Data",
+      "dataset": "geoow",
+      "use": "active public railway crossing positions",
+      "attribution": "Infrabel"
     }
   ]
 }
