@@ -2224,3 +2224,119 @@ function megaLoop20(now){
   }
 }
 requestAnimationFrame(megaLoop20);
+
+
+// ===== DENDER COUNTY 2.0 — RELEASE NAVIGATION / TRAFFIC / SURFACE POLISH =====
+const NAV20={path:[],last:0,targetKey:""};
+const ROAD20={distance:0,onRoad:true,last:0,width:6};
+
+function nearestDriveSegment20(pos){
+  let bd=Infinity,best=null;
+  for(const e of GEO10.driveEdges){
+    for(let i=1;i<e.points.length;i++){
+      const s={x1:e.points[i-1].x,z1:e.points[i-1].z,x2:e.points[i].x,z2:e.points[i].z};
+      const d=pointSegDistSq09(pos.x,pos.z,s);
+      if(d<bd){bd=d;best=e}
+    }
+  }
+  return {distance:Math.sqrt(bd),edge:best};
+}
+function updateRoadState20(now){
+  if(!GEO10.active||now-ROAD20.last<280)return;
+  ROAD20.last=now;
+  const r=nearestDriveSegment20(heroCar.position);
+  ROAD20.distance=r.distance;
+  ROAD20.width=r.edge?.width||6;
+  ROAD20.onRoad=r.distance<(ROAD20.width*.62+2.2);
+}
+function driveHeroRelease20(dt){
+  const car=heroCar,throttle=keys.KeyW?1:0,brake=keys.KeyS?1:0,handbrake=keys.Space?1:0;
+  const wet=THREE.MathUtils.clamp(v04.rainIntensity,0,1);
+  const onRoad=ROAD20.onRoad;
+  const maxForward=onRoad?31:13;
+  const accel=onRoad?13.5:7.0;
+  if(throttle)car.userData.speed+=accel*dt;
+  if(brake){if(car.userData.speed>1)car.userData.speed-=(21-wet*2)*dt;else car.userData.speed-=7*dt}
+  if(!throttle&&!brake)car.userData.speed*=Math.pow(onRoad?.62:.34,dt);
+  if(handbrake)car.userData.speed*=Math.pow(onRoad?.075:.12,dt);
+  car.userData.speed=THREE.MathUtils.clamp(car.userData.speed,-8,maxForward);
+  const steer=(keys.KeyA?1:0)-(keys.KeyD?1:0),speed=Math.abs(car.userData.speed);
+  const grip=(onRoad?(1-wet*.16):.62);
+  if(speed>.2)car.userData.heading+=steer*dt*(car.userData.speed>=0?1:-1)*THREE.MathUtils.lerp(1.62,.70,Math.min(speed/30,1))*grip;
+  if(handbrake&&speed>7)car.userData.heading+=steer*dt*(1.12+wet*.28);
+  car.rotation.y=car.userData.heading;
+  car.position.x+=Math.sin(car.userData.heading)*car.userData.speed*dt;
+  car.position.z+=Math.cos(car.userData.heading)*car.userData.speed*dt;
+  clampActor10(car);animateCar04(car,dt,steer,brake||handbrake);
+}
+function trafficBlocked20(agent){
+  const car=agent.car;
+  const forward=new THREE.Vector3(Math.sin(car.rotation.y),0,Math.cos(car.rotation.y));
+  for(const other of GEO10.trafficAgents){
+    if(other===agent)continue;
+    const v=other.car.position.clone().sub(car.position),d=v.length();
+    if(d<7&&d>.01&&forward.dot(v.normalize())>.45)return true;
+  }
+  if(player.visible){
+    const v=player.position.clone().sub(car.position),d=v.length();
+    if(d<5&&d>.01&&forward.dot(v.normalize())>.35)return true;
+  }
+  return false;
+}
+function updateTrafficRelease20(dt){
+  for(const a of GEO10.trafficAgents){
+    if(!a.pts||a.index>=a.pts.length){
+      const next=chooseNext10(a.next,a.node);if(!next){a.car.userData.speed=0;continue}
+      a.prev=a.node;a.node=a.next;a.next=next.to;a.entry=next;a.pts=next.points;a.index=1;
+    }
+    const target=a.pts[a.index];if(!target)continue;
+    tempV.copy(target).sub(a.car.position);tempV.y=0;const dist=tempV.length();
+    if(dist<1.4){a.index++;continue}
+    const blocked=trafficBlocked20(a),base=7+(Number(a.car.id)%5)*.7,speed=blocked?Math.min(1.3,base):base;
+    a.car.userData.speed=THREE.MathUtils.lerp(a.car.userData.speed||0,speed,blocked?.12:.045);
+    tempV.normalize();a.car.position.addScaledVector(tempV,Math.min(dist,a.car.userData.speed*dt));
+    a.car.rotation.y=Math.atan2(tempV.x,tempV.z);animateCar04(a.car,dt,0,blocked);
+  }
+}
+function currentJobTarget20(){
+  const j=JOB20.jobs[JOB20.index];return j?.target||null;
+}
+function updateNavigation20(now){
+  if(!GEO10.active||now-NAV20.last<1500)return;
+  NAV20.last=now;
+  const target=currentJobTarget20();if(!target){NAV20.path=[];return}
+  const actor=inVehicle?heroCar.position:player.position;
+  const s=nearestNode10(actor,true),g=nearestNode10(target,true);
+  const key=s+":"+g;
+  if(key===NAV20.targetKey&&NAV20.path.length)return;
+  NAV20.targetKey=key;
+  NAV20.path=route10(s,g).map(id=>GEO10.nodes.get(id)?.pos.clone()).filter(Boolean);
+}
+function drawMapRelease20(){
+  drawMap10();
+  if(!NAV20.path.length)return;
+  const S=180,actor=inVehicle?heroCar:player,radius=900,sc=S/(radius*2);
+  ctx.strokeStyle="#e5c066";ctx.lineWidth=2.4;ctx.beginPath();
+  let started=false;
+  for(const p of NAV20.path){
+    const x=S/2+(p.x-actor.position.x)*sc,z=S/2+(p.z-actor.position.z)*sc;
+    if(!started){ctx.moveTo(x,z);started=true}else ctx.lineTo(x,z);
+  }
+  ctx.stroke();
+}
+const releaseWait20=setInterval(()=>{
+  if(!GEO10.active)return;
+  clearInterval(releaseWait20);
+  driveHero=driveHeroRelease20;
+  updateTraffic=updateTrafficRelease20;
+  drawMap=drawMapRelease20;
+},500);
+
+let releaseLast20=performance.now();
+function releaseLoop20(now){
+  requestAnimationFrame(releaseLoop20);
+  if(!running||!GEO10.active){releaseLast20=now;return}
+  const dt=Math.min((now-releaseLast20)/1000,.04);releaseLast20=now;
+  updateRoadState20(now);updateNavigation20(now);
+}
+requestAnimationFrame(releaseLoop20);
