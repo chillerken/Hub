@@ -46,7 +46,7 @@ jobs:
             await page.goto('http://127.0.0.1:8080/index.html',{waitUntil:'domcontentloaded',timeout:120000});
             await page.waitForSelector('#startBtn',{timeout:30000});
             await page.click('#startBtn');
-            await page.waitForFunction(()=>window.__DENDER_VERSION__==='8.1',{timeout:30000});
+            await page.waitForFunction(()=>window.__DENDER_VERSION__==='8.2',{timeout:30000});
             await page.waitForFunction(()=>window.__DENDER_HEALTH__?.geoActive===true,{timeout:120000});
             await page.waitForTimeout(9000);
             const health=await page.evaluate(()=>window.__DENDER_HEALTH__);
