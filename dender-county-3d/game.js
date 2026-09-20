@@ -3698,6 +3698,7 @@ function nearestInteriorHub60(){
 }
 
 const legacyInteract60=interact;
+const legacyUpdatePrompt60=updatePrompt;
 interact=function(){
   if(INT60.inside){
     player.position.copy(INT60.returnPos);INT60.inside.interior.visible=false;INT60.inside=null;toast("Terug naar buiten");return;
@@ -3721,7 +3722,7 @@ function updatePrompt60(){
     const n=nearestInteriorHub60();
     if(n.hub&&n.d<5){p.textContent="E • betreed "+n.hub.label;return}
   }
-  updatePrompt();
+  legacyUpdatePrompt60();
 }
 
 // Damage adds handling pull and light failure.
