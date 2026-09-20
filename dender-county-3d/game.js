@@ -3768,6 +3768,7 @@ function runMasterExtras70(now){
   systems81(now);
   systems82(now);
   systems90(now);
+  systems91(now);
   MASTER70.last=now;MASTER70.frames++;
 }
 
@@ -4539,3 +4540,68 @@ const perfHook90=setInterval(()=>{
   adaptiveQuality20=()=>{};
   applyTier90("QUALITY");
 },700);
+
+// ===== DENDER COUNTY 9.1 — INSTANCED BUILDING LOD =====
+window.__DENDER_VERSION__="9.1";
+const ENV91={queue:[],targetMode:"FULL",lastMode:"FULL"};
+const legacyBuildEnvChunk91=buildEnvChunk20;
+
+function buildEnvChunk91(ch){
+  const performance=PERF90.tier==="PERFORMANCE";
+  if(!performance){
+    legacyBuildEnvChunk91(ch);ch.lod91="FULL";return;
+  }
+  if(ch.built)return;
+  const group=new THREE.Group();group.userData.realGeo10=true;group.userData.environment20=true;group.userData.lod91="PERFORMANCE";
+  const buckets=[[],[],[],[]];
+  for(const item of ch.features){
+    const kind=item.ft.properties?.kind;
+    if(kind==="building"&&item.pts.length>=4){
+      const b=bounds20(item.pts),p=item.ft.properties||{};
+      const h=THREE.MathUtils.clamp(Number(p.height_m)||6,2.8,34);
+      const w=Math.max(1.5,b.maxX-b.minX),d=Math.max(1.5,b.maxZ-b.minZ);
+      buckets[hash20(p.source_id||"b")%buckets.length].push({x:(b.minX+b.maxX)/2,z:(b.minZ+b.maxZ)/2,w,d,h});
+    }else if(kind==="water"&&item.pts.length>=4)buildArea20(item,group,"water");
+    else if(kind==="waterway")buildWaterway20(item,group);
+  }
+  buckets.forEach((items,bi)=>{
+    if(!items.length)return;
+    const geo=new THREE.BoxGeometry(1,1,1),mat91=facadeMaterial40(bi+1);
+    const mesh=new THREE.InstancedMesh(geo,mat91,items.length);
+    mesh.receiveShadow=false;mesh.castShadow=false;
+    const q=new THREE.Quaternion(),mx=new THREE.Matrix4();
+    items.forEach((b,i)=>{
+      mx.compose(new THREE.Vector3(b.x,b.h/2,b.z),q,new THREE.Vector3(b.w,b.h,b.d));
+      mesh.setMatrixAt(i,mx);
+    });
+    mesh.instanceMatrix.needsUpdate=true;group.add(mesh);
+  });
+  ch.group=group;ch.built=true;ch.lod91="PERFORMANCE";GEO10.group.add(group);
+}
+buildEnvChunk20=buildEnvChunk91;
+
+function queueLodRebuild91(mode){
+  ENV91.targetMode=mode;
+  ENV91.queue=[...ENV20.chunks.values()].filter(ch=>ch.built&&ch.lod91!==mode);
+}
+function processLodQueue91(){
+  const ch=ENV91.queue.shift();if(!ch)return;
+  destroyEnvChunk20(ch);buildEnvChunk20(ch);
+}
+const legacyApplyTier91=applyTier90;
+applyTier90=function(tier){
+  const before=PERF90.tier;
+  legacyApplyTier91(tier);
+  const mode=tier==="PERFORMANCE"?"PERFORMANCE":"FULL";
+  if(mode!==ENV91.lastMode||before!==tier){
+    ENV91.lastMode=mode;queueLodRebuild91(mode);
+  }
+};
+function systems91(now){
+  if(!GEO10.active)return;
+  if(ENV91.queue.length)processLodQueue91();
+  if(window.__DENDER_HEALTH__){
+    window.__DENDER_HEALTH__.buildingLod=PERF90.tier==="PERFORMANCE"?"INSTANCED":"FULL";
+    window.__DENDER_HEALTH__.lodQueue=ENV91.queue.length;
+  }
+}
