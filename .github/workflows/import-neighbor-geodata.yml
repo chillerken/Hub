@@ -1,0 +1,57 @@
+name: Import Lede and Aalst geography
+
+on:
+  push:
+    branches: [dender-county-3d]
+    paths:
+      - 'scripts/import_neighbor_geodata.py'
+      - '.github/workflows/import-neighbor-geodata.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    strategy:
+      max-parallel: 1
+      matrix:
+        municipality: [lede, aalst]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dender-county-3d
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Import municipality
+        run: python scripts/import_neighbor_geodata.py ${{ matrix.municipality }}
+      - name: Validate municipality
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          key=os.environ["MUNI"]
+          root=Path("dender-county-3d/geodata")
+          fc=json.loads((root/f"{key}_runtime.geojson").read_text())
+          meta=json.loads((root/f"{key}_meta.json").read_text())
+          roads=[f for f in fc["features"] if f.get("properties",{}).get("kind")=="road"]
+          assert len(roads)>500
+          assert meta["named_street_count"]>50
+          assert meta["wegenregister"]["municipality_feature_count"]==len(roads)
+          print(key,"roads",len(roads),"streets",meta["named_street_count"],"stations",meta["stations"])
+          PY
+        env:
+          MUNI: ${{ matrix.municipality }}
+      - name: Commit municipality
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin dender-county-3d
+          git add dender-county-3d/geodata/${{ matrix.municipality }}_*
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "Import real-world ${{ matrix.municipality }} geography"
+            git push origin HEAD:dender-county-3d
+          fi
