@@ -3457,3 +3457,310 @@ function simLoop50(now){
   }
 }
 requestAnimationFrame(simLoop50);
+
+// ===== DENDER COUNTY 6.0 — CAMERA COLLISION / GRAPH SIGNALS / INTERIORS =====
+window.__DENDER_VERSION__="6.0";
+
+const CAM60={
+  lastSafe:new THREE.Vector3(),
+  vel:new THREE.Vector3(),
+  fovTarget:65
+};
+
+function segmentAabbHit60(a,b,box,pad=.35){
+  const minX=box.x-box.w/2-pad,maxX=box.x+box.w/2+pad,minZ=box.z-box.d/2-pad,maxZ=box.z+box.d/2+pad;
+  let tmin=0,tmax=1;
+  const dx=b.x-a.x,dz=b.z-a.z;
+  for(const [p,d,min,max] of [[a.x,dx,minX,maxX],[a.z,dz,minZ,maxZ]]){
+    if(Math.abs(d)<1e-8){if(p<min||p>max)return null}
+    else{
+      let t1=(min-p)/d,t2=(max-p)/d;if(t1>t2)[t1,t2]=[t2,t1];
+      tmin=Math.max(tmin,t1);tmax=Math.min(tmax,t2);if(tmin>tmax)return null;
+    }
+  }
+  return tmin;
+}
+
+function cameraCollision60(target,desired){
+  if(!ENV20.ready)return desired;
+  let best=1;
+  const boxes=nearbyCollisionBoxes20(target);
+  for(const box of boxes){
+    const hit=segmentAabbHit60(target,desired,box,.45);
+    if(hit!=null&&hit<best)best=hit;
+  }
+  if(best<1){
+    const dir=desired.clone().sub(target);
+    return target.clone().addScaledVector(dir,Math.max(.08,best-.055));
+  }
+  return desired;
+}
+
+function updateCamera60(dt){
+  const targetObject=inVehicle?heroCar:player;
+  const target=targetObject.position.clone().add(new THREE.Vector3(0,inVehicle?1.45:1.72,0));
+  const speed=inVehicle?Math.abs(heroCar.userData.speed):0;
+  CAM60.fovTarget=inVehicle?THREE.MathUtils.lerp(64,72,Math.min(speed/32,1)):64;
+  camera.fov=THREE.MathUtils.lerp(camera.fov,CAM60.fovTarget,Math.min(1,dt*3.5));camera.updateProjectionMatrix();
+
+  if(v04.cameraMode===1&&inVehicle){
+    const forward=new THREE.Vector3(Math.sin(heroCar.userData.heading),0,Math.cos(heroCar.userData.heading));
+    const eye=heroCar.position.clone().add(new THREE.Vector3(0,1.52,0)).addScaledVector(forward,.2);
+    camera.position.lerp(eye,1-Math.pow(.0001,dt));camera.lookAt(eye.clone().addScaledVector(forward,28));return;
+  }
+  if(v04.cameraMode===2&&inVehicle){
+    const forward=new THREE.Vector3(Math.sin(heroCar.userData.heading),0,Math.cos(heroCar.userData.heading));
+    const eye=heroCar.position.clone().add(new THREE.Vector3(0,1.06,0)).addScaledVector(forward,2.6);
+    camera.position.lerp(eye,1-Math.pow(.0001,dt));camera.lookAt(eye.clone().addScaledVector(forward,32));return;
+  }
+  if(inVehicle)camYaw=THREE.MathUtils.lerp(camYaw,heroCar.userData.heading+Math.PI,.022);
+  const dist=inVehicle?THREE.MathUtils.lerp(8.8,11.2,Math.min(speed/30,1)):6.2;
+  const h=inVehicle?4.15:3.05;
+  const off=new THREE.Vector3(Math.sin(camYaw)*Math.cos(camPitch)*dist,h+Math.sin(camPitch)*dist,Math.cos(camYaw)*Math.cos(camPitch)*dist);
+  const desired=target.clone().add(off);
+  const safe=cameraCollision60(target,desired);
+  camera.position.lerp(safe,1-Math.pow(.0007,dt));camera.lookAt(target);
+}
+
+// Graph-derived junction control. This does not invent roads: it only
+// controls traffic at existing official nodes.
+const SIG60={
+  nodes:new Map(),
+  pool:[],
+  lastRefresh:0,
+  max:18
+};
+
+function classifySignalNode60(id){
+  const adj=(GEO10.adj.get(id)||[]).filter(x=>x.edge.drive);
+  if(adj.length<3)return null;
+  const majors=adj.filter(x=>roadProfile50(x.edge).major).length;
+  const score=adj.length*2+majors*2;
+  if(score<7)return null;
+  return{id,adj,score,signal:adj.length>=4||majors>=2};
+}
+
+function signalPhase60(nodeId,elapsed){
+  const info=SIG60.nodes.get(nodeId);if(!info||!info.signal)return null;
+  const cycle=18,phase=(elapsed+hash20(nodeId)%7)%cycle;
+  return phase<8?0:phase<10?2:phase<16?1:2; // 0 axis A, 1 axis B, 2 all-red
+}
+
+function edgeAxis60(entry){
+  const pts=entry?.points;if(!pts||pts.length<2)return 0;
+  const a=pts[Math.max(0,pts.length-2)],b=pts[pts.length-1];
+  const dx=Math.abs(b.x-a.x),dz=Math.abs(b.z-a.z);
+  return dx>=dz?0:1;
+}
+
+function shouldStopAtNode60(agent,elapsed){
+  const info=SIG60.nodes.get(agent.next);if(!info)return false;
+  const remaining=(agent.pts?.length||0)-agent.index;
+  if(remaining>1)return false;
+  if(info.signal){
+    const phase=signalPhase60(agent.next,elapsed);
+    return phase===2||phase!==edgeAxis60(agent.entry);
+  }
+  // Priority-to-the-major-road approximation using official road hierarchy.
+  const own=roadProfile50(agent.entry?.edge);
+  if(!own.major&&info.adj.some(x=>roadProfile50(x.edge).major))return true;
+  return false;
+}
+
+function createSignalVisual60(){
+  const g=new THREE.Group();g.userData.realGeo10=true;g.visible=false;
+  const poleM=new THREE.MeshStandardMaterial({color:0x3e4347,metalness:.65,roughness:.42});
+  const dark=new THREE.MeshStandardMaterial({color:0x141617,roughness:.55});
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(.055,.075,3.2,8),poleM);pole.position.y=1.6;g.add(pole);
+  const head=meshBox(.42,1.15,.34,dark,0,3.05,0);g.add(head);
+  const mk=(y,c)=>{const m=new THREE.MeshStandardMaterial({color:0x171717,emissive:c,emissiveIntensity:.05});const s=new THREE.Mesh(new THREE.SphereGeometry(.105,10,8),m);s.position.set(0,y,.19);g.add(s);return s};
+  g.userData.red=mk(3.38,0xff2211);g.userData.amber=mk(3.05,0xffa000);g.userData.green=mk(2.72,0x33ff55);
+  GEO10.group.add(g);return g;
+}
+for(let i=0;i<SIG60.max;i++)SIG60.pool.push(createSignalVisual60());
+
+function refreshSignals60(actor){
+  SIG60.nodes.clear();
+  const cand=[];
+  for(const [id,n] of GEO10.nodes){
+    if(n.pos.distanceToSquared(actor)>900*900)continue;
+    const info=classifySignalNode60(id);if(info)cand.push({...info,pos:n.pos});
+  }
+  cand.sort((a,b)=>b.score-a.score);
+  for(let i=0;i<SIG60.pool.length;i++){
+    const g=SIG60.pool[i],c=cand[i];
+    if(!c){g.visible=false;continue}
+    SIG60.nodes.set(c.id,c);g.visible=c.signal;g.position.copy(c.pos);
+    if(c.adj[0]?.points?.length>1){
+      const pts=c.adj[0].points,a=pts[0],b=pts[1];
+      g.rotation.y=Math.atan2(b.x-a.x,b.z-a.z)+Math.PI/2;
+    }
+  }
+}
+
+function updateSignalVisuals60(elapsed){
+  for(const g of SIG60.pool){
+    if(!g.visible)continue;
+    const nearest=[...SIG60.nodes.values()].find(x=>x.pos.distanceToSquared(g.position)<1);
+    if(!nearest)continue;
+    const p=signalPhase60(nearest.id,elapsed);
+    g.userData.red.material.emissiveIntensity=p===2?3.5:p===0||p===1?.18:3.5;
+    g.userData.amber.material.emissiveIntensity=p===2?2.8:.05;
+    g.userData.green.material.emissiveIntensity=p===0||p===1?2.4:.05;
+  }
+}
+
+function updateTraffic60(dt){
+  const elapsed=performance.now()/1000;
+  for(const a of GEO10.trafficAgents){
+    if(!a.pts||a.index>=a.pts.length){
+      const next=chooseNextVehicle50(a);
+      if(!next){a.car.userData.speed=0;continue}
+      a.prev=a.node;a.node=a.next;a.next=next.to;a.entry=next;a.pts=next.points;a.index=1;
+    }
+    const target=a.pts[a.index];if(!target)continue;
+    const dir=target.clone().sub(a.car.position);dir.y=0;const dist=dir.length();
+    const edge=a.entry?.edge,profile=roadProfile50(edge);
+    let desired=a.car.userData.vehicleClass==="delivery"?6.5:profile.major?10.5:7.6;
+    const stop=shouldStopAtNode60(a,elapsed);
+    if(stop)desired=0;
+    desired*=THREE.MathUtils.lerp(1,.76,v04.rainIntensity||0);
+    for(const b of GEO10.trafficAgents){
+      if(a===b)continue;
+      const d=a.car.position.distanceTo(b.car.position);
+      if(d<9)desired=Math.min(desired,Math.max(0,(d-3.2)*1.05));
+    }
+    for(const ped of PED20.agents){
+      const d=a.car.position.distanceTo(ped.p.position);
+      if(d<5.3)desired=Math.min(desired,Math.max(0,(d-2.1)*.82));
+    }
+    if(wanted>0&&police.visible&&a.car.position.distanceTo(police.position)<20)desired*=.5;
+    a.car.userData.speed=THREE.MathUtils.lerp(a.car.userData.speed||0,desired,Math.min(1,dt*2.8));
+    if(dist<1.22){a.index++;continue}
+    dir.normalize();a.car.position.addScaledVector(dir,Math.min(dist,a.car.userData.speed*dt));
+    const targetYaw=Math.atan2(dir.x,dir.z);
+    let dy=((targetYaw-a.car.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
+    a.car.rotation.y+=dy*Math.min(1,dt*4.4);
+    animateCar04(a.car,dt,dy,stop||desired<1.4);
+  }
+}
+
+// A small set of modular interiors anchored to real public-location nodes.
+// Their internal layout is fictional; geographic entry position remains tied to the real world.
+const INT60={
+  hubs:[],
+  inside:null,
+  returnPos:new THREE.Vector3(),
+  group:new THREE.Group(),
+  prompt:null
+};
+INT60.group.userData.realGeo10=true;scene.add(INT60.group);
+
+function makeInterior60(label,kind){
+  const g=new THREE.Group();g.visible=false;
+  const floor=new THREE.MeshStandardMaterial({color:kind==="station"?0x767b80:0x5b5a56,roughness:.82});
+  const wall=new THREE.MeshStandardMaterial({color:0xd2c8b8,roughness:.92});
+  const metal=new THREE.MeshStandardMaterial({color:0x34383b,metalness:.55,roughness:.42});
+  addBox(g,18,.3,14,floor,0,.15,0);
+  addBox(g,18,5,.35,wall,0,2.5,-7);addBox(g,.35,5,14,wall,-9,2.5,0);addBox(g,.35,5,14,wall,9,2.5,0);
+  addBox(g,18,.35,14,metal,0,5,0);
+  if(kind==="station"){
+    for(let i=-2;i<=2;i++)addBox(g,2.6,.45,.8,metal,i*3.2,.5,-1.8);
+    addBox(g,5.8,1.1,.3,new THREE.MeshStandardMaterial({color:0x1d2430,emissive:0x21395a,emissiveIntensity:.8}),0,3.6,-6.75);
+  }else{
+    addBox(g,6,.75,2.4,metal,0,.7,-1);
+    addBox(g,4,2.4,.6,wall,-4.8,1.4,3.7);
+  }
+  g.userData.label=label;g.userData.kind=kind;INT60.group.add(g);return g;
+}
+
+function setupInteriors60(){
+  if(INT60.hubs.length||!GEO10.active)return;
+  const burst=GEO10.station||GEO10.places.find(p=>(p.name||"").toLowerCase().includes("burst"))?.pos;
+  const aalst=GEO10.places.find(p=>p.station&&(p.name||"").toLowerCase().includes("aalst"))?.pos||
+              GEO10.places.find(p=>(p.name||"").toLowerCase()==="aalst")?.pos;
+  const mere=GEO10.places.find(p=>(p.name||"").toLowerCase()==="mere")?.pos;
+  const defs=[
+    burst?{label:"Burst mobiliteitshub",kind:"station",pos:burst.clone().add(new THREE.Vector3(6,0,6))}:null,
+    aalst?{label:"Aalst mobiliteitshub",kind:"station",pos:aalst.clone().add(new THREE.Vector3(8,0,8))}:null,
+    mere?{label:"Dender Workshop",kind:"workshop",pos:mere.clone().add(new THREE.Vector3(10,0,5))}:null
+  ].filter(Boolean);
+  defs.forEach((d,i)=>{const interior=makeInterior60(d.label,d.kind);interior.position.set(0,-50-i*20,0);INT60.hubs.push({...d,interior})});
+}
+
+function nearestInteriorHub60(){
+  const actor=inVehicle?heroCar.position:player.position;
+  let best=null,bd=Infinity;
+  for(const h of INT60.hubs){
+    const d=actor.distanceToSquared(h.pos);if(d<bd){bd=d;best=h}
+  }
+  return{hub:best,d:Math.sqrt(bd)};
+}
+
+const legacyInteract60=interact;
+interact=function(){
+  if(INT60.inside){
+    player.position.copy(INT60.returnPos);INT60.inside.interior.visible=false;INT60.inside=null;toast("Terug naar buiten");return;
+  }
+  if(!inVehicle){
+    const n=nearestInteriorHub60();
+    if(n.hub&&n.d<5){
+      INT60.returnPos.copy(player.position);
+      INT60.inside=n.hub;inVehicle=false;player.visible=true;
+      n.hub.interior.visible=true;player.position.set(0,n.hub.interior.position.y,2.5);
+      toast(n.hub.label+" • interieur");return;
+    }
+  }
+  legacyInteract60();
+};
+
+function updatePrompt60(){
+  const p=document.querySelector("#prompt");
+  if(INT60.inside){p.textContent="E • verlaat interieur";return}
+  if(!inVehicle){
+    const n=nearestInteriorHub60();
+    if(n.hub&&n.d<5){p.textContent="E • betreed "+n.hub.label;return}
+  }
+  updatePrompt();
+}
+
+// Damage adds handling pull and light failure.
+function applyDamageSystems60(){
+  const d=SIM50.damage;
+  heroCar.userData.damagePull=(d>35?((hash20("hero-damage")%2)?1:-1)*(d-35)/65*.08:0);
+  if(heroCar.userData.brakeLights){
+    heroCar.userData.brakeLights.forEach((l,i)=>{l.visible=!(d>72&&i===1)});
+  }
+}
+const oldAddDamage60=addDamage50;
+addDamage50=function(amount,reason){oldAddDamage60(amount,reason);applyDamageSystems60()};
+
+const oldDriveHero60=driveHero50;
+driveHero50=function(dt){
+  oldDriveHero60(dt);
+  if(heroCar.userData.damagePull&&Math.abs(heroCar.userData.speed)>4){
+    heroCar.userData.heading+=heroCar.userData.damagePull*dt;
+  }
+};
+
+// Override camera/prompt after 6.0 becomes active.
+const hook60=setInterval(()=>{
+  if(!GEO10.active)return;
+  clearInterval(hook60);
+  setupInteriors60();
+  updateCamera=updateCamera60;
+  updateTraffic=updateTraffic60;
+  updatePrompt=updatePrompt60;
+  toast("6.0 cinematic + junction systems actief");
+},450);
+
+let last60=performance.now();
+function loop60(now){
+  requestAnimationFrame(loop60);
+  const dt=Math.min((now-last60)/1000,.04);last60=now;
+  if(!running||!GEO10.active)return;
+  const actor=inVehicle?heroCar.position:player.position;
+  if(now-SIG60.lastRefresh>1200){SIG60.lastRefresh=now;refreshSignals60(actor)}
+  updateSignalVisuals60(now/1000);
+}
+requestAnimationFrame(loop60);
