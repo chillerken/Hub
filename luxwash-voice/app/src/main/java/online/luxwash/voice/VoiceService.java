@@ -28,6 +28,8 @@ public final class VoiceService extends Service {
     private boolean commandMode;
     private boolean transitioning;
     private boolean serviceStopping;
+    private boolean usingOnDevice;
+    private String recognitionLocale = "nl-BE";
     private int retryCount;
     private final Handler h = new Handler(Looper.getMainLooper());
 
@@ -35,28 +37,32 @@ public final class VoiceService extends Service {
         super.onCreate();
         createChannel();
         startForeground(NOTIF, notification("LuxWash Voice wordt gestart"));
-        initRecognizer();
+        initRecognizer(true);
         initTts();
         publish("STARTEN", "", "");
     }
 
-    private void initRecognizer() {
+    private void initRecognizer(boolean preferOnDevice) {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             publish("FOUT", "", "Geen Android-spraakherkenner beschikbaar op dit toestel.");
             return;
         }
+        destroyRecognizer();
         try {
-            if (Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
+            if (preferOnDevice && Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
                 recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this);
-                publish("ENGINE", "", "On-device Nederlandse herkenning beschikbaar.");
+                usingOnDevice = true;
+                publish("ENGINE", "", "On-device spraakherkenning actief.");
             } else {
                 recognizer = SpeechRecognizer.createSpeechRecognizer(this);
+                usingOnDevice = false;
                 publish("ENGINE", "", "Systeemspraakherkenning actief.");
             }
             recognizer.setRecognitionListener(listener);
         } catch (Throwable e) {
             try {
                 recognizer = SpeechRecognizer.createSpeechRecognizer(this);
+                usingOnDevice = false;
                 recognizer.setRecognitionListener(listener);
                 publish("ENGINE", "", "Fallback systeemspraakherkenning actief.");
             } catch (Throwable inner) {
@@ -158,15 +164,15 @@ public final class VoiceService extends Service {
 
         Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "nl-BE");
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "nl-BE");
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, recognitionLocale);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, recognitionLocale);
         i.putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false);
         i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
         i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5);
-        // Do not force offline recognition. Samsung may have no nl-BE offline model.
-        i.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false);
+        i.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, usingOnDevice);
 
-        publish(command ? "OPDRACHT" : "WAKE", "", command ? "Ik luister naar uw opdracht." : "Luistert naar Hey LuxWash.");
+        publish(command ? "OPDRACHT" : "WAKE", "", (command ? "Ik luister naar uw opdracht. " : "Luistert naar Hey LuxWash. ") +
+                "Taal: " + recognitionLocale + (usingOnDevice ? " • on-device" : " • systeem"));
         updateNotification(command ? "Luistert naar uw opdracht" : "Luistert naar “Hey LuxWash”");
 
         try {
@@ -219,6 +225,27 @@ public final class VoiceService extends Service {
                 publish("FOUT", "", "Microfoontoegang is geweigerd.");
                 return;
             }
+
+            if (Build.VERSION.SDK_INT >= 31 &&
+                    (error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED || error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE)) {
+                boolean wasCommand = commandMode;
+                if ("nl-BE".equals(recognitionLocale)) {
+                    recognitionLocale = "nl-NL";
+                    publish("FALLBACK", "", "nl-BE niet beschikbaar; ik probeer nl-NL.");
+                    scheduleRetry(wasCommand, 300);
+                    return;
+                }
+                if (usingOnDevice) {
+                    recognitionLocale = "nl-BE";
+                    publish("FALLBACK", "", "Lokaal Nederlands niet beschikbaar; ik schakel naar systeemspraakherkenning.");
+                    initRecognizer(false);
+                    scheduleRetry(wasCommand, 500);
+                    return;
+                }
+                publish("FOUT", "", "Geen Nederlandse spraakherkenning beschikbaar. Installeer Nederlands bij Samsung/Google spraakservices.");
+                return;
+            }
+
             if (commandMode && (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)) {
                 speak("Ik heb uw opdracht niet verstaan. Zeg ze nog eens.", "listen_now_ack");
                 return;
@@ -282,6 +309,14 @@ public final class VoiceService extends Service {
         try { recognizer.cancel(); } catch (Throwable ignored) {}
     }
 
+    private void destroyRecognizer() {
+        if (recognizer != null) {
+            try { recognizer.cancel(); } catch (Throwable ignored) {}
+            try { recognizer.destroy(); } catch (Throwable ignored) {}
+            recognizer = null;
+        }
+    }
+
     private void publish(String state, String transcript, String error) {
         Intent i = new Intent(ACTION_STATE);
         i.setPackage(getPackageName());
@@ -302,7 +337,10 @@ public final class VoiceService extends Service {
             case SpeechRecognizer.ERROR_RECOGNIZER_BUSY: return "Spraakherkenner was bezet; ik probeer opnieuw.";
             case SpeechRecognizer.ERROR_SERVER: return "Spraakdienst gaf een fout.";
             case SpeechRecognizer.ERROR_SPEECH_TIMEOUT: return "Geen spraak gehoord binnen de luistertijd.";
-            default: return "Spraakherkenningsfout " + e + ".";
+            default:
+                if (Build.VERSION.SDK_INT >= 31 && e == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED) return "Deze Nederlandse taalvariant wordt niet ondersteund.";
+                if (Build.VERSION.SDK_INT >= 31 && e == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE) return "Deze Nederlandse taalvariant is niet geïnstalleerd.";
+                return "Spraakherkenningsfout " + e + ".";
         }
     }
 
@@ -336,7 +374,7 @@ public final class VoiceService extends Service {
     @Override public void onDestroy() {
         serviceStopping = true;
         h.removeCallbacksAndMessages(null);
-        if (recognizer != null) recognizer.destroy();
+        destroyRecognizer();
         if (tts != null) tts.shutdown();
         publish("GESTOPT", "", "Luisterservice gestopt.");
         super.onDestroy();
