@@ -37,5 +37,15 @@ jobs:
           from pathlib import Path
           p=Path('/tmp/toycar.glb')
           assert p.read_bytes()[:4] == b'glTF', 'Invalid GLB magic'
-          print('GLB OK', p.stat().st_size)
+          print('ToyCar GLB OK', p.stat().st_size)
+          PY
+          curl -L --fail --retry 2 --max-time 30 \
+            -o /tmp/riggedfigure.glb \
+            https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/RiggedFigure/glTF-Binary/RiggedFigure.glb
+          test -s /tmp/riggedfigure.glb
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/riggedfigure.glb')
+          assert p.read_bytes()[:4] == b'glTF', 'Invalid RiggedFigure GLB magic'
+          print('RiggedFigure GLB OK', p.stat().st_size)
           PY
