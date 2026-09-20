@@ -1,0 +1,49 @@
+name: Import real railway crossings
+
+on:
+  push:
+    branches: [dender-county-3d]
+    paths:
+      - 'scripts/import_level_crossings.py'
+      - '.github/workflows/import-level-crossings.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dender-county-3d
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Import exact OSM railway crossings
+        run: python scripts/import_level_crossings.py
+      - name: Validate crossing data
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("dender-county-3d/geodata")
+          fc=json.loads((root/"level_crossings.geojson").read_text())
+          m=json.loads((root/"level_crossings_meta.json").read_text())
+          assert m["feature_count"]==len(fc["features"])
+          assert m["feature_count"]>0
+          assert all(f["properties"]["kind"]=="level_crossing" for f in fc["features"])
+          print("real railway crossings",m["feature_count"])
+          PY
+      - name: Commit crossing layer
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dender-county-3d/geodata/level_crossings*
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "Import exact railway crossing geodata"
+            git pull --rebase origin dender-county-3d
+            git push origin HEAD:dender-county-3d
+          fi
