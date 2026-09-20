@@ -53,9 +53,9 @@ def height(tags,obj_id):
         except:pass
     return 4.8+(int(obj_id)%5)*0.75
 
-def query(b):
+def query_tile(b):
     bbox=f'{b["south"]},{b["west"]},{b["north"]},{b["east"]}'
-    q=f"""[out:json][timeout:160];
+    q=f"""[out:json][timeout:90];
 (
   way["building"]({bbox});
   way["waterway"]({bbox});
@@ -69,9 +69,28 @@ out tags geom;"""
     data=urllib.parse.urlencode({"data":q}).encode()
     last=None
     for ep in ["https://overpass.kumi.systems/api/interpreter","https://overpass-api.de/api/interpreter"]:
-        try:return get_json(ep,data=data,timeout=220)
+        try:return get_json(ep,data=data,timeout=120)
         except Exception as e:last=e
     raise RuntimeError(last)
+
+def query(b):
+    rows, cols = 4, 4
+    merged={}
+    lat_step=(b["north"]-b["south"])/rows
+    lon_step=(b["east"]-b["west"])/cols
+    for iy in range(rows):
+        for ix in range(cols):
+            tile={
+                "south":b["south"]+iy*lat_step,
+                "north":b["south"]+(iy+1)*lat_step,
+                "west":b["west"]+ix*lon_step,
+                "east":b["west"]+(ix+1)*lon_step,
+            }
+            part=query_tile(tile)
+            for e in part.get("elements",[]):
+                merged[(e.get("type"),e.get("id"))]=e
+            print("tile",iy,ix,"elements",len(part.get("elements",[])),"unique",len(merged),flush=True)
+    return {"elements":list(merged.values())}
 
 def main():
     n=nominatim();boundary=n["geojson"];bb=[float(x) for x in n["boundingbox"]]
