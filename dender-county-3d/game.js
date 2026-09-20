@@ -1893,3 +1893,334 @@ function geoLoop10(now){
   }
 }
 requestAnimationFrame(geoLoop10);
+
+
+// ===== DENDER COUNTY 2.0 — INTEGRATED WORLD BUILD =====
+window.__DENDER_VERSION__="2.0";
+
+const GAME20={
+  cash:Number(localStorage.getItem("dc20_cash")||250),
+  completed:Number(localStorage.getItem("dc20_completed")||0),
+  phoneOpen:false,
+  fps:60,
+  fpsFrames:0,
+  fpsAccum:0,
+  quality:"AUTO",
+  lastAutoSave:0
+};
+
+const ENV20={
+  ready:false,
+  features:[],
+  chunks:new Map(),
+  collisionChunks:new Map(),
+  chunkSize:500,
+  loadRadius:900,
+  unloadRadius:1700,
+  retryTimer:null,
+  wallMats:mat.brick,
+  roofMat:mat.roof,
+  waterMat:mat.water.clone(),
+  vegMat:new THREE.MeshStandardMaterial({color:0x365d35,roughness:1})
+};
+ENV20.waterMat.transparent=true;ENV20.waterMat.opacity=.82;
+
+function envChunkKey20(x,z){
+  return Math.floor(x/ENV20.chunkSize)+":"+Math.floor(z/ENV20.chunkSize);
+}
+function featurePoints20(ft){
+  const g=ft.geometry;if(!g)return[];
+  if(g.type==="Polygon"&&g.coordinates?.[0])return g.coordinates[0].map(geoToLocal10);
+  if(g.type==="LineString")return g.coordinates.map(geoToLocal10);
+  return[];
+}
+function centroid20(points){
+  if(!points.length)return new THREE.Vector3();
+  const c=new THREE.Vector3();for(const p of points)c.add(p);return c.multiplyScalar(1/points.length);
+}
+function hash20(s){
+  let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0;
+}
+function bounds20(points){
+  let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+  for(const p of points){minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);minZ=Math.min(minZ,p.z);maxZ=Math.max(maxZ,p.z)}
+  return {minX,maxX,minZ,maxZ};
+}
+function preprocessEnvironment20(fc){
+  ENV20.features=fc.features||[];
+  for(const ft of ENV20.features){
+    const pts=featurePoints20(ft);if(pts.length<2)continue;
+    const c=centroid20(pts),key=envChunkKey20(c.x,c.z);
+    let ch=ENV20.chunks.get(key);
+    if(!ch){ch={key,cx:c.x,cz:c.z,features:[],group:null,built:false};ENV20.chunks.set(key,ch)}
+    ch.features.push({ft,pts,c});
+    if(ft.properties?.kind==="building"&&pts.length>=4){
+      let arr=ENV20.collisionChunks.get(key);
+      if(!arr){arr=[];ENV20.collisionChunks.set(key,arr)}
+      const b=bounds20(pts);arr.push({x:(b.minX+b.maxX)/2,z:(b.minZ+b.maxZ)/2,w:Math.max(1,b.maxX-b.minX),d:Math.max(1,b.maxZ-b.minZ)});
+    }
+  }
+  ENV20.ready=true;
+}
+function makeShape20(points,c){
+  const sh=new THREE.Shape();
+  points.forEach((p,i)=>{
+    const x=p.x-c.x,y=-(p.z-c.z);
+    if(i===0)sh.moveTo(x,y);else sh.lineTo(x,y);
+  });
+  sh.closePath();return sh;
+}
+function buildBuilding20(item,parent){
+  const p=item.ft.properties||{},h=THREE.MathUtils.clamp(Number(p.height_m)||6,2.8,32);
+  const shape=makeShape20(item.pts,item.c);
+  let geo;
+  try{geo=new THREE.ExtrudeGeometry(shape,{depth:h,bevelEnabled:false,steps:1,curveSegments:1})}catch{return}
+  geo.rotateX(-Math.PI/2);
+  const wall=ENV20.wallMats[hash20(p.source_id||"b")%ENV20.wallMats.length];
+  const mesh=new THREE.Mesh(geo,[ENV20.roofMat,wall]);
+  mesh.position.set(item.c.x,0,item.c.z);mesh.castShadow=true;mesh.receiveShadow=true;parent.add(mesh);
+}
+function buildArea20(item,parent,kind){
+  const shape=makeShape20(item.pts,item.c);
+  let geo;try{geo=new THREE.ShapeGeometry(shape)}catch{return}
+  geo.rotateX(-Math.PI/2);
+  const material=kind==="water"?ENV20.waterMat:ENV20.vegMat;
+  const mesh=new THREE.Mesh(geo,material);mesh.position.set(item.c.x,kind==="water"?.045:.025,item.c.z);mesh.receiveShadow=true;parent.add(mesh);
+}
+function buildWaterway20(item,parent){
+  const pts=item.pts.map(p=>new THREE.Vector3(p.x,.05,p.z));
+  if(pts.length<2)return;
+  const geo=new THREE.BufferGeometry().setFromPoints(pts);
+  const line=new THREE.Line(geo,new THREE.LineBasicMaterial({color:0x4e8191,transparent:true,opacity:.82}));
+  parent.add(line);
+}
+function buildEnvChunk20(ch){
+  if(ch.built)return;
+  const group=new THREE.Group();group.userData.realGeo10=true;group.userData.environment20=true;
+  for(const item of ch.features){
+    const kind=item.ft.properties?.kind;
+    if(kind==="building"&&item.pts.length>=4)buildBuilding20(item,group);
+    else if(kind==="water"&&item.pts.length>=4)buildArea20(item,group,"water");
+    else if(kind==="vegetation"&&item.pts.length>=4)buildArea20(item,group,"vegetation");
+    else if(kind==="waterway")buildWaterway20(item,group);
+  }
+  ch.group=group;ch.built=true;GEO10.group.add(group);
+}
+function destroyEnvChunk20(ch){
+  if(!ch.built||!ch.group)return;
+  ch.group.traverse(o=>{if(o.geometry)o.geometry.dispose()});
+  GEO10.group.remove(ch.group);ch.group=null;ch.built=false;
+}
+function streamEnvironment20(actor){
+  if(!ENV20.ready)return;
+  const load2=ENV20.loadRadius*ENV20.loadRadius,unload2=ENV20.unloadRadius*ENV20.unloadRadius;
+  for(const ch of ENV20.chunks.values()){
+    const dx=ch.cx-actor.x,dz=ch.cz-actor.z,d2=dx*dx+dz*dz;
+    if(d2<load2&&!ch.built)buildEnvChunk20(ch);
+    else if(d2>unload2&&ch.built)destroyEnvChunk20(ch);
+  }
+}
+function nearbyCollisionBoxes20(pos){
+  const cx=Math.floor(pos.x/ENV20.chunkSize),cz=Math.floor(pos.z/ENV20.chunkSize),out=[];
+  for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++){
+    const a=ENV20.collisionChunks.get((cx+dx)+":"+(cz+dz));if(a)out.push(...a);
+  }
+  return out;
+}
+function collidesBuildings20(pos,radius){
+  for(const b of nearbyCollisionBoxes20(pos)){
+    if(pos.x>b.x-b.w/2-radius&&pos.x<b.x+b.w/2+radius&&pos.z>b.z-b.d/2-radius&&pos.z<b.z+b.d/2+radius)return true;
+  }
+  return false;
+}
+function installCollisions20(){
+  if(!ENV20.ready)return;
+  if(inVehicle){
+    if(collidesBuildings20(heroCar.position,1.25)){
+      heroCar.position.copy(v02.carPrev);heroCar.userData.speed*=-.18;
+    }else v02.carPrev.copy(heroCar.position);
+  }else{
+    if(collidesBuildings20(player.position,.55))player.position.copy(v02.playerPrev);
+    else v02.playerPrev.copy(player.position);
+  }
+}
+
+async function loadEnvironment20(){
+  if(ENV20.ready||!GEO10.active)return false;
+  try{
+    const r=await fetch("./geodata/erpe_mere_environment.geojson?v=2.0");
+    if(!r.ok)throw new Error("environment "+r.status);
+    const fc=await r.json();preprocessEnvironment20(fc);
+    toast("Echte gebouwen, water en groen geladen");
+    return true;
+  }catch(err){console.warn("Environment not ready yet",err);return false}
+}
+const envWait20=setInterval(async()=>{if(GEO10.active&&await loadEnvironment20())clearInterval(envWait20)},1800);
+
+// Pedestrians follow the same official graph.
+const PED20={agents:[]};
+function choosePedEdge20(node,prev){
+  const opts=(GEO10.adj.get(node)||[]).filter(x=>x.to!==prev);
+  if(!opts.length)return (GEO10.adj.get(node)||[])[0]||null;
+  return opts[Math.floor(rnd()*opts.length)];
+}
+function setupPeds20(){
+  if(!GEO10.active||PED20.agents.length)return;
+  const edges=GEO10.edges.filter(e=>e.a&&e.b&&e.length>8);
+  pedestrians.forEach((p,i)=>{
+    const e=edges[(i*37)%Math.max(1,edges.length)];if(!e)return;
+    p.visible=true;
+    const start=i%2?e.a:e.b,end=i%2?e.b:e.a;
+    const entry=(GEO10.adj.get(start)||[]).find(x=>x.to===end&&x.edge===e);if(!entry)return;
+    p.position.copy(entry.points[0]);p.userData.speed=1.15+(i%4)*.13;
+    PED20.agents.push({p,node:start,prev:null,next:end,pts:entry.points,index:1});
+  });
+}
+function updatePeds20(dt){
+  for(const a of PED20.agents){
+    if(!a.pts||a.index>=a.pts.length){
+      const n=choosePedEdge20(a.next,a.node);if(!n)continue;
+      a.prev=a.node;a.node=a.next;a.next=n.to;a.pts=n.points;a.index=1;
+    }
+    const t=a.pts[a.index];if(!t)continue;
+    tempV.copy(t).sub(a.p.position);tempV.y=0;
+    if(tempV.length()<.75){a.index++;continue}
+    tempV.normalize();a.p.position.addScaledVector(tempV,a.p.userData.speed*dt);a.p.rotation.y=Math.atan2(tempV.x,tempV.z);
+  }
+}
+
+// Thirty real-world jobs generated from actual villages and official streets.
+const JOB20={jobs:[],index:GAME20.completed,started:false,deadline:0,escapeStarted:false};
+function edgeMid20(e){
+  const p=e.points[Math.floor(e.points.length/2)]||e.points[0];return p.clone();
+}
+function setupJobs20(){
+  if(JOB20.jobs.length||!GEO10.active)return;
+  const villageJobs=GEO10.missionTargets.map((t,i)=>({
+    id:"village-"+i,type:i%2?"delivery":"inspection",name:"Gemeenterit: "+t.name,target:t.pos.clone(),reward:90+i*15
+  }));
+  const named=[];const seen=new Set();
+  for(const e of GEO10.driveEdges){
+    if(!e.name||seen.has(e.name)||e.length<18)continue;seen.add(e.name);
+    named.push(e);if(named.length>=22)break;
+  }
+  const types=["delivery","timed","courier","night","inspection","escape"];
+  const streetJobs=named.map((e,i)=>({
+    id:"street-"+i,type:types[i%types.length],name:(types[i%types.length]==="courier"?"Koerier: ":"Opdracht: ")+e.name,
+    target:edgeMid20(e),street:e.name,reward:110+(i%6)*25
+  }));
+  JOB20.jobs=[...villageJobs,...streetJobs].slice(0,30);
+  JOB20.index=Math.min(GAME20.completed,JOB20.jobs.length);
+}
+function startJob20(j){
+  JOB20.started=true;JOB20.escapeStarted=false;
+  if(j.type==="timed")JOB20.deadline=performance.now()+120000;
+  else JOB20.deadline=0;
+  if(j.type==="night"&&day>6&&day<19)day=20.2;
+  if(j.type==="escape"){wanted=Math.max(wanted,2);wantedCooldown=14;JOB20.escapeStarted=true}
+}
+function completeJob20(j){
+  GAME20.cash+=j.reward;GAME20.completed=Math.min(JOB20.jobs.length,JOB20.index+1);
+  localStorage.setItem("dc20_cash",GAME20.cash);localStorage.setItem("dc20_completed",GAME20.completed);
+  toast("OPDRACHT VOLTOOID +€"+j.reward);JOB20.index++;JOB20.started=false;JOB20.deadline=0;JOB20.escapeStarted=false;
+}
+function updateMission20(){
+  const j=JOB20.jobs[JOB20.index],title=document.querySelector("#missionTitle"),txt=document.querySelector("#missionText");
+  if(!j){marker.visible=false;title.textContent="30 OPDRACHTEN VOLTOOID";txt.textContent="Vrije verkenning in Erpe-Mere • €"+GAME20.cash;return}
+  if(!JOB20.started)startJob20(j);
+  marker.visible=true;marker.position.set(j.target.x,.22,j.target.z);
+  const actor=inVehicle?heroCar.position:player.position,dist=actor.distanceTo(j.target);
+  let extra="";
+  if(j.type==="courier")extra=" • te voet afleveren";
+  if(j.type==="delivery")extra=" • voertuig vereist";
+  if(j.type==="timed"){
+    const left=Math.max(0,Math.ceil((JOB20.deadline-performance.now())/1000));extra=" • "+left+" sec";
+    if(left<=0){JOB20.started=false;toast("Tijd verstreken — opdracht herstart");return}
+  }
+  if(j.type==="escape")extra=" • raak politie kwijt";
+  if(j.type==="night")extra=" • nachtrit";
+  title.textContent=j.name.toUpperCase();
+  txt.textContent=j.type.toUpperCase()+" • "+Math.round(dist)+" m"+extra+" • beloning €"+j.reward;
+  let ok=dist<30;
+  if(j.type==="courier")ok=ok&&!inVehicle;
+  if(j.type==="delivery"||j.type==="night"||j.type==="timed")ok=ok&&inVehicle;
+  if(j.type==="escape")ok=ok&&wanted<=.05;
+  if(ok)completeJob20(j);
+}
+
+// Phone / status UI.
+function buildPhone20(){
+  if(document.querySelector("#phone20"))return;
+  const p=document.createElement("div");p.id="phone20";
+  p.style.cssText="display:none;position:fixed;z-index:30;right:24px;top:70px;width:min(340px,calc(100vw - 30px));max-height:72vh;overflow:auto;background:rgba(7,10,14,.95);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:18px;padding:18px;box-shadow:0 22px 70px rgba(0,0,0,.55);font:14px system-ui";
+  p.innerHTML='<div style="font-weight:900;font-size:20px;letter-spacing:.08em">DENDER PHONE</div><div style="color:#c7aa68;margin:4px 0 14px">ERPE-MERE NETWORK</div><div id="phoneStats20"></div><hr style="border:0;border-top:1px solid #303640;margin:14px 0"><div><b>Apps</b></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px"><div>🗺️ Kaart</div><div>💼 Jobs</div><div>🚗 Garage</div><div>⚙️ Settings</div></div><div style="margin-top:16px;color:#9199a3;font-size:11px">T = sluiten • Q = quality/performance • P = opslaan</div>';
+  document.body.appendChild(p);
+}
+function updatePhone20(){
+  const p=document.querySelector("#phone20"),s=document.querySelector("#phoneStats20");if(!p||!s)return;
+  p.style.display=GAME20.phoneOpen?"block":"none";if(!GAME20.phoneOpen)return;
+  const actor=inVehicle?heroCar.position:player.position,place=GEO10.active?nearestPlace10(actor):null,street=GEO10.active?nearestStreet10(actor):{name:""};
+  s.innerHTML="<b>Saldo:</b> €"+GAME20.cash+"<br><b>Opdrachten:</b> "+GAME20.completed+"/30<br><b>Locatie:</b> "+(place?.name||"Erpe-Mere")+"<br><b>Straat:</b> "+(street.name||"—")+"<br><b>Wanted:</b> "+Math.ceil(wanted)+"/5<br><b>FPS:</b> "+Math.round(GAME20.fps)+"<br><b>Kwaliteit:</b> "+GAME20.quality;
+}
+buildPhone20();
+addEventListener("keydown",e=>{if(e.code==="KeyT"&&!e.repeat){GAME20.phoneOpen=!GAME20.phoneOpen;updatePhone20()}});
+
+// Weather states layered on top of existing day/night.
+const WEATHER20={states:["CLEAR","OVERCAST","RAIN","HEAVY RAIN","MIST"],index:2,target:2,lastChange:performance.now()};
+function updateWeather20(dt,now){
+  if(now-WEATHER20.lastChange>150000){WEATHER20.lastChange=now;WEATHER20.target=Math.floor(rnd()*WEATHER20.states.length)}
+  WEATHER20.index=THREE.MathUtils.lerp(WEATHER20.index,WEATHER20.target,dt*.08);
+  const rainLevel=THREE.MathUtils.clamp((WEATHER20.index-1.2)/2,0,1);
+  v04.rainIntensity=rainLevel;rain.material.opacity=.06+.62*rainLevel;
+  const mist=THREE.MathUtils.clamp((WEATHER20.index-3.2),0,1);
+  scene.fog.density=.00045+rainLevel*.00016+mist*.00075;
+}
+
+// Adaptive quality, conservative to protect phones.
+function adaptiveQuality20(dt){
+  GAME20.fpsFrames++;GAME20.fpsAccum+=dt;
+  if(GAME20.fpsAccum<5)return;
+  GAME20.fps=GAME20.fpsFrames/GAME20.fpsAccum;
+  GAME20.fpsFrames=0;GAME20.fpsAccum=0;
+  if(GAME20.fps<32&&renderer.getPixelRatio()>1.01){
+    renderer.setPixelRatio(Math.max(1,renderer.getPixelRatio()-.2));GAME20.quality="AUTO PERFORMANCE";
+  }else if(GAME20.fps>54&&renderer.getPixelRatio()<Math.min(devicePixelRatio,1.7)-.05){
+    renderer.setPixelRatio(Math.min(Math.min(devicePixelRatio,1.7),renderer.getPixelRatio()+.1));GAME20.quality="AUTO QUALITY";
+  }
+}
+function saveMeta20(){
+  localStorage.setItem("dc20_cash",GAME20.cash);localStorage.setItem("dc20_completed",GAME20.completed);
+  const actor=inVehicle?heroCar:player;
+  localStorage.setItem("dc20_geo",JSON.stringify({x:actor.position.x,z:actor.position.z,inVehicle,heading:heroCar.userData.heading,day,wanted}));
+}
+function restoreMeta20(){
+  try{
+    const s=JSON.parse(localStorage.getItem("dc20_geo")||"null");if(!s||!GEO10.active)return;
+    if(s.inVehicle){inVehicle=true;player.visible=false;heroCar.position.set(s.x,0,s.z);heroCar.userData.heading=s.heading||0;heroCar.rotation.y=heroCar.userData.heading}
+    else{inVehicle=false;player.visible=true;player.position.set(s.x,0,s.z)}
+    day=s.day??day;wanted=s.wanted??wanted;v02.playerPrev.copy(player.position);v02.carPrev.copy(heroCar.position);
+  }catch{}
+}
+addEventListener("keydown",e=>{if(e.code==="KeyP")saveMeta20()});
+
+const integrateWait20=setInterval(()=>{
+  if(!GEO10.active)return;
+  clearInterval(integrateWait20);
+  setupPeds20();setupJobs20();
+  updatePeds=updatePeds20;updateMission=updateMission20;installCollisions=installCollisions20;
+  restoreMeta20();
+},350);
+
+let last20=performance.now();
+function megaLoop20(now){
+  requestAnimationFrame(megaLoop20);
+  const dt=Math.min((now-last20)/1000,.04);last20=now;
+  if(!running)return;
+  if(GEO10.active){
+    const actor=inVehicle?heroCar.position:player.position;
+    streamEnvironment20(actor);adaptiveQuality20(dt);updateWeather20(dt,now);
+    if(now-GAME20.lastAutoSave>12000){GAME20.lastAutoSave=now;saveMeta20()}
+    if(GAME20.phoneOpen)updatePhone20();
+  }
+}
+requestAnimationFrame(megaLoop20);
