@@ -887,3 +887,115 @@ document.querySelector("#mobileBrake")?.addEventListener("touchend",e=>{e.preven
 document.querySelector("#mobileCam")?.addEventListener("touchstart",e=>{e.preventDefault();v04.cameraMode=(v04.cameraMode+1)%3;toast(["CHASE CAMERA","FIRST PERSON","BUMPER CAMERA"][v04.cameraMode])},{passive:false});
 document.querySelector("#mobileHorn")?.addEventListener("touchstart",e=>{e.preventDefault();horn04()},{passive:false});
 
+
+
+// ===== DENDER COUNTY 0.5 — FLEMISH STREETSCAPE PASS =====
+window.__DENDER_VERSION__="0.5";
+
+const bikeMat05=new THREE.MeshStandardMaterial({color:0x9d4639,roughness:.9});
+function bikeLane05(x,z,w,d,rot=0){
+  const m=meshBox(w,.035,d,bikeMat05,x,.175,z);m.rotation.y=rot;scene.add(m);
+}
+bikeLane05(0,8.1,370,1.8);bikeLane05(0,-8.1,370,1.8);
+bikeLane05(-69,0,1.8,310);bikeLane05(97,-20,1.8,330);
+
+function rowHouse05(x,z,faceDir=1,brick=0){
+  const g=new THREE.Group();g.position.set(x,0,z);
+  const w=8.8,d=7.4,h=7.2;
+  const body=meshBox(w,h,d,mat.brick[brick%mat.brick.length],0,h/2,0);g.add(body);
+  const roofGeo=new THREE.ConeGeometry(5.7,2.5,4);
+  const roof=new THREE.Mesh(roofGeo,mat.roof);roof.position.y=h+1.15;roof.rotation.y=Math.PI/4;roof.scale.z=.78;roof.castShadow=true;g.add(roof);
+  const frontZ=faceDir*(d/2+.055);
+  const doorM=new THREE.MeshStandardMaterial({color:brick%2?0x25384a:0x44362b,roughness:.75});
+  addBox(g,1.25,2.25,.08,doorM,-2.4,1.15,frontZ);
+  for(const fy of [1.55,4.45]){
+    for(const fx of [-.45,2.35]){
+      const wm=new THREE.MeshStandardMaterial({color:0x8eb0bd,emissive:0xc7a86e,emissiveIntensity:.08,metalness:.05,roughness:.18});
+      addBox(g,1.55,1.45,.07,wm,fx,fy,frontZ);
+    }
+  }
+  const sill=new THREE.MeshStandardMaterial({color:0xc2b7a5,roughness:.9});
+  addBox(g,8.9,.18,.25,sill,0,3.05,frontZ);
+  scene.add(g);buildingBoxes.push({x,z,w,d});return g;
+}
+
+const rowHouses05=[];
+for(let x=-158,i=0;x<=158;x+=11.2,i++){
+  if(Math.abs(x+78)<20||Math.abs(x-86)<20||Math.abs(x-20)<18)continue;
+  rowHouses05.push(rowHouse05(x,20, -1,i));
+  rowHouses05.push(rowHouse05(x,-20, 1,i+2));
+}
+for(let z=-128,i=0;z<=128;z+=12.5,i++){
+  if(Math.abs(z)<20||Math.abs(z-96)<18)continue;
+  const a=rowHouse05(-58,z,1,i+1);a.rotation.y=Math.PI/2;
+  const b=rowHouse05(-98,z,-1,i+3);b.rotation.y=Math.PI/2;
+}
+
+function shopSignTexture05(text,bg="#151b24",fg="#f3d99a"){
+  const c=document.createElement("canvas");c.width=512;c.height=128;
+  const x=c.getContext("2d");x.fillStyle=bg;x.fillRect(0,0,c.width,c.height);
+  x.fillStyle=fg;x.font="900 52px system-ui";x.textAlign="center";x.textBaseline="middle";x.fillText(text,256,67);
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;
+}
+function facadeSign05(x,z,text,rot=0,bg="#161b21",fg="#f3d899"){
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(7.2,1.6),new THREE.MeshBasicMaterial({map:shopSignTexture05(text,bg,fg),side:THREE.DoubleSide}));
+  m.position.set(x,3.7,z);m.rotation.y=rot;scene.add(m);return m;
+}
+facadeSign05(-42,-16.25,"FRITUUR DE DENDER",0,"#8f2622","#fff1c2");
+facadeSign05(42,16.25,"CAFÉ 'T PLEIN",Math.PI,"#20364e","#f0d487");
+facadeSign05(111,-16.25,"BUURTMARKT",0,"#28553a","#f4e7b4");
+
+function directionalTexture05(lines){
+  const c=document.createElement("canvas");c.width=512;c.height=256;const x=c.getContext("2d");
+  x.fillStyle="#185b87";x.fillRect(0,0,512,256);x.strokeStyle="#fff";x.lineWidth=8;x.strokeRect(8,8,496,240);
+  x.fillStyle="#fff";x.font="800 44px system-ui";x.textAlign="left";x.textBaseline="middle";
+  lines.forEach((t,i)=>x.fillText("→  "+t,34,55+i*66));const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;return tex;
+}
+function directional05(x,z,lines,rot=0){
+  const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=rot;
+  const poleM=new THREE.MeshStandardMaterial({color:0x85898a,metalness:.65,roughness:.35});
+  for(const px of [-1.6,1.6]){const p=new THREE.Mesh(new THREE.CylinderGeometry(.06,.08,3.2,8),poleM);p.position.set(px,1.6,0);g.add(p)}
+  const s=new THREE.Mesh(new THREE.PlaneGeometry(4.4,2.2),new THREE.MeshBasicMaterial({map:directionalTexture05(lines),side:THREE.DoubleSide}));
+  s.position.y=3.15;g.add(s);scene.add(g);
+}
+directional05(-10,-12,["AALST","LEDE","ERPE-MERE"],0);
+directional05(105,9,["ERPE-MERE","BURST"],Math.PI);
+
+const parkedCars05=[];
+function parkCar05(x,z,heading,color){
+  const c=createCar(color);decorateCar04(c,40+parkedCars05.length);c.position.set(x,0,z);c.userData.heading=heading;c.rotation.y=heading;scene.add(c);parkedCars05.push(c);
+}
+const parkColors05=[0x272c31,0x8a8e90,0x314e68,0x7b3e35,0xd0d0ca];
+for(let x=-145,i=0;x<145;x+=31,i++){
+  if(Math.abs(x+78)<18||Math.abs(x-86)<18)continue;
+  parkCar05(x,13.1,Math.PI/2,parkColors05[i%parkColors05.length]);
+  parkCar05(x+13,-13.1,-Math.PI/2,parkColors05[(i+2)%parkColors05.length]);
+}
+
+function addBollards05(x,z,count=6,axis="x"){
+  const bm=new THREE.MeshStandardMaterial({color:0xd7d6cf,roughness:.75});
+  for(let i=0;i<count;i++){
+    const b=new THREE.Mesh(new THREE.CylinderGeometry(.1,.12,.85,8),bm);
+    b.position.set(x+(axis==="x"?i*1.5:0),.43,z+(axis==="z"?i*1.5:0));b.castShadow=true;scene.add(b);
+    const black=meshBox(.24,.12,.24,new THREE.MeshStandardMaterial({color:0x202224}),b.position.x,.62,b.position.z);scene.add(black);
+  }
+}
+addBollards05(-121,-58,8,"x");addBollards05(61,-48,7,"z");
+
+function updateWetRoad05(){
+  const wet=.55+.35*v04.rainIntensity;
+  mat.road.roughness=1-wet*.62;
+  mat.road.metalness=.08+wet*.12;
+  puddleMat04.opacity=.28+.38*v04.rainIntensity;
+}
+
+let v05Last=performance.now();
+function v05Loop(now){
+  requestAnimationFrame(v05Loop);
+  if(!running){v05Last=now;return}
+  const dt=Math.min((now-v05Last)/1000,.04);v05Last=now;
+  v04.rainIntensity=.58+.28*(Math.sin(now/26000)*.5+.5);
+  rain.material.opacity=.32+.48*v04.rainIntensity;
+  updateWetRoad05();
+}
+requestAnimationFrame(v05Loop);
