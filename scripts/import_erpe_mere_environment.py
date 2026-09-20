@@ -158,8 +158,10 @@ def osm_nature(b,boundary):
     return out,counts
 
 def main():
-    n=nominatim();boundary=n["geojson"];bb=[float(x) for x in n["boundingbox"]]
-    b={"south":bb[0],"north":bb[1],"west":bb[2],"east":bb[3]}
+    boundary_fc=json.loads((OUT/"erpe_mere_boundaries.geojson").read_text(encoding="utf-8"))
+    boundary=boundary_fc["features"][0]["geometry"]
+    base_meta=json.loads((OUT/"erpe_mere_meta.json").read_text(encoding="utf-8"))
+    b=base_meta["bbox_wgs84"]
     buildings,official_meta=official_buildings(b,boundary)
     nature,nature_counts=osm_nature(b,boundary)
     features=buildings+nature
