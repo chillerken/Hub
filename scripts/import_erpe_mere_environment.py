@@ -53,9 +53,9 @@ def height(tags,obj_id):
         except:pass
     return 4.8+(int(obj_id)%5)*0.75
 
-def query_tile(b):
+def query_tile(b, depth=0):
     bbox=f'{b["south"]},{b["west"]},{b["north"]},{b["east"]}'
-    q=f"""[out:json][timeout:90];
+    q=f"""[out:json][timeout:75];
 (
   way["building"]({bbox});
   way["waterway"]({bbox});
@@ -69,9 +69,24 @@ out tags geom;"""
     data=urllib.parse.urlencode({"data":q}).encode()
     last=None
     for ep in ["https://overpass.kumi.systems/api/interpreter","https://overpass-api.de/api/interpreter"]:
-        try:return get_json(ep,data=data,timeout=120)
-        except Exception as e:last=e
-    raise RuntimeError(last)
+        for attempt in range(2):
+            try:return get_json(ep,data=data,timeout=105)
+            except Exception as e:last=e
+    if depth>=3:
+        print("SKIP tile after recursive retries",b,"error",repr(last),flush=True)
+        return {"elements":[]}
+    midlat=(b["south"]+b["north"])/2
+    midlon=(b["west"]+b["east"])/2
+    merged={}
+    for sub in [
+        {"south":b["south"],"north":midlat,"west":b["west"],"east":midlon},
+        {"south":b["south"],"north":midlat,"west":midlon,"east":b["east"]},
+        {"south":midlat,"north":b["north"],"west":b["west"],"east":midlon},
+        {"south":midlat,"north":b["north"],"west":midlon,"east":b["east"]},
+    ]:
+        part=query_tile(sub,depth+1)
+        for e in part.get("elements",[]):merged[(e.get("type"),e.get("id"))]=e
+    return {"elements":list(merged.values())}
 
 def query(b):
     rows, cols = 4, 4
