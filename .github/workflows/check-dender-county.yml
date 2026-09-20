@@ -39,6 +39,26 @@ jobs:
           assert any(f.get("geometry",{}).get("type") in ("Polygon","MultiPolygon") for f in bounds["features"])
           print("real roads",len(roads),"named streets",meta["street_count_named"],"station",stations[0]["properties"].get("name"))
           PY
+      - name: Validate integrated Erpe-Mere 2.0 systems
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("dender-county-3d")
+          meta=json.loads((root/"geodata/erpe_mere_meta.json").read_text())
+          runtime=json.loads((root/"geodata/erpe_mere_runtime.geojson").read_text())
+          roads=[f for f in runtime["features"] if f.get("properties",{}).get("kind")=="road"]
+          routed=[f for f in roads if f.get("properties",{}).get("begin_node") is not None and f.get("properties",{}).get("end_node") is not None]
+          assert len(roads)>2000, len(roads)
+          assert len(routed)>1500, len(routed)
+          assert meta["named_street_count"]>200
+          game=(root/"game.js").read_text()
+          assert "DENDER COUNTY 2.0" in game
+          assert "JOB20.jobs" in game and ".slice(0,30)" in game
+          assert "route10(" in game and "updatePolice10" in game
+          assert "streamEnvironment20" in game and "updatePeds20" in game
+          print("Erpe-Mere roads",len(roads),"routed",len(routed),"named",meta["named_street_count"])
+          PY
       - name: Verify required game files
         run: |
           test -s dender-county-3d/index.html
