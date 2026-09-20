@@ -2710,3 +2710,30 @@ function chunkLoop31(now){
   pruneVisitedChunks31();
 }
 requestAnimationFrame(chunkLoop31);
+
+// 3.1 loader priority: prefer streamed manifests before legacy whole-file fetches.
+const legacyEnvironmentLoader31=loadEnvironment20;
+const legacyRegionEnvironmentLoader31=loadRegionEnvironment30;
+loadEnvironment20=async function(){
+  if(GEO10.active){
+    const m=await loadManifest31("erpe_mere");
+    if(m){
+      CHUNK31.manifests.set("erpe_mere",m);
+      ENV20.ready=true;CHUNK31.ready=true;
+      return true;
+    }
+  }
+  return legacyEnvironmentLoader31();
+};
+loadRegionEnvironment30=async function(key){
+  if(GEO10.active){
+    const m=await loadManifest31(key);
+    if(m){
+      CHUNK31.manifests.set(key,m);
+      ENV20.ready=true;CHUNK31.ready=true;
+      REG30.environmentLoaded.add(key);
+      return true;
+    }
+  }
+  return legacyRegionEnvironmentLoader31(key);
+};
