@@ -3,8 +3,9 @@ import json, math, sys
 from pathlib import Path
 
 ROOT=Path("dender-county-3d/geodata")
-ORIGIN_LAT=50.91365
-ORIGIN_LON=3.92037
+BASE_META=json.loads((ROOT/"erpe_mere_meta.json").read_text(encoding="utf-8"))
+ORIGIN_LAT=float(BASE_META["center_wgs84"]["lat"])
+ORIGIN_LON=float(BASE_META["center_wgs84"]["lon"])
 MLAT=111320.0
 MLON=111320.0*math.cos(math.radians(ORIGIN_LAT))
 CHUNK=750.0
