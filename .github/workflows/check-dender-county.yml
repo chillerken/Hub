@@ -78,6 +78,33 @@ jobs:
               assert "Digitaal Vlaanderen" in meta.get("primary_building_source","")
               print("environment features",len(fc["features"]),"buildings",len(buildings),meta.get("counts"))
           PY
+      - name: Validate Dender County 3.0 regional world
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("dender-county-3d/geodata")
+          for key,min_roads,min_streets in [
+              ("erpe_mere",2000,200),
+              ("lede",1500,300),
+              ("aalst",5000,700),
+          ]:
+              meta=json.loads((root/f"{key}_meta.json").read_text())
+              runtime=json.loads((root/f"{key}_runtime.geojson").read_text())
+              roads=[f for f in runtime["features"] if f.get("properties",{}).get("kind")=="road"]
+              assert len(roads)>=min_roads,(key,len(roads))
+              count=meta.get("named_street_count",meta.get("street_count_named",0))
+              assert count>=min_streets,(key,count)
+              assert all("begin_node" in f.get("properties",{}) and "end_node" in f.get("properties",{}) for f in roads[:100])
+              print(key,"roads",len(roads),"streets",count)
+          for key,min_buildings in [("erpe_mere",15000),("lede",3000),("aalst",10000)]:
+              p=root/f"{key}_environment_meta.json"
+              assert p.exists(),f"missing {p}"
+              m=json.loads(p.read_text())
+              b=m.get("counts",{}).get("building",0)
+              assert b>=min_buildings,(key,b)
+              print(key,"buildings",b,"environment",m.get("feature_count"))
+          PY
       - name: Verify required game files
         run: |
           test -s dender-county-3d/index.html
