@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 
 const canvas = document.querySelector("#game");
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:"high-performance"});
@@ -2737,3 +2738,310 @@ loadRegionEnvironment30=async function(key){
   }
   return legacyRegionEnvironmentLoader31(key);
 };
+
+
+// ===== DENDER COUNTY 4.0 — AAA-STYLE QUALITY PASS =====
+window.__DENDER_VERSION__="4.0";
+
+const VIS40={
+  facadeMats:[],
+  npcMixers:[],
+  streetLast:0,
+  treeLast:0,
+  npcInstalled:false,
+  vehiclesInstalled:false,
+  truckAsset:null
+};
+
+function facadeTextures40(seed){
+  const c=document.createElement("canvas");c.width=512;c.height=512;
+  const x=c.getContext("2d");
+  const palettes=[
+    ["#9c5d49","#d1a18c"],["#b77a5a","#deb39a"],["#d7c6b2","#f0e5d5"],
+    ["#7c4c3f","#b57a67"],["#c6b49a","#e4d5bf"],["#9a8b7a","#d2c3b0"]
+  ];
+  const pal=palettes[seed%palettes.length];
+  x.fillStyle=pal[0];x.fillRect(0,0,512,512);
+  x.globalAlpha=.22;x.strokeStyle=pal[1];x.lineWidth=2;
+  for(let y=0;y<512;y+=24){
+    x.beginPath();x.moveTo(0,y);x.lineTo(512,y);x.stroke();
+    const off=((y/24)%2)*28;
+    for(let xx=-off;xx<512;xx+=56){x.beginPath();x.moveTo(xx,y);x.lineTo(xx,y+24);x.stroke()}
+  }
+  x.globalAlpha=1;
+  const floors=3,cols=4;
+  const lit=[];
+  for(let fy=0;fy<floors;fy++){
+    for(let fx=0;fx<cols;fx++){
+      const wx=52+fx*116,wy=62+fy*145;
+      x.fillStyle="#252b2e";x.fillRect(wx,wy,66,78);
+      x.fillStyle=(seed+fx+fy)%3===0?"#e4c386":"#88a4ad";
+      x.globalAlpha=(seed+fx+fy)%3===0?.9:.6;x.fillRect(wx+5,wy+5,56,68);x.globalAlpha=1;
+      x.strokeStyle="#e7e0d5";x.lineWidth=5;x.strokeRect(wx,wy,66,78);
+      x.beginPath();x.moveTo(wx+33,wy);x.lineTo(wx+33,wy+78);x.stroke();
+      lit.push({wx,wy,on:(seed+fx+fy)%3===0});
+    }
+  }
+  const e=document.createElement("canvas");e.width=e.height=512;
+  const ex=e.getContext("2d");ex.fillStyle="#000";ex.fillRect(0,0,512,512);
+  for(const w of lit)if(w.on){ex.fillStyle="#fff";ex.fillRect(w.wx+5,w.wy+5,56,68)}
+  const map=new THREE.CanvasTexture(c),em=new THREE.CanvasTexture(e);
+  map.colorSpace=THREE.SRGBColorSpace;em.colorSpace=THREE.SRGBColorSpace;
+  map.wrapS=map.wrapT=em.wrapS=em.wrapT=THREE.RepeatWrapping;
+  map.repeat.set(1,1);em.repeat.set(1,1);
+  return{map,em};
+}
+
+function facadeMaterial40(seed){
+  if(VIS40.facadeMats[seed])return VIS40.facadeMats[seed];
+  const base=mat.brick[seed%mat.brick.length].clone();
+  const t=facadeTextures40(seed);
+  base.map=t.map;base.emissiveMap=t.em;base.emissive=new THREE.Color(0xffc56d);
+  base.emissiveIntensity=.08;base.roughness=.82;base.metalness=0;
+  base.needsUpdate=true;VIS40.facadeMats[seed]=base;return base;
+}
+
+const legacyBuildBuilding40=buildBuilding20;
+buildBuilding20=function(item,parent){
+  const p=item.ft.properties||{},h=THREE.MathUtils.clamp(Number(p.height_m)||6,2.8,34);
+  const shape=makeShape20(item.pts,item.c);let geo;
+  try{geo=new THREE.ExtrudeGeometry(shape,{depth:h,bevelEnabled:false,steps:1,curveSegments:1})}catch{return}
+  geo.rotateX(-Math.PI/2);
+  const seed=hash20(p.source_id||"building")%6,wall=facadeMaterial40(seed);
+  const roof=ENV20.roofMat.clone();roof.color.offsetHSL(0,0,(seed%3-1)*.04);
+  const mesh=new THREE.Mesh(geo,[roof,wall]);
+  mesh.position.set(item.c.x,0,item.c.z);mesh.castShadow=true;mesh.receiveShadow=true;
+  mesh.userData.facade40=true;parent.add(mesh);
+};
+
+function updateFacadeNight40(){
+  const daylight=day>=7&&day<=19;
+  for(const m of VIS40.facadeMats)if(m)m.emissiveIntensity=daylight?.015:.32;
+}
+
+// Road markings around player.
+const MARK40={
+  max:900,lastActor:new THREE.Vector3(1e9,0,1e9),
+  mesh:null
+};
+(function initMarkings40(){
+  const geo=new THREE.BoxGeometry(.12,.025,2.6);
+  const m=new THREE.MeshStandardMaterial({color:0xf1eee5,roughness:.74});
+  MARK40.mesh=new THREE.InstancedMesh(geo,m,MARK40.max);
+  MARK40.mesh.count=0;MARK40.mesh.receiveShadow=true;MARK40.mesh.userData.realGeo10=true;
+  GEO10.group.add(MARK40.mesh);
+})();
+function refreshMarkings40(actor){
+  if(!GEO10.active||actor.distanceToSquared(MARK40.lastActor)<140*140)return;
+  MARK40.lastActor.copy(actor);
+  const q=new THREE.Quaternion(),p=new THREE.Vector3(),sc=new THREE.Vector3(1,1,1),mx=new THREE.Matrix4(),yAxis=new THREE.Vector3(0,1,0);
+  let n=0;
+  for(const e of GEO10.driveEdges){
+    if(e.width<5.7)continue;
+    for(let i=1;i<e.points.length&&n<MARK40.max;i++){
+      const a=e.points[i-1],b=e.points[i];
+      const mid=a.clone().add(b).multiplyScalar(.5);
+      if(mid.distanceToSquared(actor)>850*850)continue;
+      const dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz),ang=Math.atan2(dx,dz);
+      const dashes=Math.max(1,Math.floor(len/8));
+      for(let k=0;k<dashes&&n<MARK40.max;k++){
+        if(k%2)continue;
+        const t=(k+.5)/dashes;
+        p.lerpVectors(a,b,t);p.y=.155;
+        q.setFromAxisAngle(yAxis,ang);mx.compose(p,q,sc);
+        MARK40.mesh.setMatrixAt(n++,mx);
+      }
+    }
+    if(n>=MARK40.max)break;
+  }
+  MARK40.mesh.count=n;MARK40.mesh.instanceMatrix.needsUpdate=true;
+}
+
+// Street-light pool; only eight actual PointLights, all bulbs emissive.
+const LAMP40={groups:[],lastActor:new THREE.Vector3(1e9,0,1e9)};
+(function initLamps40(){
+  const metal=new THREE.MeshStandardMaterial({color:0x5b6064,metalness:.7,roughness:.36});
+  const bulb=new THREE.MeshStandardMaterial({color:0xe8e0c8,emissive:0xffd88f,emissiveIntensity:.5});
+  for(let i=0;i<28;i++){
+    const g=new THREE.Group();g.visible=false;g.userData.realGeo10=true;
+    const pole=new THREE.Mesh(new THREE.CylinderGeometry(.055,.075,5.4,8),metal);pole.position.y=2.7;g.add(pole);
+    const arm=meshBox(1.15,.07,.07,metal,.5,5.15,0);g.add(arm);
+    const b=new THREE.Mesh(new THREE.SphereGeometry(.14,8,6),bulb.clone());b.position.set(1.03,5.02,0);g.add(b);
+    if(i<8){const light=new THREE.PointLight(0xffd7a0,0,20,2);light.position.set(1.03,4.8,0);g.add(light);g.userData.light=light}
+    g.userData.bulb=b;GEO10.group.add(g);LAMP40.groups.push(g);
+  }
+})();
+function refreshLamps40(actor){
+  if(!GEO10.active||actor.distanceToSquared(LAMP40.lastActor)<120*120)return;
+  LAMP40.lastActor.copy(actor);
+  const candidates=[];
+  for(const n of GEO10.nodes.values()){
+    const d=n.pos.distanceToSquared(actor);
+    if(d<720*720)candidates.push({n,d});
+  }
+  candidates.sort((a,b)=>a.d-b.d);
+  for(let i=0;i<LAMP40.groups.length;i++){
+    const g=LAMP40.groups[i],c=candidates[i*2];
+    if(!c){g.visible=false;continue}
+    g.visible=true;g.position.copy(c.n.pos);g.position.y=0;
+    const adj=GEO10.adj.get(c.n.id)||[];
+    if(adj[0]&&adj[0].points.length>1){
+      const a=adj[0].points[0],b=adj[0].points[1];
+      g.rotation.y=Math.atan2(b.x-a.x,b.z-a.z)+Math.PI/2;
+    }
+  }
+}
+function updateLamps40(){
+  const night=day<6.5||day>19;
+  LAMP40.groups.forEach(g=>{
+    if(g.userData.bulb)g.userData.bulb.material.emissiveIntensity=night?3:.08;
+    if(g.userData.light)g.userData.light.intensity=night?3.8:0;
+  });
+}
+
+// Instanced trees from real vegetation polygons in currently loaded chunks.
+const TREE40={max:260,trunks:null,crowns:null,lastActor:new THREE.Vector3(1e9,0,1e9)};
+(function initTrees40(){
+  TREE40.trunks=new THREE.InstancedMesh(new THREE.CylinderGeometry(.12,.2,2.4,7),new THREE.MeshStandardMaterial({color:0x5b4430,roughness:1}),TREE40.max);
+  TREE40.crowns=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1.35,1),new THREE.MeshStandardMaterial({color:0x315a31,roughness:1}),TREE40.max);
+  TREE40.trunks.count=TREE40.crowns.count=0;TREE40.trunks.castShadow=TREE40.crowns.castShadow=true;
+  TREE40.trunks.userData.realGeo10=TREE40.crowns.userData.realGeo10=true;GEO10.group.add(TREE40.trunks,TREE40.crowns);
+})();
+function pointInPoly40(x,z,pts){
+  let inside=false;
+  for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+    const xi=pts[i].x,zi=pts[i].z,xj=pts[j].x,zj=pts[j].z;
+    const hit=((zi>z)!=(zj>z))&&(x<(xj-xi)*(z-zi)/(zj-zi+1e-9)+xi);if(hit)inside=!inside;
+  }
+  return inside;
+}
+function refreshTrees40(actor){
+  if(!ENV20.ready||actor.distanceToSquared(TREE40.lastActor)<180*180)return;
+  TREE40.lastActor.copy(actor);
+  const trunkM=new THREE.Matrix4(),crownM=new THREE.Matrix4(),q=new THREE.Quaternion(),sc=new THREE.Vector3();
+  let n=0;
+  for(const ch of ENV20.chunks.values()){
+    if(n>=TREE40.max)break;
+    if((ch.cx-actor.x)**2+(ch.cz-actor.z)**2>950*950)continue;
+    for(const item of ch.features){
+      if(item.ft.properties?.kind!=="vegetation"||item.pts.length<4)continue;
+      const b=bounds20(item.pts),seed=hash20(item.ft.properties?.source_id||"veg");
+      const tries=Math.min(10,2+Math.floor((b.maxX-b.minX)*(b.maxZ-b.minZ)/1800));
+      for(let i=0;i<tries&&n<TREE40.max;i++){
+        const rx=((seed+i*73)%997)/997,rz=((seed+i*137)%991)/991;
+        const x=THREE.MathUtils.lerp(b.minX,b.maxX,rx),z=THREE.MathUtils.lerp(b.minZ,b.maxZ,rz);
+        if(!pointInPoly40(x,z,item.pts))continue;
+        const h=.8+((seed+i*19)%40)/100;
+        sc.set(1,h,1);trunkM.compose(new THREE.Vector3(x,1.2*h,z),q,sc);
+        crownM.compose(new THREE.Vector3(x,3.0*h,z),q,new THREE.Vector3(.8+h*.25,.8+h*.25,.8+h*.25));
+        TREE40.trunks.setMatrixAt(n,trunkM);TREE40.crowns.setMatrixAt(n,crownM);n++;
+      }
+    }
+  }
+  TREE40.trunks.count=TREE40.crowns.count=n;TREE40.trunks.instanceMatrix.needsUpdate=TREE40.crowns.instanceMatrix.needsUpdate=true;
+}
+
+// Rigged NPC crowd, cloned safely through SkeletonUtils.
+async function installRiggedNPCs40(){
+  if(VIS40.npcInstalled)return;
+  const gltf=await assetManager06.loadGLB(ASSETS06.player.id,ASSETS06.player.url);if(!gltf)return;
+  const target=pedestrians.slice(0,12);
+  target.forEach((p,i)=>{
+    const visual=fitModelHeight07(SkeletonUtils.clone(gltf.scene),2.75+(i%4)*.08);
+    visual.userData.asset07=true;visual.rotation.y=Math.PI;
+    visual.traverse(o=>{
+      if(o.isMesh&&o.material){
+        o.material=o.material.clone();
+        if(o.material.color)o.material.color.offsetHSL((i%6-.3)*.02,(i%3)*.03,(i%5-2)*.035);
+      }
+    });
+    p.add(visual);hidePrimitiveHuman07(p);p.userData.rig40=visual;
+    if(gltf.animations?.length){
+      const mixer=new THREE.AnimationMixer(visual),action=mixer.clipAction(gltf.animations[0]);action.play();
+      VIS40.npcMixers.push({mixer,p,phase:i*.13});
+    }
+  });
+  VIS40.npcInstalled=true;toast("Rigged NPC-populatie geladen");
+}
+installRiggedNPCs40();
+
+// Additional free CC-BY delivery-truck visual, stripped of obvious logo nodes and covered by blank side panels.
+ASSETS06.deliveryTruck={
+  id:"khronos-cesium-milktruck-ccby4",
+  url:"https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/CesiumMilkTruck/glTF-Binary/CesiumMilkTruck.glb",
+  license:"CC-BY-4.0",
+  credit:"© 2017 Cesium — Khronos glTF Sample Assets"
+};
+async function installTrafficVariety40(){
+  if(VIS40.vehiclesInstalled)return;
+  const toy=await assetManager06.loadGLB(ASSETS06.heroCar.id,ASSETS06.heroCar.url);
+  if(toy){
+    traffic.forEach((car,i)=>{
+      if(car.userData.productionVisual)return;
+      const visual=fitModel06(toy.scene.clone(true),4.05+(i%3)*.16);visual.userData.asset06=true;visual.rotation.y=Math.PI;
+      visual.traverse(o=>{if(o.isMesh&&o.material){o.material=o.material.clone();if(o.material.color)o.material.color.offsetHSL((i%7)*.04,0,(i%5-2)*.04)}});
+      car.add(visual);hidePrimitiveCarShell06(car);car.userData.productionVisual=visual;
+    });
+  }
+  const truck=await assetManager06.loadGLB(ASSETS06.deliveryTruck.id,ASSETS06.deliveryTruck.url);
+  if(truck){
+    for(const [idx,car] of [[2,traffic[2]],[9,traffic[9]]]){
+      if(!car)continue;
+      if(car.userData.productionVisual)car.remove(car.userData.productionVisual);
+      const visual=fitModel06(truck.scene.clone(true),5.7);visual.userData.asset06=true;visual.rotation.y=Math.PI;
+      visual.traverse(o=>{if(/logo|cesium/i.test(o.name||""))o.visible=false});
+      const blank=new THREE.MeshStandardMaterial({color:idx===2?0xe8e1d5:0x546b77,roughness:.62,metalness:.12});
+      addBox(visual,2.2,1.3,.045,blank,-1.42,1.8,0);addBox(visual,2.2,1.3,.045,blank,1.42,1.8,0);
+      car.add(visual);hidePrimitiveCarShell06(car);car.userData.productionVisual=visual;car.userData.vehicleClass="delivery";
+    }
+  }
+  VIS40.vehiclesInstalled=true;toast("Verkeersvariatie geladen");
+}
+installTrafficVariety40();
+
+// More believable headway and weather-sensitive speeds on the official graph.
+const legacyUpdateTraffic40=updateTraffic10;
+updateTraffic10=function(dt){
+  for(const a of GEO10.trafficAgents){
+    if(!a.pts||a.index>=a.pts.length){
+      const next=chooseNext10(a.next,a.node);
+      if(!next){a.car.userData.speed=0;continue}
+      a.prev=a.node;a.node=a.next;a.next=next.to;a.entry=next;a.pts=next.points;a.index=1;
+    }
+    const target=a.pts[a.index];if(!target)continue;
+    const dir=target.clone().sub(a.car.position);dir.y=0;const dist=dir.length();
+    let desired=a.car.userData.vehicleClass==="delivery"?6.4:8.4;
+    const edge=a.entry?.edge;
+    if(edge?.width>=7.5)desired+=2.2;
+    if(edge?.width<=5.2)desired-=1.3;
+    desired*=THREE.MathUtils.lerp(1,.78,v04.rainIntensity||0);
+    for(const b of GEO10.trafficAgents){
+      if(a===b)continue;
+      const d=a.car.position.distanceTo(b.car.position);
+      if(d<8){desired=Math.min(desired,Math.max(0,(d-3)*1.1))}
+    }
+    for(const ped of PED20.agents){
+      const d=a.car.position.distanceTo(ped.p.position);
+      if(d<5.5){desired=Math.min(desired,Math.max(0,(d-2.2)*.9))}
+    }
+    a.car.userData.speed=THREE.MathUtils.lerp(a.car.userData.speed||0,desired,Math.min(1,dt*2.4));
+    if(dist<1.4){a.index++;continue}
+    dir.normalize();a.car.position.addScaledVector(dir,Math.min(dist,a.car.userData.speed*dt));
+    a.car.rotation.y=THREE.MathUtils.lerp(a.car.rotation.y,Math.atan2(dir.x,dir.z),Math.min(1,dt*5));
+    animateCar04(a.car,dt,0,desired<2);
+  }
+};
+
+let last40=performance.now();
+function qualityLoop40(now){
+  requestAnimationFrame(qualityLoop40);
+  const dt=Math.min((now-last40)/1000,.04);last40=now;
+  if(!running||!GEO10.active)return;
+  const actor=inVehicle?heroCar.position:player.position;
+  if(now-VIS40.streetLast>900){
+    VIS40.streetLast=now;refreshMarkings40(actor);refreshLamps40(actor);updateFacadeNight40();updateLamps40();
+  }
+  if(now-VIS40.treeLast>1700){VIS40.treeLast=now;refreshTrees40(actor)}
+  for(const x of VIS40.npcMixers)x.mixer.update(dt*(.85+x.phase*.15));
+}
+requestAnimationFrame(qualityLoop40);
