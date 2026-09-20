@@ -1,6 +1,6 @@
-const CACHE="dender-county-shell-v9.1";
-const CHUNK_CACHE="dender-county-geodata-v9.1";
-const SHELL=["./","./index.html","./style.css?v=9.0","./game.js?v=7.2","./assets-manifest.json"];
+const CACHE="dender-county-shell-v9.2";
+const CHUNK_CACHE="dender-county-geodata-v9.2";
+const SHELL=["./","./index.html","./style.css?v=9.0","./game.js?v=9.2","./assets-manifest.json"];
 self.addEventListener("install",event=>{
   event.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).catch(()=>{}));
   self.skipWaiting();

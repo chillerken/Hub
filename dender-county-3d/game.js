@@ -3769,6 +3769,7 @@ function runMasterExtras70(now){
   systems82(now);
   systems90(now);
   systems91(now);
+  systems92(now);
   MASTER70.last=now;MASTER70.frames++;
 }
 
@@ -4603,5 +4604,233 @@ function systems91(now){
   if(window.__DENDER_HEALTH__){
     window.__DENDER_HEALTH__.buildingLod=PERF90.tier==="PERFORMANCE"?"INSTANCED":"FULL";
     window.__DENDER_HEALTH__.lodQueue=ENV91.queue.length;
+  }
+}
+
+// ===== DENDER COUNTY 9.2 — EXACT LEVEL CROSSINGS + VERSIONED SAVE =====
+window.__DENDER_VERSION__="9.2";
+
+const CROSS92={
+  ready:false,
+  loading:false,
+  crossings:[],
+  retryAt:0,
+  activeCount:0
+};
+
+function crossingVisual92(pos,roadDir,width){
+  const g=new THREE.Group();g.position.copy(pos);g.userData.realGeo10=true;
+  const side=new THREE.Vector3(roadDir.z,0,-roadDir.x).normalize();
+  const theta=Math.atan2(-side.z,side.x);g.rotation.y=theta;
+  const poleM=new THREE.MeshStandardMaterial({color:0x4b4f52,metalness:.65,roughness:.42});
+  const armM=new THREE.MeshStandardMaterial({color:0xe9e4d9,roughness:.68});
+  const redM=new THREE.MeshStandardMaterial({color:0x1d1d1d,emissive:0xff1d16,emissiveIntensity:.08});
+  const off=Math.max(2.5,width*.62),armLen=Math.min(5.8,off*1.65);
+  const pivots=[];
+  for(const sign of [-1,1]){
+    const root=new THREE.Group();root.position.set(sign*off,0,0);
+    const pole=new THREE.Mesh(new THREE.CylinderGeometry(.06,.085,2.2,8),poleM);pole.position.y=1.1;root.add(pole);
+    const lamp=new THREE.Mesh(new THREE.SphereGeometry(.12,10,8),redM.clone());lamp.position.set(0,1.75,.12);root.add(lamp);
+    const pivot=new THREE.Group();pivot.position.y=1.55;
+    const arm=meshBox(armLen,.12,.12,armM,sign<0?armLen/2:-armLen/2,0,0);pivot.add(arm);
+    root.add(pivot);g.add(root);pivots.push({pivot,lamp,sign});
+  }
+  scene.add(g);
+  return{group:g,pivots,open:1};
+}
+
+function nearestRoadDirection92(pos){
+  let best=null,bd=Infinity,dir=new THREE.Vector3(1,0,0),width=5.6;
+  for(const e of localEdges82(pos,90)){
+    if(!e.drive)continue;
+    for(let i=1;i<e.points.length;i++){
+      const a=e.points[i-1],b=e.points[i];
+      const d=pointSegDistSq09(pos.x,pos.z,{x1:a.x,z1:a.z,x2:b.x,z2:b.z});
+      if(d<bd){bd=d;best=e;dir.copy(b).sub(a).setY(0).normalize();width=e.width||5.6}
+    }
+  }
+  return{edge:best,dir,width,dist:Math.sqrt(bd)};
+}
+
+function nearestRailDistance92(pos){
+  if(!SYS71.railPath||!SYS71.railCum)return null;
+  let bestD=Infinity,bestDist=0;
+  for(let i=1;i<SYS71.railPath.length;i++){
+    const a=SYS71.railPath[i-1],b=SYS71.railPath[i];
+    const vx=b.x-a.x,vz=b.z-a.z,wx=pos.x-a.x,wz=pos.z-a.z;
+    const vv=vx*vx+vz*vz||1,t=THREE.MathUtils.clamp((wx*vx+wz*vz)/vv,0,1);
+    const px=a.x+t*vx,pz=a.z+t*vz,d=(pos.x-px)**2+(pos.z-pz)**2;
+    if(d<bestD){bestD=d;bestDist=SYS71.railCum[i-1]+t*(SYS71.railCum[i]-SYS71.railCum[i-1])}
+  }
+  return{distance:bestDist,offset:Math.sqrt(bestD)};
+}
+
+async function loadCrossings92(){
+  if(CROSS92.ready||CROSS92.loading||!GEO10.active||!SP82.edgeCount)return false;
+  CROSS92.loading=true;
+  try{
+    const r=await fetch("./geodata/level_crossings.geojson?v=9.2");
+    if(!r.ok)throw new Error("crossing layer "+r.status);
+    const fc=await r.json();
+    for(const ft of fc.features||[]){
+      if(ft.geometry?.type!=="Point")continue;
+      const pos=geoToLocal10(ft.geometry.coordinates);
+      const road=nearestRoadDirection92(pos);
+      if(!road.edge||road.dist>35)continue;
+      const rail=nearestRailDistance92(pos);
+      if(!rail||rail.offset>45)continue;
+      if(CROSS92.crossings.some(c=>c.pos.distanceToSquared(pos)<18*18))continue;
+      const visual=crossingVisual92(pos,road.dir,road.width);
+      CROSS92.crossings.push({
+        id:ft.properties?.source_id||ft.id||("cross-"+CROSS92.crossings.length),
+        pos,roadEdge:road.edge,railDistance:rail.distance,visual,active:false
+      });
+    }
+    CROSS92.ready=true;
+    toast("Echte spoorwegovergangen geladen • "+CROSS92.crossings.length);
+    return true;
+  }catch(err){
+    console.warn("level crossings pending",err);
+    CROSS92.retryAt=performance.now()+8000;
+    return false;
+  }finally{CROSS92.loading=false}
+}
+
+function crossingAhead92(agent,c){
+  const target=agent.pts?.[agent.index];if(!target)return false;
+  const dir=target.clone().sub(agent.car.position).setY(0);
+  const to=c.pos.clone().sub(agent.car.position).setY(0);
+  return dir.dot(to)>0;
+}
+
+const legacyShouldStop92=shouldStopAtNode60;
+shouldStopAtNode60=function(agent,elapsed){
+  for(const c of CROSS92.crossings){
+    if(!c.active)continue;
+    const d=agent.car.position.distanceTo(c.pos);
+    if(d<42&&crossingAhead92(agent,c))return true;
+  }
+  return legacyShouldStop92(agent,elapsed);
+};
+
+function updateCrossings92(dt,now){
+  if(!CROSS92.ready){
+    if(!CROSS92.loading&&now>CROSS92.retryAt)loadCrossings92();
+    return;
+  }
+  const actor=inVehicle?heroCar.position:player.position;
+  CROSS92.activeCount=0;
+  for(const c of CROSS92.crossings){
+    const trainGap=SYS71.railLoaded?Math.abs(SYS71.trainDistance-c.railDistance):99999;
+    c.active=trainGap<240;
+    if(c.active)CROSS92.activeCount++;
+    c.visual.group.visible=actor.distanceToSquared(c.pos)<1500*1500;
+    const targetOpen=c.active?0:1;
+    c.visual.open=THREE.MathUtils.lerp(c.visual.open,targetOpen,Math.min(1,dt*1.8));
+    for(const p of c.visual.pivots){
+      p.pivot.rotation.z=p.sign*(c.visual.open*Math.PI*.48);
+      p.lamp.material.emissiveIntensity=c.active&&(Math.sin(now*.015)>0)?4:.08;
+    }
+  }
+  if(inVehicle&&SYS71.train){
+    const td=heroCar.position.distanceTo(SYS71.train.position);
+    if(td<4.2&&Math.abs(heroCar.userData.speed)>1){
+      heroCar.position.copy(v02.carPrev);heroCar.userData.speed=0;
+      addDamage50(45,"Botsing met trein");
+      wanted=Math.max(wanted,1);wantedCooldown=10;
+    }
+  }
+}
+
+const SAVE92={key:"denderCountySaveV3",version:3,restored:false,lastSave:0};
+
+function snapshot92(){
+  return{
+    version:SAVE92.version,
+    gameVersion:window.__DENDER_VERSION__,
+    savedAt:new Date().toISOString(),
+    day,wanted,inVehicle,
+    cash:GAME20.cash,
+    completed:GAME20.completed,
+    jobIndex:JOB20.index,
+    damage:SIM50.damage,
+    player:{x:player.position.x,y:player.position.y,z:player.position.z,yaw:player.rotation.y},
+    car:{x:heroCar.position.x,y:heroCar.position.y,z:heroCar.position.z,heading:heroCar.userData.heading,speed:heroCar.userData.speed},
+    quality:PERF90.tier
+  };
+}
+function saveUnified92(show=false){
+  try{
+    localStorage.setItem(SAVE92.key,JSON.stringify(snapshot92()));
+    SAVE92.lastSave=performance.now();
+    if(show)toast("Savegame v3 opgeslagen");
+  }catch(err){console.warn("save v3 failed",err)}
+}
+function validNum92(v){return typeof v==="number"&&Number.isFinite(v)}
+function restoreUnified92(show=false){
+  if(SAVE92.restored||!GEO10.active||!JOB20.jobs.length)return false;
+  let data=null;
+  try{data=JSON.parse(localStorage.getItem(SAVE92.key)||"null")}catch{}
+  if(!data){
+    try{
+      const legacy=JSON.parse(localStorage.getItem("dc20_geo")||"null");
+      if(legacy){
+        data={version:2,day:legacy.day,wanted:legacy.wanted,inVehicle:legacy.inVehicle,
+          cash:Number(localStorage.getItem("dc20_cash")||GAME20.cash),
+          completed:Number(localStorage.getItem("dc20_completed")||GAME20.completed),
+          jobIndex:Number(localStorage.getItem("dc20_completed")||0),
+          damage:SIM50.damage,
+          player:{x:legacy.x,y:0,z:legacy.z,yaw:0},
+          car:{x:legacy.x,y:0,z:legacy.z,heading:legacy.heading||0,speed:0}};
+      }
+    }catch{}
+  }
+  SAVE92.restored=true;
+  if(!data)return false;
+  const clamp=(v,min,max)=>THREE.MathUtils.clamp(validNum92(v)?v:0,min,max);
+  const bounds=GEO10.bounds||{minX:-1e5,maxX:1e5,minZ:-1e5,maxZ:1e5};
+  day=validNum92(data.day)?data.day:day;wanted=validNum92(data.wanted)?data.wanted:wanted;
+  GAME20.cash=validNum92(data.cash)?data.cash:GAME20.cash;
+  GAME20.completed=Math.max(0,Math.floor(validNum92(data.completed)?data.completed:GAME20.completed));
+  JOB20.index=Math.max(0,Math.min(JOB20.jobs.length,Math.floor(validNum92(data.jobIndex)?data.jobIndex:GAME20.completed)));
+  SIM50.damage=THREE.MathUtils.clamp(validNum92(data.damage)?data.damage:0,0,100);
+  if(data.player){
+    player.position.set(clamp(data.player.x,bounds.minX,bounds.maxX),validNum92(data.player.y)?data.player.y:0,clamp(data.player.z,bounds.minZ,bounds.maxZ));
+    player.rotation.y=validNum92(data.player.yaw)?data.player.yaw:0;
+  }
+  if(data.car){
+    heroCar.position.set(clamp(data.car.x,bounds.minX,bounds.maxX),validNum92(data.car.y)?data.car.y:0,clamp(data.car.z,bounds.minZ,bounds.maxZ));
+    heroCar.userData.heading=validNum92(data.car.heading)?data.car.heading:0;heroCar.rotation.y=heroCar.userData.heading;
+    heroCar.userData.speed=THREE.MathUtils.clamp(validNum92(data.car.speed)?data.car.speed:0,-8,34);
+  }
+  inVehicle=!!data.inVehicle;player.visible=!inVehicle;
+  applyDamageVisual50();updateVehicleConditionUI50();
+  v02.playerPrev.copy(player.position);v02.carPrev.copy(heroCar.position);
+  refreshRoute80(true);saveUnified92(false);
+  if(show)toast(data.version===SAVE92.version?"Savegame geladen":"Oude savegame gemigreerd naar v3");
+  return true;
+}
+
+const legacySaveMeta92=saveMeta20;
+saveMeta20=function(){legacySaveMeta92();saveUnified92(false)};
+const legacySaveGame92=saveGame;
+saveGame=function(show=true){legacySaveGame92(false);saveUnified92(show)};
+const legacyLoadGame92=loadGame;
+loadGame=function(show=true){if(!restoreUnified92(show))legacyLoadGame92(show)};
+
+const restorePoll92=setInterval(()=>{
+  if(!GEO10.active||!JOB20.jobs.length)return;
+  clearInterval(restorePoll92);restoreUnified92(false);
+},500);
+
+function systems92(now){
+  if(!running||!GEO10.active)return;
+  const dt=Math.min((now-(systems92.last||now))/1000,.04);systems92.last=now;
+  updateCrossings92(dt,now);
+  if(now-SAVE92.lastSave>15000)saveUnified92(false);
+  if(window.__DENDER_HEALTH__){
+    window.__DENDER_HEALTH__.crossings=CROSS92.crossings.length;
+    window.__DENDER_HEALTH__.activeCrossings=CROSS92.activeCount;
+    window.__DENDER_HEALTH__.saveVersion=SAVE92.version;
   }
 }

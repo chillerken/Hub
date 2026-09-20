@@ -46,7 +46,7 @@ jobs:
             await page.goto('http://127.0.0.1:8080/index.html',{waitUntil:'domcontentloaded',timeout:120000});
             await page.waitForSelector('#startBtn',{timeout:30000});
             await page.click('#startBtn');
-            await page.waitForFunction(()=>window.__DENDER_VERSION__==='9.1',{timeout:30000});
+            await page.waitForFunction(()=>window.__DENDER_VERSION__==='9.2',{timeout:30000});
             await page.waitForFunction(()=>window.__DENDER_HEALTH__?.geoActive===true,{timeout:120000});
             await page.waitForTimeout(9000);
             const health=await page.evaluate(()=>window.__DENDER_HEALTH__);
@@ -75,6 +75,8 @@ jobs:
             if(health.masterFrames<5)throw new Error('master loop not advancing');
             if(!health.quality)throw new Error('adaptive quality did not initialize');
             if(!health.buildingLod)throw new Error('building LOD did not initialize');
+            if(health.saveVersion!==3)throw new Error('versioned save did not initialize: '+health.saveVersion);
+            if(typeof health.crossings!=='number')throw new Error('crossing system health missing');
             if(health.roads<2000)throw new Error('road graph too small: '+health.roads);
             if(health.nodes<500)throw new Error('routing graph too small: '+health.nodes);
             const fatal=errors.filter(e=>!e.includes('favicon')&&!e.includes('ERR_BLOCKED_BY_CLIENT'));
