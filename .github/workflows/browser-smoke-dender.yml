@@ -54,7 +54,8 @@ jobs:
             await page.screenshot({path:'/tmp/dender-smoke.png',fullPage:true});
             if(!health.started)throw new Error('game did not start');
             if(!health.geoActive)throw new Error('real-world geography inactive');
-            if(health.masterFrames<5)throw new Error('master loop not advancing');\n            if(!health.quality)throw new Error('adaptive quality did not initialize');
+            if(health.masterFrames<5)throw new Error('master loop not advancing');
+            if(!health.quality)throw new Error('adaptive quality did not initialize');
             if(health.roads<2000)throw new Error('road graph too small: '+health.roads);
             if(health.nodes<500)throw new Error('routing graph too small: '+health.nodes);
             const fatal=errors.filter(e=>!e.includes('favicon')&&!e.includes('ERR_BLOCKED_BY_CLIENT'));
