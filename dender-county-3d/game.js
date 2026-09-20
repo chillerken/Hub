@@ -614,7 +614,8 @@ const v04={
   qualityHigh:true,
   signalPhase:0,
   lastHorn:0,
-  rainIntensity:.72
+  rainIntensity:.72,
+  escapeStarted:false
 };
 
 function pointInRoad04(pos){
@@ -860,7 +861,9 @@ function v04MissionCheck(){
   const actor=inVehicle?heroCar.position:player.position;
   if(mission===6&&inVehicle&&actor.distanceTo(new THREE.Vector3(20,0,96))<8)completeMission();
   if(mission===7){
-    if(wanted<1){wanted=2;wantedCooldown=12;toast("POLITIEZOEKING GESTART")}
+    if(!v04.escapeStarted){
+      v04.escapeStarted=true;wanted=2;wantedCooldown=12;toast("POLITIEZOEKING GESTART");
+    }
     if(wanted<=0.05&&actor.distanceTo(new THREE.Vector3(86,0,120))<20)completeMission();
   }
 }
@@ -877,3 +880,10 @@ function v04Loop04(now){
   v04MissionCheck();
 }
 requestAnimationFrame(v04Loop04);
+
+
+document.querySelector("#mobileBrake")?.addEventListener("touchstart",e=>{e.preventDefault();keys.Space=true},{passive:false});
+document.querySelector("#mobileBrake")?.addEventListener("touchend",e=>{e.preventDefault();keys.Space=false},{passive:false});
+document.querySelector("#mobileCam")?.addEventListener("touchstart",e=>{e.preventDefault();v04.cameraMode=(v04.cameraMode+1)%3;toast(["CHASE CAMERA","FIRST PERSON","BUMPER CAMERA"][v04.cameraMode])},{passive:false});
+document.querySelector("#mobileHorn")?.addEventListener("touchstart",e=>{e.preventDefault();horn04()},{passive:false});
+
