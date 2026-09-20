@@ -52,6 +52,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin dender-county-3d
           git add dender-county-3d/geodata/chunks
-          if git diff --cached --quiet; then echo "No chunk changes"; else git commit -m "Build streamed regional environment chunks"; git push origin HEAD:dender-county-3d; fi
+          if git diff --cached --quiet; then
+            echo "No chunk changes"
+          else
+            git commit -m "Build streamed regional environment chunks"
+            git pull --rebase origin dender-county-3d
+            git push origin HEAD:dender-county-3d
+          fi
