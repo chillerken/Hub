@@ -1,6 +1,6 @@
 {
   "schema": "dender-county-assets-v1",
-  "gameVersion": "9.3",
+  "gameVersion": "9.4",
   "runtime": {
     "three": "0.180.0",
     "khronosSampleAssetsCommit": "c6a6bd13ab2b3c685c7903d03561b8a9392f38b8"
@@ -40,6 +40,13 @@
       "license": "CC0-1.0",
       "attribution": "Poly Haven",
       "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/brick_wall_07/"
+    },
+    {
+      "id": "quaternius-human-cc0",
+      "kind": "character",
+      "license": "CC0-1.0",
+      "attribution": "Quaternius (source); UMRAM-Bilkent supine-human-model repository",
+      "url": "https://cdn.jsdelivr.net/gh/UMRAM-Bilkent/supine-human-model@728f23ab5eb9d6cb2c8fb39acb3440bd81db0d3e/assets/human.glb"
     }
   ],
   "geodata": [

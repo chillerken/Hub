@@ -3771,6 +3771,7 @@ function runMasterExtras70(now){
   systems91(now);
   systems92(now);
   systems93(now);
+  systems94(now);
   MASTER70.last=now;MASTER70.frames++;
 }
 
@@ -5009,5 +5010,138 @@ function systems93(now){
     window.__DENDER_HEALTH__.pedAgents=PED20.agents.length;
     window.__DENDER_HEALTH__.visiblePeds=PED20.agents.filter(a=>a.p.visible).length;
     window.__DENDER_HEALTH__.populationTier=PERF90.tier;
+  }
+}
+
+// ===== DENDER COUNTY 9.4 — CC0 HUMAN PLAYER + POPULATION FIX =====
+window.__DENDER_VERSION__="9.4";
+
+const PLAYER94={
+  id:"quaternius-human-cc0",
+  url:"https://cdn.jsdelivr.net/gh/UMRAM-Bilkent/supine-human-model@728f23ab5eb9d6cb2c8fb39acb3440bd81db0d3e/assets/human.glb",
+  installed:false,
+  visual:null,
+  mixer:null,
+  actions:{},
+  active:null,
+  animations:0,
+  spawnOriented:false
+};
+
+function clip94(anims,re,fallback){
+  return anims.find(a=>re.test(a.name||""))||anims[fallback]||anims[0]||null;
+}
+function action94(name,clip){
+  if(!clip)return null;
+  const a=PLAYER94.mixer.clipAction(clip);a.enabled=true;a.setLoop(THREE.LoopRepeat);PLAYER94.actions[name]=a;return a;
+}
+function switchPlayerAction94(name){
+  const next=PLAYER94.actions[name]||PLAYER94.actions.walk||PLAYER94.actions.idle;
+  if(!next||PLAYER94.active===next)return;
+  next.reset().play();
+  if(PLAYER94.active)PLAYER94.active.crossFadeTo(next,.22,false);
+  PLAYER94.active=next;playerAction07=next;
+}
+
+async function installPlayer94(){
+  if(PLAYER94.installed)return;
+  const gltf=await assetManager06.loadGLB(PLAYER94.id,PLAYER94.url);
+  if(!gltf)return;
+  if(player.userData.productionVisual07){
+    player.remove(player.userData.productionVisual07);
+    player.userData.productionVisual07=null;
+  }
+  if(playerMixer07)playerMixer07.stopAllAction();
+
+  const visual=fitModelHeight07(SkeletonUtils.clone(gltf.scene),1.82);
+  visual.userData.asset07=true;visual.userData.player94=true;
+  visual.rotation.y=0;
+  visual.traverse(o=>{
+    if(o.isMesh){
+      o.castShadow=true;o.receiveShadow=true;
+      if(o.material){
+        o.material=o.material.clone();
+        o.material.roughness=Math.max(.55,o.material.roughness??.7);
+        if("envMapIntensity" in o.material)o.material.envMapIntensity=.85;
+      }
+    }
+  });
+  player.add(visual);hidePrimitiveHuman07(player);
+  player.userData.productionVisual07=visual;
+  PLAYER94.visual=visual;PLAYER94.animations=gltf.animations?.length||0;
+  PLAYER94.mixer=new THREE.AnimationMixer(visual);playerMixer07=PLAYER94.mixer;
+  const anims=gltf.animations||[];
+  action94("idle",clip94(anims,/idle|stand/i,0));
+  action94("walk",clip94(anims,/walk/i,1));
+  action94("run",clip94(anims,/run|jog/i,2));
+  switchPlayerAction94("idle");
+  PLAYER94.installed=true;
+  toast("CC0 humanoid speler geladen");
+}
+
+function closestRoadPose94(pos){
+  let best=null,bd=Infinity;
+  for(const e of localEdges82(pos,180)){
+    if(!e.drive)continue;
+    for(let i=1;i<e.points.length;i++){
+      const a=e.points[i-1],b=e.points[i],vx=b.x-a.x,vz=b.z-a.z,wx=pos.x-a.x,wz=pos.z-a.z;
+      const vv=vx*vx+vz*vz||1,t=THREE.MathUtils.clamp((wx*vx+wz*vz)/vv,0,1);
+      const p=new THREE.Vector3(a.x+t*vx,0,a.z+t*vz),d=p.distanceToSquared(pos);
+      if(d<bd){bd=d;best={p,dir:b.clone().sub(a).setY(0).normalize(),width:e.width||5.6}}
+    }
+  }
+  return best;
+}
+function orientFreshSpawn94(){
+  if(PLAYER94.spawnOriented||!GEO10.active||!SP82.edgeCount)return;
+  PLAYER94.spawnOriented=true;
+  const hadSave=!!localStorage.getItem("denderCountySaveV3")||!!localStorage.getItem("dc20_geo");
+  const pose=closestRoadPose94(player.position);
+  if(!pose)return;
+  if(!hadSave){
+    const side=new THREE.Vector3(pose.dir.z,0,-pose.dir.x);
+    player.position.copy(pose.p).addScaledVector(side,pose.width*.58+1.4);
+    heroCar.position.copy(pose.p).addScaledVector(pose.dir,7).addScaledVector(side,Math.min(1.5,pose.width*.2));
+    heroCar.userData.heading=Math.atan2(pose.dir.x,pose.dir.z);heroCar.rotation.y=heroCar.userData.heading;
+    v02.playerPrev.copy(player.position);v02.carPrev.copy(heroCar.position);
+  }
+  camYaw=Math.atan2(pose.dir.x,pose.dir.z)+Math.PI;
+  camPitch=-.12;
+}
+
+const legacyBalancePopulation94=balancePopulation93;
+balancePopulation93=function(actor){
+  const target=populationTargets93();
+  const activeBase=Math.min(target.cars,GEO10.trafficAgents.length);
+  for(let i=0;i<activeBase;i++){
+    const a=GEO10.trafficAgents[i];
+    if(!a.car.visible||a.car.position.distanceToSquared(actor)>1900*1900){
+      placeTrafficAgent93(a,actor,i*43+MASTER70.frames);
+    }else a.car.visible=true;
+  }
+  legacyBalancePopulation94(actor);
+  for(let i=0;i<Math.min(target.cars,GEO10.trafficAgents.length);i++){
+    const a=GEO10.trafficAgents[i];
+    if(!a.car.visible)placeTrafficAgent93(a,actor,i*47+MASTER70.frames);
+  }
+};
+
+const playerHook94=setInterval(()=>{
+  if(!GEO10.active||!SP82.edgeCount)return;
+  clearInterval(playerHook94);
+  installPlayer94();orientFreshSpawn94();
+},700);
+
+function systems94(now){
+  if(!running||!GEO10.active)return;
+  if(PLAYER94.installed){
+    const moving=!inVehicle&&(keys.KeyW||keys.KeyA||keys.KeyS||keys.KeyD);
+    switchPlayerAction94(moving?(keys.ShiftLeft?"run":"walk"):"idle");
+  }
+  if(!PLAYER94.spawnOriented)orientFreshSpawn94();
+  if(window.__DENDER_HEALTH__){
+    window.__DENDER_HEALTH__.playerAsset=PLAYER94.installed?PLAYER94.id:"loading";
+    window.__DENDER_HEALTH__.playerAnimations=PLAYER94.animations;
+    window.__DENDER_HEALTH__.playerHeightTarget=1.82;
   }
 }

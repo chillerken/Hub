@@ -135,7 +135,7 @@ jobs:
           from pathlib import Path
           root=Path("dender-county-3d")
           m=json.loads((root/"assets-manifest.json").read_text())
-          assert m["gameVersion"]=="9.3"
+          assert m["gameVersion"]=="9.4"
           assert m["runtime"]["three"]=="0.180.0"
           sha=m["runtime"]["khronosSampleAssetsCommit"]
           assert len(sha)==40
@@ -165,6 +165,18 @@ jobs:
           assert meta["feature_count"]>0
           assert all(f.get("properties",{}).get("kind")=="level_crossing" for f in fc["features"])
           print("official Infrabel crossings",meta["feature_count"])
+          PY
+      - name: Validate CC0 humanoid player asset
+        run: |
+          curl -L --fail --retry 2 --max-time 40 \
+            -o /tmp/quaternius-human.glb \
+            https://cdn.jsdelivr.net/gh/UMRAM-Bilkent/supine-human-model@728f23ab5eb9d6cb2c8fb39acb3440bd81db0d3e/assets/human.glb
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/quaternius-human.glb')
+          assert p.read_bytes()[:4]==b'glTF'
+          assert p.stat().st_size>500000
+          print("CC0 humanoid GLB OK",p.stat().st_size)
           PY
       - name: Verify required game files
         run: |
