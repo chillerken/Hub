@@ -40,13 +40,6 @@
       "license": "CC0-1.0",
       "attribution": "Poly Haven",
       "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/brick_wall_07/"
-    },
-    {
-      "id": "polyhaven-covered-car",
-      "kind": "prop",
-      "license": "CC0-1.0",
-      "attribution": "Poly Haven",
-      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/covered_car/covered_car_1k.gltf"
     }
   ],
   "geodata": [

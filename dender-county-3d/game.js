@@ -1232,16 +1232,18 @@ applyPolyHavenPBR08();
 
 async function installCoveredCar08(){
   try{
-    const gltf=await assetManager06.loader.loadAsync(PH08.coveredCar.gltf);
-    const model=gltf.scene;
+    const gltf=await assetManager06.loadGLB(ASSETS06.heroCar.id,ASSETS06.heroCar.url);
+    if(!gltf)throw new Error("parked vehicle asset unavailable");
+    const model=gltf.scene.clone(true);
     model.traverse(o=>{
       if(o.isMesh){
         o.castShadow=true;o.receiveShadow=true;
+        if(o.material)o.material=o.material.clone();
         const mats=Array.isArray(o.material)?o.material:[o.material];
         mats.filter(Boolean).forEach(m=>{if("envMapIntensity" in m)m.envMapIntensity=1.15;});
       }
     });
-    fitModel06(model,4.7);
+    fitModel06(model,4.15);
     model.position.set(68,0,-63);
     model.rotation.y=-Math.PI*.18;
     scene.add(model);
@@ -1252,9 +1254,9 @@ async function installCoveredCar08(){
     second.scale.multiplyScalar(.96);
     scene.add(second);
 
-    toast("Gratis Poly Haven 3D-assets geladen");
+    toast("Gevalideerde CC0 parkeerassets geladen");
   }catch(err){
-    console.warn("Poly Haven covered car fallback",err);
+    console.warn("Parked vehicle fallback",err);
   }
 }
 installCoveredCar08();

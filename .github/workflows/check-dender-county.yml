@@ -181,7 +181,7 @@ jobs:
           PY
       - name: Verify Poly Haven runtime assets
         run: |
-          for url in             https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/asphalt_01/asphalt_01_diff_1k.png             https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/asphalt_01/asphalt_01_nor_gl_1k.png             https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/asphalt_01/asphalt_01_arm_1k.png             https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/brick_wall_07/brick_wall_07_diff_1k.png             https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/covered_car/covered_car_1k.gltf
+          for url in             https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/asphalt_01/asphalt_01_diff_1k.png             https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/asphalt_01/asphalt_01_nor_gl_1k.png             https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/asphalt_01/asphalt_01_arm_1k.png             https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/brick_wall_07/brick_wall_07_diff_1k.png
           do
             curl -L --fail --retry 2 --max-time 30 -o /tmp/ph_asset "$url"
             test -s /tmp/ph_asset
