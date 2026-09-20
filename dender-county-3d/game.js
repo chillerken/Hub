@@ -1524,7 +1524,7 @@ function installGeoHUD09(){
   let credit=document.querySelector("#geoCredit09");
   if(!credit){
     credit=document.createElement("div");credit.id="geoCredit09";
-    credit.textContent="Wegen: © Digitaal Vlaanderen • aanvullingen: © OpenStreetMap contributors (ODbL)";
+    credit.textContent="Wegen & gebouwen: © Digitaal Vlaanderen • spoor, plaatsen, water & groen: © OpenStreetMap contributors (ODbL)";
     credit.style.cssText="position:fixed;left:14px;bottom:8px;z-index:11;font:600 9px system-ui;color:#ccd1d6;background:rgba(8,10,14,.58);padding:4px 7px;border-radius:4px;pointer-events:none";
     document.body.appendChild(credit);
   }

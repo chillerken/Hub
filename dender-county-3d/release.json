@@ -1,0 +1,56 @@
+{
+  "name": "Dender County",
+  "version": "2.0",
+  "build": "integrated-real-erpe-mere",
+  "geography": {
+    "municipality": "Erpe-Mere",
+    "scale": "1m real = 1m game",
+    "official_road_segments": 2698,
+    "named_streets": 274,
+    "villages": [
+      "Aaigem",
+      "Bambrugge",
+      "Burst",
+      "Erondegem",
+      "Erpe",
+      "Mere",
+      "Ottergem",
+      "Vlekkem"
+    ],
+    "stations": [
+      "Burst"
+    ],
+    "official_building_footprints": 21825,
+    "water_polygons": 90,
+    "waterways": 409,
+    "vegetation_zones": 329
+  },
+  "systems": [
+    "official-road-graph-routing",
+    "sector-streaming",
+    "real-building-streaming",
+    "water-and-vegetation-layers",
+    "vehicle-physics",
+    "road-vs-offroad-grip",
+    "wet-weather-handling",
+    "graph-traffic-ai",
+    "graph-pedestrian-ai",
+    "road-routed-police",
+    "wanted-system",
+    "30-real-world-jobs",
+    "route-guidance-minimap",
+    "phone-status-ui",
+    "autosave",
+    "adaptive-quality",
+    "day-night",
+    "dynamic-weather",
+    "GLB-PBR-assets",
+    "mobile-controls"
+  ],
+  "sources": {
+    "roads": "Digitaal Vlaanderen Wegenregister",
+    "buildings": "Digitaal Vlaanderen Gebouwenregister",
+    "supplements": "OpenStreetMap contributors / ODbL",
+    "materials": "Poly Haven / CC0"
+  }
+}
