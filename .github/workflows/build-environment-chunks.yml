@@ -1,0 +1,57 @@
+name: Build regional environment chunks
+
+on:
+  push:
+    branches: [dender-county-3d]
+    paths:
+      - 'dender-county-3d/geodata/erpe_mere_environment.geojson'
+      - 'dender-county-3d/geodata/lede_environment.geojson'
+      - 'dender-county-3d/geodata/aalst_environment.geojson'
+      - 'scripts/build_environment_chunks.py'
+      - '.github/workflows/build-environment-chunks.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: environment-chunks
+  cancel-in-progress: true
+
+jobs:
+  chunks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dender-county-3d
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build chunks
+        run: |
+          python scripts/build_environment_chunks.py erpe_mere
+          python scripts/build_environment_chunks.py lede
+          python scripts/build_environment_chunks.py aalst
+      - name: Validate manifests
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("dender-county-3d/geodata/chunks")
+          for key in ("erpe_mere","lede","aalst"):
+              p=root/key/"manifest.json"
+              if not p.exists():
+                  print("pending",key);continue
+              m=json.loads(p.read_text())
+              assert len(m["chunks"])>5
+              assert sum(c["features"] for c in m["chunks"])>1000
+              print(key,len(m["chunks"]),sum(c["features"] for c in m["chunks"]))
+          PY
+      - name: Commit chunks
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin dender-county-3d
+          git add dender-county-3d/geodata/chunks
+          if git diff --cached --quiet; then echo "No chunk changes"; else git commit -m "Build streamed regional environment chunks"; git push origin HEAD:dender-county-3d; fi
