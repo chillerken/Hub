@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <meta name="theme-color" content="#0a0d12" />
+  <title>Dender County — 3D Vertical Slice</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="loading">
+    <div class="logo">DENDER COUNTY</div>
+    <div class="sub">Oost-Vlaanderen • 3D vertical slice</div>
+    <button id="startBtn">START SPEL</button>
+    <div class="hint">WASD bewegen/rijden • Shift sprint • E instappen/uitstappen • muis = camera • P opslaan</div>
+  </div>
+
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div class="topbar">
+      <div>
+        <div id="district">ERPE-MERE</div>
+        <div id="clock">08:15</div>
+      </div>
+      <div id="wanted">○ ○ ○ ○ ○</div>
+    </div>
+
+    <div id="missionBox">
+      <div class="eyebrow">MISSIE</div>
+      <div id="missionTitle">Vrije rit</div>
+      <div id="missionText">Verken de streek.</div>
+    </div>
+
+    <canvas id="minimap" width="180" height="180"></canvas>
+
+    <div id="speed">0 km/u</div>
+    <div id="prompt"></div>
+    <div id="toast"></div>
+
+    <div id="mobile">
+      <div class="pad">
+        <button data-key="KeyW">▲</button>
+        <div>
+          <button data-key="KeyA">◀</button>
+          <button data-key="KeyS">▼</button>
+          <button data-key="KeyD">▶</button>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="mobileAction">E</button>
+        <button id="mobileSprint">RUN</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>
