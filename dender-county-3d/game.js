@@ -406,6 +406,7 @@ function animate(){
   const actor=inVehicle?heroCar.position:player.position;updateRain(dt,actor);updateMission(dt);updateCamera(dt);updatePrompt();
   document.querySelector("#district").textContent=districtName(actor);
   mapTimer-=dt;if(mapTimer<=0){drawMap();mapTimer=.08}
+  runMasterExtras70(performance.now());
   renderer.render(scene,camera);
 }
 animate();
@@ -599,7 +600,6 @@ function v02MissionCheck(){
 
 let v02Last=performance.now();
 function v02Loop(now){
-  requestAnimationFrame(v02Loop);
   if(!running){v02Last=now;return}
   const dt=Math.min((now-v02Last)/1000,.04);v02Last=now;
   installCollisions();
@@ -609,7 +609,6 @@ function v02Loop(now){
   updateAudio();
   v02MissionCheck();
 }
-requestAnimationFrame(v02Loop);
 
 
 // ===== DENDER COUNTY 0.4 — VISUAL / DRIVING / STREET LIFE UPGRADE =====
@@ -876,7 +875,6 @@ function v04MissionCheck(){
 
 let v04Prev=performance.now();
 function v04Loop04(now){
-  requestAnimationFrame(v04Loop04);
   if(!running){v04Prev=now;return}
   const dt=Math.min((now-v04Prev)/1000,.04);v04Prev=now;
   const elapsed=now/1000;
@@ -885,7 +883,6 @@ function v04Loop04(now){
   if(police.visible){police.userData.speed=12+wanted*2;animateCar04(police,dt,0,false)}
   v04MissionCheck();
 }
-requestAnimationFrame(v04Loop04);
 
 
 document.querySelector("#mobileBrake")?.addEventListener("touchstart",e=>{e.preventDefault();keys.Space=true},{passive:false});
@@ -997,14 +994,12 @@ function updateWetRoad05(){
 
 let v05Last=performance.now();
 function v05Loop(now){
-  requestAnimationFrame(v05Loop);
   if(!running){v05Last=now;return}
   const dt=Math.min((now-v05Last)/1000,.04);v05Last=now;
   v04.rainIntensity=.58+.28*(Math.sin(now/26000)*.5+.5);
   rain.material.opacity=.32+.48*v04.rainIntensity;
   updateWetRoad05();
 }
-requestAnimationFrame(v05Loop);
 
 
 // ===== DENDER COUNTY 0.6 — PRODUCTION GLB ASSET PIPELINE =====
@@ -1167,7 +1162,6 @@ installPlayerAsset07();
 
 let v07Prev=performance.now();
 function v07Loop(now){
-  requestAnimationFrame(v07Loop);
   const dt=Math.min((now-v07Prev)/1000,.04);v07Prev=now;
   if(!running)return;
   if(playerMixer07){
@@ -1176,7 +1170,6 @@ function v07Loop(now){
     playerMixer07.update(dt);
   }
 }
-requestAnimationFrame(v07Loop);
 
 
 // ===== DENDER COUNTY 0.8 — FREE POLY HAVEN PBR / MODEL PIPELINE =====
@@ -1566,7 +1559,6 @@ activateRealBurst09();
 
 let geoLoopPrev09=performance.now();
 function geoLoop09(now){
-  requestAnimationFrame(geoLoop09);
   if(!running||!GEO09.active)return;
   if(now-GEO09.lastStreetCheck>300){
     GEO09.lastStreetCheck=now;
@@ -1577,7 +1569,6 @@ function geoLoop09(now){
     if(el)el.textContent=GEO09.currentStreet||"Onbenoemde/openbare weg";
   }
 }
-requestAnimationFrame(geoLoop09);
 
 
 // ===== DENDER COUNTY 1.0 — FULL ERPE-MERE / OFFICIAL ROUTING GRAPH =====
@@ -1884,7 +1875,6 @@ async function activateErpeMere10(){
 setTimeout(activateErpeMere10,250);
 
 function geoLoop10(now){
-  requestAnimationFrame(geoLoop10);
   if(!running||!GEO10.active)return;
   const actor=inVehicle?heroCar.position:player.position;
   if(now-GEO10.lastStream>450){GEO10.lastStream=now;stream10(actor);sun.position.set(actor.x+80,120,actor.z+30)}
@@ -1893,7 +1883,6 @@ function geoLoop10(now){
     if(el)el.textContent=n.dist<55&&n.name?n.name:"Onbenoemde/openbare weg";
   }
 }
-requestAnimationFrame(geoLoop10);
 
 
 // ===== DENDER COUNTY 2.0 — INTEGRATED WORLD BUILD =====
@@ -2214,7 +2203,6 @@ const integrateWait20=setInterval(()=>{
 
 let last20=performance.now();
 function megaLoop20(now){
-  requestAnimationFrame(megaLoop20);
   const dt=Math.min((now-last20)/1000,.04);last20=now;
   if(!running)return;
   if(GEO10.active){
@@ -2224,7 +2212,6 @@ function megaLoop20(now){
     if(GAME20.phoneOpen)updatePhone20();
   }
 }
-requestAnimationFrame(megaLoop20);
 
 
 // ===== DENDER COUNTY 2.0 — RELEASE NAVIGATION / TRAFFIC / SURFACE POLISH =====
@@ -2335,12 +2322,10 @@ const releaseWait20=setInterval(()=>{
 
 let releaseLast20=performance.now();
 function releaseLoop20(now){
-  requestAnimationFrame(releaseLoop20);
   if(!running||!GEO10.active){releaseLast20=now;return}
   const dt=Math.min((now-releaseLast20)/1000,.04);releaseLast20=now;
   updateRoadState20(now);updateNavigation20(now);
 }
-requestAnimationFrame(releaseLoop20);
 
 
 // Full-region on-foot controller: never inherit the old Burst-only clamp.
@@ -2547,7 +2532,6 @@ const regionStart30=setInterval(async()=>{
 
 let regLast30=performance.now();
 function regionLoop30(now){
-  requestAnimationFrame(regionLoop30);
   if(!running||!GEO10.active){regLast30=now;return}
   if(now-REG30.lastStream>500){
     REG30.lastStream=now;
@@ -2555,7 +2539,6 @@ function regionLoop30(now){
     if(REG30.loaded.size) addCrossRegionJobs30();
   }
 }
-requestAnimationFrame(regionLoop30);
 
 
 // ===== DENDER COUNTY 3.0 — MULTI-MUNICIPALITY ENVIRONMENT STREAMING =====
@@ -2702,7 +2685,6 @@ const chunkInitPoll31=setInterval(async()=>{
 },1800);
 
 function chunkLoop31(now){
-  requestAnimationFrame(chunkLoop31);
   if(!running||!GEO10.active||!CHUNK31.ready)return;
   if(now-CHUNK31.last<550)return;
   CHUNK31.last=now;
@@ -2710,7 +2692,6 @@ function chunkLoop31(now){
   for(const [key,m] of CHUNK31.manifests)touchNearbyChunks31(key,m,actor);
   pruneVisitedChunks31();
 }
-requestAnimationFrame(chunkLoop31);
 
 // 3.1 loader priority: prefer streamed manifests before legacy whole-file fetches.
 const legacyEnvironmentLoader31=loadEnvironment20;
@@ -3034,7 +3015,6 @@ updateTraffic10=function(dt){
 
 let last40=performance.now();
 function qualityLoop40(now){
-  requestAnimationFrame(qualityLoop40);
   const dt=Math.min((now-last40)/1000,.04);last40=now;
   if(!running||!GEO10.active)return;
   const actor=inVehicle?heroCar.position:player.position;
@@ -3044,7 +3024,6 @@ function qualityLoop40(now){
   if(now-VIS40.treeLast>1700){VIS40.treeLast=now;refreshTrees40(actor)}
   for(const x of VIS40.npcMixers)x.mixer.update(dt*(.85+x.phase*.15));
 }
-requestAnimationFrame(qualityLoop40);
 
 // ===== DENDER COUNTY 5.0 — ROAD RULES / VEHICLE DAMAGE / PREDICTIVE POLICE =====
 window.__DENDER_VERSION__="5.0";
@@ -3445,7 +3424,6 @@ const hook50=setInterval(()=>{
 
 let last50=performance.now();
 function simLoop50(now){
-  requestAnimationFrame(simLoop50);
   const dt=Math.min((now-last50)/1000,.04);last50=now;
   if(!running||!GEO10.active)return;
   const actor=inVehicle?heroCar.position:player.position;
@@ -3456,7 +3434,6 @@ function simLoop50(now){
     x.mixer.timeScale=moving?.92:.08;
   }
 }
-requestAnimationFrame(simLoop50);
 
 // ===== DENDER COUNTY 6.0 — CAMERA COLLISION / GRAPH SIGNALS / INTERIORS =====
 window.__DENDER_VERSION__="6.0";
@@ -3757,11 +3734,32 @@ const hook60=setInterval(()=>{
 
 let last60=performance.now();
 function loop60(now){
-  requestAnimationFrame(loop60);
   const dt=Math.min((now-last60)/1000,.04);last60=now;
   if(!running||!GEO10.active)return;
   const actor=inVehicle?heroCar.position:player.position;
   if(now-SIG60.lastRefresh>1200){SIG60.lastRefresh=now;refreshSignals60(actor)}
   updateSignalVisuals60(now/1000);
 }
-requestAnimationFrame(loop60);
+
+
+// ===== DENDER COUNTY 7.0 — SINGLE MASTER FRAME LOOP =====
+window.__DENDER_VERSION__="7.0";
+const MASTER70={last:performance.now(),frames:0};
+function runMasterExtras70(now){
+  // Deterministic update order; these functions no longer self-schedule.
+  // This replaces 13 independent requestAnimationFrame loops.
+  v02Loop(now);
+  v04Loop04(now);
+  v05Loop(now);
+  v07Loop(now);
+  geoLoop09(now);
+  geoLoop10(now);
+  megaLoop20(now);
+  releaseLoop20(now);
+  regionLoop30(now);
+  chunkLoop31(now);
+  qualityLoop40(now);
+  simLoop50(now);
+  loop60(now);
+  MASTER70.last=now;MASTER70.frames++;
+}
