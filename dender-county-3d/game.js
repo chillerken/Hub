@@ -1577,3 +1577,319 @@ function geoLoop09(now){
   }
 }
 requestAnimationFrame(geoLoop09);
+
+
+// ===== DENDER COUNTY 1.0 — FULL ERPE-MERE / OFFICIAL ROUTING GRAPH =====
+window.__DENDER_VERSION__="1.0";
+const GEO10={
+  active:false,group:new THREE.Group(),origin:null,bbox:null,bounds:null,boundary:null,
+  nodes:new Map(),adj:new Map(),edges:[],driveEdges:[],places:[],station:null,
+  chunks:new Map(),chunkSize:800,lastStream:0,lastStreet:0,lastPoliceRoute:0,
+  trafficAgents:[],policePath:[],policePathIndex:0,missionIndex:0,
+  missionNames:["Burst","Mere","Erpe","Bambrugge","Erondegem","Ottergem","Aaigem","Vlekkem"],
+  missionTargets:[]
+};
+GEO10.group.userData.realGeo09=true;
+GEO10.group.userData.realGeo10=true;
+scene.add(GEO10.group);
+
+function geoToLocal10(coord){
+  const lat=GEO10.origin.lat,mlat=111320,mlon=111320*Math.cos(lat*Math.PI/180);
+  return new THREE.Vector3((coord[0]-GEO10.origin.lon)*mlon,0,-(coord[1]-GEO10.origin.lat)*mlat);
+}
+function localToGeo10(pos){
+  const lat=GEO10.origin.lat,mlat=111320,mlon=111320*Math.cos(lat*Math.PI/180);
+  return [GEO10.origin.lon+pos.x/mlon,GEO10.origin.lat-pos.z/mlat];
+}
+function lines10(g){
+  if(!g)return[];
+  if(g.type==="LineString")return[g.coordinates];
+  if(g.type==="MultiLineString")return g.coordinates;
+  return[];
+}
+function roadWidth10(p){
+  const s=((p.road_class||"")+" "+(p.road_category||"")).toLowerCase();
+  if(s.includes("autosnel"))return 12;
+  if(s.includes("primaire")||s.includes("hoofdweg"))return 9;
+  if(s.includes("secundaire"))return 7.5;
+  if(s.includes("wandel")||s.includes("fietsweg"))return 2.2;
+  if(s.includes("plaatselijke")||s.includes("lokale"))return 5.2;
+  return 5.8;
+}
+function drivable10(p){
+  const s=((p.road_class||"")+" "+(p.access||"")).toLowerCase();
+  if(s.includes("wandel")||s.includes("fietsweg")||s.includes("niet toegankelijk voor andere voertuigen"))return false;
+  return true;
+}
+function ensureNode10(id,pos){
+  if(id==null)return null;
+  const key=String(id);
+  if(!GEO10.nodes.has(key))GEO10.nodes.set(key,{id:key,pos:pos.clone()});
+  if(!GEO10.adj.has(key))GEO10.adj.set(key,[]);
+  return key;
+}
+function pathLength10(points){
+  let n=0;for(let i=1;i<points.length;i++)n+=points[i].distanceTo(points[i-1]);return n;
+}
+function chunkKey10(x,z){
+  return Math.floor(x/GEO10.chunkSize)+":"+Math.floor(z/GEO10.chunkSize);
+}
+function addSegmentToChunk10(seg){
+  const key=chunkKey10((seg.x1+seg.x2)/2,(seg.z1+seg.z2)/2);
+  let c=GEO10.chunks.get(key);
+  if(!c){c={key,group:new THREE.Group(),buckets:new Map(),x:(seg.x1+seg.x2)/2,z:(seg.z1+seg.z2)/2};c.group.userData.realGeo09=true;GEO10.group.add(c.group);GEO10.chunks.set(key,c)}
+  const bucket=seg.width<=2.4?2.2:seg.width<=5.4?5.2:seg.width<=6.3?5.8:seg.width<=8?7.5:12;
+  if(!c.buckets.has(bucket))c.buckets.set(bucket,[]);
+  c.buckets.get(bucket).push(seg);
+}
+function finalizeChunks10(){
+  const yAxis=new THREE.Vector3(0,1,0);
+  for(const c of GEO10.chunks.values()){
+    for(const [width,items] of c.buckets){
+      const geo=new THREE.BoxGeometry(1,1,1);
+      const m=mat.road.clone();
+      if(width<=2.4){m.color.set(0x6d6d68);m.map=null;m.normalMap=null;m.roughnessMap=null;m.metalnessMap=null;m.needsUpdate=true}
+      const inst=new THREE.InstancedMesh(geo,m,items.length);
+      inst.receiveShadow=true;
+      const p=new THREE.Vector3(),q=new THREE.Quaternion(),sc=new THREE.Vector3(),mx=new THREE.Matrix4();
+      items.forEach((s,i)=>{
+        const dx=s.x2-s.x1,dz=s.z2-s.z1,len=Math.hypot(dx,dz);
+        p.set((s.x1+s.x2)/2,.08,(s.z1+s.z2)/2);
+        q.setFromAxisAngle(yAxis,Math.atan2(dx,dz));
+        sc.set(s.width,.12,len+.25);mx.compose(p,q,sc);inst.setMatrixAt(i,mx);
+      });
+      inst.instanceMatrix.needsUpdate=true;c.group.add(inst);
+    }
+  }
+}
+function buildGraph10(fc){
+  for(const ft of fc.features||[]){
+    const p=ft.properties||{};
+    if(p.kind==="place"&&ft.geometry?.type==="Point"){
+      GEO10.places.push({name:p.name||"Plaats",pos:geoToLocal10(ft.geometry.coordinates)});
+      continue;
+    }
+    if(p.kind==="station"&&ft.geometry?.type==="Point"){
+      const pt=geoToLocal10(ft.geometry.coordinates);
+      if((p.name||"").toLowerCase().includes("burst"))GEO10.station=pt;
+      continue;
+    }
+    if(p.kind==="railway"){
+      for(const line of lines10(ft.geometry)){
+        for(let i=1;i<line.length;i++){
+          const a=geoToLocal10(line[i-1]),b=geoToLocal10(line[i]);
+          const rail=meshBox(1.6,.12,a.distanceTo(b),new THREE.MeshStandardMaterial({color:0x3d3d3d,metalness:.5,roughness:.55}),0,.1,0);
+          rail.position.set((a.x+b.x)/2,.09,(a.z+b.z)/2);rail.rotation.y=Math.atan2(b.x-a.x,b.z-a.z);
+          rail.userData.realGeo09=true;GEO10.group.add(rail);
+        }
+      }continue;
+    }
+    if(p.kind!=="road")continue;
+    for(const line of lines10(ft.geometry)){
+      if(line.length<2)continue;
+      const pts=line.map(geoToLocal10);
+      const aKey=ensureNode10(p.begin_node,pts[0]);
+      const bKey=ensureNode10(p.end_node,pts[pts.length-1]);
+      const edge={a:aKey,b:bKey,points:pts,name:p.name||"",props:p,width:roadWidth10(p),drive:drivable10(p),length:pathLength10(pts)};
+      GEO10.edges.push(edge);if(edge.drive)GEO10.driveEdges.push(edge);
+      if(aKey&&bKey){
+        GEO10.adj.get(aKey).push({to:bKey,edge,points:pts});
+        GEO10.adj.get(bKey).push({to:aKey,edge,points:[...pts].reverse()});
+      }
+      for(let i=1;i<pts.length;i++)addSegmentToChunk10({x1:pts[i-1].x,z1:pts[i-1].z,x2:pts[i].x,z2:pts[i].z,width:edge.width,name:edge.name,edge});
+    }
+  }
+  finalizeChunks10();
+}
+function setupBounds10(){
+  const west=geoToLocal10([GEO10.bbox.west,GEO10.origin.lat]).x,east=geoToLocal10([GEO10.bbox.east,GEO10.origin.lat]).x;
+  const north=geoToLocal10([GEO10.origin.lon,GEO10.bbox.north]).z,south=geoToLocal10([GEO10.origin.lon,GEO10.bbox.south]).z;
+  GEO10.bounds={minX:Math.min(west,east),maxX:Math.max(west,east),minZ:Math.min(north,south),maxZ:Math.max(north,south)};
+  const w=GEO10.bounds.maxX-GEO10.bounds.minX+500,h=GEO10.bounds.maxZ-GEO10.bounds.minZ+500;
+  const g=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat.grass.clone());g.rotation.x=-Math.PI/2;g.position.y=-.03;g.receiveShadow=true;g.userData.realGeo09=true;GEO10.group.add(g);
+}
+function nearestNode10(pos,driveOnly=false){
+  let best=null,bd=Infinity;
+  const source=driveOnly?GEO10.driveEdges:GEO10.edges;
+  const seen=new Set();
+  for(const e of source){
+    for(const id of [e.a,e.b]){
+      if(!id||seen.has(id))continue;seen.add(id);
+      const n=GEO10.nodes.get(id);if(!n)continue;
+      const d=n.pos.distanceToSquared(pos);if(d<bd){bd=d;best=id}
+    }
+  }
+  return best;
+}
+function nearestStreet10(pos){
+  let best="",bd=Infinity;
+  for(const e of GEO10.edges){
+    if(!e.name)continue;
+    for(let i=1;i<e.points.length;i++){
+      const s={x1:e.points[i-1].x,z1:e.points[i-1].z,x2:e.points[i].x,z2:e.points[i].z};
+      const d=pointSegDistSq09(pos.x,pos.z,s);if(d<bd){bd=d;best=e.name}
+    }
+  }
+  return{name:best,dist:Math.sqrt(bd)};
+}
+function nearestPlace10(pos){
+  let best=null,bd=Infinity;
+  for(const p of GEO10.places){const d=p.pos.distanceToSquared(pos);if(d<bd){bd=d;best=p}}
+  return best;
+}
+function stream10(actor){
+  for(const c of GEO10.chunks.values()){
+    const dx=c.x-actor.x,dz=c.z-actor.z;
+    c.group.visible=(dx*dx+dz*dz)<2600*2600;
+  }
+}
+function chooseNext10(nodeId,prevId=null){
+  const opts=(GEO10.adj.get(nodeId)||[]).filter(x=>x.edge.drive&&x.to!==prevId);
+  if(!opts.length)return (GEO10.adj.get(nodeId)||[]).find(x=>x.edge.drive)||null;
+  return opts[Math.floor(rnd()*opts.length)];
+}
+function setupTraffic10(){
+  GEO10.trafficAgents.length=0;
+  const usable=GEO10.driveEdges.filter(e=>e.a&&e.b&&e.length>15);
+  traffic.forEach((car,i)=>{
+    if(i>=14){car.visible=false;return}
+    const e=usable[Math.floor((i/14)*usable.length)%usable.length]||usable[i%usable.length];
+    if(!e)return;
+    car.visible=true;const start=i%2?e.a:e.b,end=i%2?e.b:e.a;
+    const entry=(GEO10.adj.get(start)||[]).find(x=>x.to===end&&x.edge===e);
+    if(!entry)return;
+    car.position.copy(entry.points[0]);car.position.y=0;
+    car.userData.speed=7+(i%5)*.8;
+    GEO10.trafficAgents.push({car,node:start,prev:null,next:end,entry,pts:entry.points,index:1});
+  });
+}
+function updateTraffic10(dt){
+  for(const a of GEO10.trafficAgents){
+    if(!a.pts||a.index>=a.pts.length){
+      const next=chooseNext10(a.next,a.node);
+      if(!next){a.car.userData.speed=0;continue}
+      a.prev=a.node;a.node=a.next;a.next=next.to;a.entry=next;a.pts=next.points;a.index=1;
+    }
+    const target=a.pts[a.index];if(!target)continue;
+    const dir=target.clone().sub(a.car.position);dir.y=0;const dist=dir.length();
+    const speed=a.car.userData.speed||8;
+    if(dist<1.4){a.index++;continue}
+    dir.normalize();a.car.position.addScaledVector(dir,Math.min(dist,speed*dt));
+    a.car.rotation.y=Math.atan2(dir.x,dir.z);animateCar04(a.car,dt,0,false);
+  }
+}
+class MinHeap10{
+  constructor(){this.a=[]}
+  push(x){this.a.push(x);let i=this.a.length-1;while(i){let p=(i-1)>>1;if(this.a[p][0]<=x[0])break;this.a[i]=this.a[p];i=p}this.a[i]=x}
+  pop(){if(!this.a.length)return null;const root=this.a[0],last=this.a.pop();if(this.a.length){let i=0;while(true){let l=i*2+1,r=l+1;if(l>=this.a.length)break;let c=r<this.a.length&&this.a[r][0]<this.a[l][0]?r:l;if(this.a[c][0]>=last[0])break;this.a[i]=this.a[c];i=c}this.a[i]=last}return root}
+  get length(){return this.a.length}
+}
+function route10(start,goal){
+  if(!start||!goal)return[];
+  const pq=new MinHeap10(),dist=new Map([[start,0]]),prev=new Map();pq.push([0,start]);
+  while(pq.length){
+    const [d,u]=pq.pop();if(u===goal)break;if(d!==(dist.get(u)??Infinity))continue;
+    for(const x of GEO10.adj.get(u)||[]){if(!x.edge.drive)continue;const nd=d+x.edge.length;if(nd<(dist.get(x.to)??Infinity)){dist.set(x.to,nd);prev.set(x.to,u);pq.push([nd,x.to])}}
+  }
+  if(!dist.has(goal))return[];
+  const out=[];let u=goal;while(u){out.push(u);if(u===start)break;u=prev.get(u)}return out.reverse();
+}
+function updatePolice10(dt,elapsed){
+  if(wanted<=0){police.visible=false;blueLight.intensity=redLight.intensity=0;return}
+  police.visible=true;const target=inVehicle?heroCar.position:player.position;
+  if(!police.userData.spawned10){
+    const near=nearestNode10(target,true),n=GEO10.nodes.get(near);
+    police.position.copy(n?n.pos:target).add(new THREE.Vector3(30,0,30));police.userData.spawned10=true;
+  }
+  if(performance.now()-GEO10.lastPoliceRoute>1800||GEO10.policePathIndex>=GEO10.policePath.length){
+    GEO10.lastPoliceRoute=performance.now();
+    const s=nearestNode10(police.position,true),g=nearestNode10(target,true);
+    GEO10.policePath=route10(s,g).map(id=>GEO10.nodes.get(id)?.pos.clone()).filter(Boolean);GEO10.policePathIndex=0;
+  }
+  const p=GEO10.policePath[GEO10.policePathIndex];
+  if(p){
+    tempV.copy(p).sub(police.position);tempV.y=0;
+    if(tempV.length()<2.5)GEO10.policePathIndex++;
+    else{tempV.normalize();police.position.addScaledVector(tempV,(11+wanted*1.7)*dt);police.rotation.y=Math.atan2(tempV.x,tempV.z)}
+  }
+  const flash=Math.sin(elapsed*13)>0;blueLight.intensity=flash?8:0;redLight.intensity=flash?0:8;
+  if(police.position.distanceTo(target)<5){wanted=Math.max(0,wanted-1);toast("Politie heeft contact gemaakt");GEO10.lastPoliceRoute=0}
+  wantedCooldown-=dt;if(wantedCooldown<=0)wanted=Math.max(0,wanted-dt*.045);
+}
+function setupMissions10(){
+  GEO10.missionTargets=GEO10.missionNames.map(n=>{
+    const p=GEO10.places.find(x=>x.name===n);return p?{name:n,pos:p.pos.clone()}:null
+  }).filter(Boolean);GEO10.missionIndex=0;
+}
+function updateMission10(){
+  const t=GEO10.missionTargets[GEO10.missionIndex];
+  const title=document.querySelector("#missionTitle"),txt=document.querySelector("#missionText");
+  if(!t){marker.visible=false;title.textContent="ERPE-MERE ONTGRENDELD";txt.textContent="Vrije verkenning op het officiële wegennet.";return}
+  marker.visible=true;marker.position.set(t.pos.x,.2,t.pos.z);
+  title.textContent="RONDE VAN ERPE-MERE";
+  txt.textContent="Bereik "+t.name+" via het echte wegennet • "+(GEO10.missionIndex+1)+"/"+GEO10.missionTargets.length;
+  const actor=inVehicle?heroCar.position:player.position;
+  if(actor.distanceTo(t.pos)<70){toast(t.name+" bereikt");GEO10.missionIndex++}
+}
+function district10(pos){
+  const p=nearestPlace10(pos);return p?(p.name.toUpperCase()+" • ERPE-MERE"):"ERPE-MERE";
+}
+function drawMap10(){
+  const S=180,actor=inVehicle?heroCar:player,radius=900,sc=S/(radius*2);
+  ctx.clearRect(0,0,S,S);ctx.fillStyle="#111a15";ctx.fillRect(0,0,S,S);ctx.lineCap="round";
+  for(const e of GEO10.edges){
+    for(let i=1;i<e.points.length;i++){
+      const a=e.points[i-1],b=e.points[i];
+      const x1=S/2+(a.x-actor.x)*sc,z1=S/2+(a.z-actor.z)*sc,x2=S/2+(b.x-actor.x)*sc,z2=S/2+(b.z-actor.z)*sc;
+      if((x1<0&&x2<0)||(x1>S&&x2>S)||(z1<0&&z2<0)||(z1>S&&z2>S))continue;
+      ctx.strokeStyle=e.drive?"#5d6467":"#777a72";ctx.lineWidth=Math.max(1,e.width*sc);
+      ctx.beginPath();ctx.moveTo(x1,z1);ctx.lineTo(x2,z2);ctx.stroke();
+    }
+  }
+  const t=GEO10.missionTargets[GEO10.missionIndex];
+  if(t){const x=S/2+(t.pos.x-actor.x)*sc,z=S/2+(t.pos.z-actor.z)*sc;ctx.fillStyle="#ffd36b";ctx.beginPath();ctx.arc(x,z,5,0,Math.PI*2);ctx.fill()}
+  ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(S/2,S/2,4,0,Math.PI*2);ctx.fill();
+}
+function clampActor10(obj){
+  if(!GEO10.bounds)return;
+  obj.position.x=THREE.MathUtils.clamp(obj.position.x,GEO10.bounds.minX,GEO10.bounds.maxX);
+  obj.position.z=THREE.MathUtils.clamp(obj.position.z,GEO10.bounds.minZ,GEO10.bounds.maxZ);
+}
+function movePlayer10(dt){movePlayer09(dt);clampActor10(player)}
+function driveHero10(dt){driveHero09(dt);clampActor10(heroCar)}
+async function activateErpeMere10(){
+  try{
+    const [fc,meta,bounds]=await Promise.all([
+      fetch("./geodata/erpe_mere_runtime.geojson?v=1.0").then(r=>{if(!r.ok)throw new Error("Erpe-Mere runtime "+r.status);return r.json()}),
+      fetch("./geodata/erpe_mere_meta.json?v=1.0").then(r=>r.json()),
+      fetch("./geodata/erpe_mere_boundaries.geojson?v=1.0").then(r=>r.json())
+    ]);
+    GEO10.origin=meta.center_wgs84;GEO10.bbox=meta.bbox_wgs84;GEO10.boundary=bounds;
+    buildGraph10(fc);setupBounds10();setupTraffic10();setupMissions10();
+    GEO09.active=false;GEO09.group.visible=false;GEO10.active=true;
+    scene.fog.density=.00055;camera.far=3200;camera.updateProjectionMatrix();
+    hideLegacyWorld09();GEO10.group.visible=true;
+    const spawn=GEO10.station||GEO10.places.find(p=>p.name==="Burst")?.pos||new THREE.Vector3();
+    player.position.copy(spawn).add(new THREE.Vector3(5,0,5));heroCar.position.copy(spawn).add(new THREE.Vector3(13,0,3));
+    heroCar.userData.speed=0;heroCar.userData.heading=0;heroCar.rotation.y=0;player.visible=!inVehicle;
+    v02.playerPrev.copy(player.position);v02.carPrev.copy(heroCar.position);
+    movePlayer=movePlayer10;driveHero=driveHero10;updateTraffic=updateTraffic10;updatePeds=()=>{};
+    updatePolice=updatePolice10;updateMission=updateMission10;drawMap=drawMap10;districtName=district10;installCollisions=()=>{};
+    mission=1000;wanted=0;police.visible=false;police.userData.spawned10=false;
+    installGeoHUD09();
+    toast("Heel Erpe-Mere geladen • officiële wegen • 1:1");
+  }catch(err){console.error("Erpe-Mere 1.0 activation failed",err);toast("Erpe-Mere kon niet laden — Burst fallback blijft actief")}
+}
+setTimeout(activateErpeMere10,250);
+
+function geoLoop10(now){
+  requestAnimationFrame(geoLoop10);
+  if(!running||!GEO10.active)return;
+  const actor=inVehicle?heroCar.position:player.position;
+  if(now-GEO10.lastStream>450){GEO10.lastStream=now;stream10(actor);sun.position.set(actor.x+80,120,actor.z+30)}
+  if(now-GEO10.lastStreet>320){
+    GEO10.lastStreet=now;const n=nearestStreet10(actor),el=document.querySelector("#streetName09");
+    if(el)el.textContent=n.dist<55&&n.name?n.name:"Onbenoemde/openbare weg";
+  }
+}
+requestAnimationFrame(geoLoop10);
