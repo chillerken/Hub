@@ -44,5 +44,6 @@ jobs:
             echo "No environment changes"
           else
             git commit -m "Import Erpe-Mere buildings water and vegetation"
+            git pull --rebase origin dender-county-3d
             git push origin HEAD:dender-county-3d
           fi
