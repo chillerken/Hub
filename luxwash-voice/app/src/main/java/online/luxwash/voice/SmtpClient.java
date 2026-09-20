@@ -62,7 +62,7 @@ public final class SmtpClient {
             write(out,"MIME-Version: 1.0");
             write(out,"Content-Type: text/plain; charset=UTF-8");
             write(out,"Content-Transfer-Encoding: 8bit");
-            write(out("");
+            write(out,"");
             for(String line:body.replace("\r","").split("\n",-1)) write(out,line.startsWith(".")?"."+line:line);
             write(out,".");
             out.flush();
