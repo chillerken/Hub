@@ -135,7 +135,7 @@ jobs:
           from pathlib import Path
           root=Path("dender-county-3d")
           m=json.loads((root/"assets-manifest.json").read_text())
-          assert m["gameVersion"]=="9.2"
+          assert m["gameVersion"]=="9.3"
           assert m["runtime"]["three"]=="0.180.0"
           sha=m["runtime"]["khronosSampleAssetsCommit"]
           assert len(sha)==40

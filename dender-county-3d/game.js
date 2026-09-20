@@ -3770,6 +3770,7 @@ function runMasterExtras70(now){
   systems90(now);
   systems91(now);
   systems92(now);
+  systems93(now);
   MASTER70.last=now;MASTER70.frames++;
 }
 
@@ -4834,5 +4835,179 @@ function systems92(now){
     window.__DENDER_HEALTH__.officialCrossings=CROSS92.officialCount||0;
     window.__DENDER_HEALTH__.activeCrossings=CROSS92.activeCount;
     window.__DENDER_HEALTH__.saveVersion=SAVE92.version;
+  }
+}
+
+// ===== DENDER COUNTY 9.3 — ADAPTIVE LOCAL POPULATION STREAMING =====
+window.__DENDER_VERSION__="9.3";
+
+const POP93={
+  ready:false,
+  maxCars:30,
+  maxPeds:34,
+  lastBalance:0,
+  lastRelocate:0,
+  carPool:[],
+  extraPeds:[],
+  visualJobs:new Set()
+};
+
+function populationTargets93(){
+  const tier=PERF90.tier;
+  if(tier==="PERFORMANCE")return{cars:14,peds:14};
+  if(tier==="BALANCED")return{cars:22,peds:24};
+  return{cars:30,peds:34};
+}
+
+function edgeMid93(e){
+  const p=e.points[Math.floor(e.points.length/2)]||e.points[0];
+  return p;
+}
+function localSpawnEdges93(actor,forCar=true){
+  return localEdges82(actor,1700).filter(e=>{
+    if(!e.a||!e.b||e.length<20)return false;
+    const p=roadProfile50(e);
+    if(forCar&&(!e.drive||p.bike))return false;
+    const m=edgeMid93(e),d=m.distanceToSquared(actor);
+    return d>90*90&&d<1650*1650;
+  });
+}
+function entryForEdge93(e,reverse=false){
+  const start=reverse?e.b:e.a,end=reverse?e.a:e.b;
+  const entry=(GEO10.adj.get(start)||[]).find(x=>x.to===end&&x.edge===e);
+  return entry?{start,end,entry}:null;
+}
+function placeTrafficAgent93(agent,actor,salt=0){
+  const edges=localSpawnEdges93(actor,true);if(!edges.length)return false;
+  for(let tries=0;tries<12;tries++){
+    const e=edges[Math.abs((salt+tries*37+Math.floor(rnd()*10000)))%edges.length];
+    const info=entryForEdge93(e,(salt+tries)%2===1);if(!info)continue;
+    const pts=info.entry.points;if(!pts?.length)continue;
+    agent.node=info.start;agent.prev=null;agent.next=info.end;agent.entry=info.entry;agent.pts=pts;agent.index=Math.min(1,pts.length-1);
+    agent.car.position.copy(pts[0]);agent.car.position.y=0;
+    agent.car.userData.speed=5.5+(salt%5)*.55;agent.car.visible=true;
+    if(pts.length>1){const d=pts[1].clone().sub(pts[0]);agent.car.rotation.y=Math.atan2(d.x,d.z)}
+    return true;
+  }
+  return false;
+}
+
+async function ensurePooledCarVisual93(car,index){
+  if(car.userData.productionVisual||POP93.visualJobs.has(car))return;
+  POP93.visualJobs.add(car);
+  try{
+    const gltf=await assetManager06.loadGLB(ASSETS06.heroCar.id,ASSETS06.heroCar.url);
+    if(!gltf)return;
+    const visual=fitModel06(gltf.scene.clone(true),4.0+(index%3)*.12);
+    visual.userData.asset06=true;visual.rotation.y=Math.PI;
+    visual.traverse(o=>{
+      if(o.isMesh&&o.material){
+        o.material=o.material.clone();
+        if(o.material.color)o.material.color.offsetHSL((index%9)*.035,0,(index%5-2)*.035);
+      }
+    });
+    car.add(visual);hidePrimitiveCarShell06(car);car.userData.productionVisual=visual;
+  }finally{POP93.visualJobs.delete(car)}
+}
+
+function createPoolCar93(index){
+  const colors=[0x2d5065,0x6b3032,0x474b4e,0x65704d,0xa4a19a,0x39465b,0x765b40,0x6b6b72];
+  const car=createCar(colors[index%colors.length]);car.visible=false;car.userData.pool93=true;
+  scene.add(car);traffic.push(car);POP93.carPool.push(car);return car;
+}
+function acquirePoolCar93(){
+  return POP93.carPool.find(c=>!c.userData.agent93)||createPoolCar93(POP93.carPool.length);
+}
+function addTrafficAgent93(actor,index){
+  const car=acquirePoolCar93();
+  const agent={car,node:null,prev:null,next:null,entry:null,pts:null,index:1,pool93:true};
+  if(!placeTrafficAgent93(agent,actor,index)){car.visible=false;return false}
+  car.userData.agent93=agent;GEO10.trafficAgents.push(agent);
+  if(PERF90.tier!=="PERFORMANCE")ensurePooledCarVisual93(car,index);
+  return true;
+}
+function removeExtraTraffic93(){
+  for(let i=GEO10.trafficAgents.length-1;i>=0;i--){
+    const a=GEO10.trafficAgents[i];if(!a.pool93)continue;
+    GEO10.trafficAgents.splice(i,1);a.car.visible=false;a.car.userData.agent93=null;return true;
+  }
+  return false;
+}
+
+function placePedAgent93(agent,actor,salt=0){
+  const edges=localSpawnEdges93(actor,false);if(!edges.length)return false;
+  for(let tries=0;tries<12;tries++){
+    const e=edges[Math.abs((salt+tries*53+Math.floor(rnd()*10000)))%edges.length];
+    const info=entryForEdge93(e,(salt+tries)%2===0);if(!info)continue;
+    agent.node=info.start;agent.prev=null;agent.next=info.end;agent.pts=info.entry.points;agent.index=Math.min(1,agent.pts.length-1);
+    agent.p.position.copy(agent.pts[0]);agent.p.position.y=0;
+    agent.p.userData.speed=1.05+(salt%5)*.11;return true;
+  }
+  return false;
+}
+function createExtraPed93(index){
+  const colors=[0x355d73,0x75483a,0x466648,0x66506b,0x55606b,0x755f3d];
+  const p=createHuman(colors[index%colors.length]);p.userData.pool93=true;p.visible=false;scene.add(p);pedestrians.push(p);
+  const agent={p,node:null,prev:null,next:null,pts:null,index:1,pool93:true};
+  PED20.agents.push(agent);POP93.extraPeds.push(agent);return agent;
+}
+function ensureMaxPeds93(actor){
+  while(PED20.agents.length<POP93.maxPeds){
+    const a=createExtraPed93(POP93.extraPeds.length);
+    placePedAgent93(a,actor,PED20.agents.length*17);
+  }
+}
+
+function balancePopulation93(actor){
+  const target=populationTargets93();
+  while(GEO10.trafficAgents.length<target.cars)addTrafficAgent93(actor,GEO10.trafficAgents.length*23);
+  while(GEO10.trafficAgents.length>target.cars){
+    if(!removeExtraTraffic93())break;
+  }
+  ensureMaxPeds93(actor);
+  PED20.agents.forEach((a,i)=>{
+    if(i>=target.peds)a.p.visible=false;
+  });
+  if(PERF90.tier!=="PERFORMANCE"){
+    for(const [i,a] of GEO10.trafficAgents.entries()){
+      if(a.pool93&&a.car.visible)ensurePooledCarVisual93(a.car,i);
+    }
+  }
+}
+function relocatePopulation93(actor){
+  GEO10.trafficAgents.forEach((a,i)=>{
+    if(!a.car.visible)return;
+    const d=a.car.position.distanceToSquared(actor);
+    if(d>1900*1900||d<35*35)placeTrafficAgent93(a,actor,i*31+MASTER70.frames);
+  });
+  PED20.agents.forEach((a,i)=>{
+    if(!a.p.visible)return;
+    const d=a.p.position.distanceToSquared(actor);
+    if(d>1450*1450||d<20*20)placePedAgent93(a,actor,i*29+MASTER70.frames);
+  });
+}
+
+const popHook93=setInterval(()=>{
+  if(!GEO10.active||!SP82.edgeCount)return;
+  clearInterval(popHook93);
+  const actor=inVehicle?heroCar.position:player.position;
+  ensureMaxPeds93(actor);balancePopulation93(actor);POP93.ready=true;
+  toast("Adaptieve wereldpopulatie actief");
+},900);
+
+function systems93(now){
+  if(!running||!GEO10.active||!POP93.ready)return;
+  const actor=inVehicle?heroCar.position:player.position;
+  if(now-POP93.lastBalance>2200){POP93.lastBalance=now;balancePopulation93(actor)}
+  if(now-POP93.lastRelocate>4200){POP93.lastRelocate=now;relocatePopulation93(actor)}
+  const target=populationTargets93();
+  PED20.agents.forEach((a,i)=>{if(i>=target.peds)a.p.visible=false});
+  if(window.__DENDER_HEALTH__){
+    window.__DENDER_HEALTH__.populationReady=true;
+    window.__DENDER_HEALTH__.trafficAgents=GEO10.trafficAgents.length;
+    window.__DENDER_HEALTH__.visibleTraffic=GEO10.trafficAgents.filter(a=>a.car.visible).length;
+    window.__DENDER_HEALTH__.pedAgents=PED20.agents.length;
+    window.__DENDER_HEALTH__.visiblePeds=PED20.agents.filter(a=>a.p.visible).length;
+    window.__DENDER_HEALTH__.populationTier=PERF90.tier;
   }
 }

@@ -55,7 +55,7 @@ jobs:
             console.log('EARLY',JSON.stringify(early));
             console.log('EARLY_ERRORS',JSON.stringify(errors.slice(0,12)));
             console.log('FAILED_REQUESTS',JSON.stringify(failed.slice(0,12)));
-            if(early.version!=='9.2')throw new Error('wrong runtime version '+early.version+' | '+errors.slice(0,6).join(' | ')+' | '+failed.slice(0,6).join(' | '));
+            if(early.version!=='9.3')throw new Error('wrong runtime version '+early.version+' | '+errors.slice(0,6).join(' | ')+' | '+failed.slice(0,6).join(' | '));
             await page.waitForFunction(()=>window.__DENDER_HEALTH__?.geoActive===true,{timeout:120000});
             await page.waitForFunction(()=>window.__DENDER_HEALTH__?.saveVersion===3,{timeout:60000});
             await page.waitForFunction(()=>window.__DENDER_HEALTH__?.crossings>0,{timeout:90000});
@@ -89,6 +89,8 @@ jobs:
             if(health.saveVersion!==3)throw new Error('versioned save did not initialize: '+health.saveVersion);
             if(!(health.crossings>0))throw new Error('no exact railway crossings loaded: '+health.crossings);
             if(!(health.officialCrossings>0))throw new Error('official crossing source missing');
+            if(!health.populationReady)throw new Error('adaptive population did not initialize');
+            if(typeof health.visibleTraffic!=='number'||typeof health.visiblePeds!=='number')throw new Error('population health missing');
             if(health.roads<2000)throw new Error('road graph too small: '+health.roads);
             if(health.nodes<500)throw new Error('routing graph too small: '+health.nodes);
             const fatal=errors.filter(e=>!e.includes('favicon')&&!e.includes('ERR_BLOCKED_BY_CLIENT'));
