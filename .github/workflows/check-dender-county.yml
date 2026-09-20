@@ -1,0 +1,27 @@
+name: Check Dender County 3D
+
+on:
+  push:
+    branches: [dender-county-3d]
+    paths:
+      - 'dender-county-3d/**'
+      - '.github/workflows/check-dender-county.yml'
+  workflow_dispatch:
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check JavaScript syntax
+        run: |
+          cp dender-county-3d/game.js /tmp/dender-game.mjs
+          node --check /tmp/dender-game.mjs
+      - name: Verify required game files
+        run: |
+          test -s dender-county-3d/index.html
+          test -s dender-county-3d/style.css
+          test -s dender-county-3d/game.js
