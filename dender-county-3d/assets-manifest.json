@@ -1,6 +1,6 @@
 {
   "schema": "dender-county-assets-v1",
-  "gameVersion": "8.2",
+  "gameVersion": "9.0",
   "runtime": {
     "three": "0.180.0",
     "khronosSampleAssetsCommit": "c6a6bd13ab2b3c685c7903d03561b8a9392f38b8"

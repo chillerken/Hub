@@ -3767,6 +3767,7 @@ function runMasterExtras70(now){
   systems80(now);
   systems81(now);
   systems82(now);
+  systems90(now);
   MASTER70.last=now;MASTER70.frames++;
 }
 
@@ -4471,3 +4472,70 @@ function systems82(now){
   if(!GEO10.active)return;
   if((SP82.edgeCount!==GEO10.edges.length||SP82.nodeCount!==GEO10.nodes.size)&&now-SP82.lastBuild>2500)rebuildSpatial82();
 }
+
+// ===== DENDER COUNTY 9.0 — ADAPTIVE WORLD QUALITY =====
+window.__DENDER_VERSION__="9.0";
+const PERF90={
+  sampleStart:performance.now(),
+  frames:0,
+  fps:60,
+  tier:"QUALITY",
+  lastTierChange:0
+};
+function applyTier90(tier){
+  if(PERF90.tier===tier&&PERF90.lastTierChange)return;
+  PERF90.tier=tier;PERF90.lastTierChange=performance.now();
+  const dpr=Math.max(1,devicePixelRatio||1);
+  if(tier==="PERFORMANCE"){
+    renderer.setPixelRatio(Math.min(dpr,.9));
+    renderer.shadowMap.enabled=false;sun.castShadow=false;
+    ENV20.loadRadius=540;ENV20.unloadRadius=920;CHUNK31.radius=0;
+    TREE40.trunks.visible=false;TREE40.crowns.visible=false;
+    ROAD50.edge.visible=false;ROAD50.junction.visible=true;ROAD50.center.visible=true;ROAD50.bike.visible=true;
+    rain.visible=false;camera.far=2600;
+    LAMP40.groups.forEach((g,i)=>{if(g.userData.light)g.userData.light.visible=i<2});
+  }else if(tier==="BALANCED"){
+    renderer.setPixelRatio(Math.min(dpr,1.15));
+    renderer.shadowMap.enabled=true;sun.castShadow=true;
+    ENV20.loadRadius=720;ENV20.unloadRadius=1250;CHUNK31.radius=1;
+    TREE40.trunks.visible=true;TREE40.crowns.visible=true;
+    ROAD50.edge.visible=true;ROAD50.junction.visible=true;ROAD50.center.visible=true;ROAD50.bike.visible=true;
+    rain.visible=true;camera.far=3400;
+    LAMP40.groups.forEach((g,i)=>{if(g.userData.light)g.userData.light.visible=i<5});
+  }else{
+    renderer.setPixelRatio(Math.min(dpr,1.7));
+    renderer.shadowMap.enabled=true;sun.castShadow=true;
+    ENV20.loadRadius=900;ENV20.unloadRadius=1700;CHUNK31.radius=1;
+    TREE40.trunks.visible=true;TREE40.crowns.visible=true;
+    ROAD50.edge.visible=true;ROAD50.junction.visible=true;ROAD50.center.visible=true;ROAD50.bike.visible=true;
+    rain.visible=true;camera.far=4200;
+    LAMP40.groups.forEach(g=>{if(g.userData.light)g.userData.light.visible=true});
+  }
+  camera.updateProjectionMatrix();
+  GAME20.quality="AUTO "+tier;
+}
+function systems90(now){
+  if(!running)return;
+  PERF90.frames++;
+  const elapsed=now-PERF90.sampleStart;
+  if(elapsed<3000)return;
+  PERF90.fps=PERF90.frames*1000/elapsed;
+  GAME20.fps=PERF90.fps;
+  PERF90.frames=0;PERF90.sampleStart=now;
+  const current=PERF90.tier;
+  let next=current;
+  if(PERF90.fps<24)next="PERFORMANCE";
+  else if(PERF90.fps<46)next="BALANCED";
+  else if(PERF90.fps>54)next="QUALITY";
+  if(next!==current&&now-PERF90.lastTierChange>5000)applyTier90(next);
+  if(window.__DENDER_HEALTH__){
+    window.__DENDER_HEALTH__.fps=Math.round(PERF90.fps);
+    window.__DENDER_HEALTH__.quality=PERF90.tier;
+  }
+}
+const perfHook90=setInterval(()=>{
+  if(!GEO10.active)return;
+  clearInterval(perfHook90);
+  adaptiveQuality20=()=>{};
+  applyTier90("QUALITY");
+},700);
