@@ -57,23 +57,24 @@ def official_buildings(b,boundary):
     cid=None
     for c in collections.get("collections",[]):
         hay=(str(c.get("id",""))+" "+str(c.get("title",""))).lower()
-        if hay.strip()=="gebouw" or " gebouw" in " "+hay:
+        if c.get("title","").lower()=="gebouw" or c.get("id","").lower()=="gebouw":
             cid=c.get("id");break
     if not cid:cid="Gebouw"
-    features=[];offset=0;limit=1000;matched=None
-    while True:
-        params={
-            "bbox":f'{b["west"]},{b["south"]},{b["east"]},{b["north"]}',
-            "bbox-crs":CRS84,"crs":CRS84,"limit":limit,"offset":offset,"f":"json"
-        }
-        url=f"{base}/collections/{urllib.parse.quote(str(cid))}/items?"+urllib.parse.urlencode(params)
+    params={
+        "bbox":f'{b["west"]},{b["south"]},{b["east"]},{b["north"]}',
+        "bbox-crs":CRS84,"crs":CRS84,"limit":1000,"f":"json"
+    }
+    url=f"{base}/collections/{urllib.parse.quote(str(cid))}/items?"+urllib.parse.urlencode(params)
+    features=[];matched=None;page_no=0;seen_urls=set()
+    while url and url not in seen_urls and page_no<100:
+        seen_urls.add(url);page_no+=1
         page=get_json(url,timeout=150)
         items=page.get("features",[])
         if matched is None:matched=page.get("numberMatched")
         if items and not plausible_wgs84(items[0].get("geometry")):
             raise RuntimeError("Gebouwenregister did not return CRS84 coordinates")
         for ft in items:
-            g=ft.get("geometry");p=ft.get("properties",{});fid=ft.get("id") or p.get("objectId") or f"building-{offset}"
+            g=ft.get("geometry");p=ft.get("properties",{});fid=ft.get("id") or p.get("objectId") or f"building-{page_no}"
             if not g:continue
             polys=[]
             if g["type"]=="Polygon":polys=[g["coordinates"]]
@@ -87,19 +88,19 @@ def official_buildings(b,boundary):
                     "type":"Feature","id":f"gebouw/{fid}/{k}",
                     "properties":{
                         "source":"Digitaal Vlaanderen Gebouwenregister",
-                        "source_id":f"gebouw/{fid}/{k}",
-                        "kind":"building",
-                        "building":"official",
+                        "source_id":f"gebouw/{fid}/{k}","kind":"building","building":"official",
                         "height_m":building_height(fid),
                         "status":p.get("gebouwstatus") or p.get("status"),
                     },
                     "geometry":{"type":"Polygon","coordinates":poly}
                 })
-        offset+=len(items)
-        print("official buildings page",offset,"matched",matched,flush=True)
-        if not items or len(items)<limit or (isinstance(matched,int) and offset>=matched):break
-        if offset>50000:break
-    return features,{"endpoint":base,"collection_id":cid,"numberMatched":matched,"municipality_count":len(features)}
+        print("official buildings page",page_no,"returned",len(items),"kept",len(features),"matched",matched,flush=True)
+        nxt=None
+        for link in page.get("links",[]):
+            if link.get("rel")=="next" and link.get("href"):
+                nxt=link["href"];break
+        url=nxt
+    return features,{"endpoint":base,"collection_id":cid,"numberMatched":matched,"municipality_count":len(features),"pages":page_no}
 
 def osm_nature_tile(b,depth=0):
     bbox=f'{b["south"]},{b["west"]},{b["north"]},{b["east"]}'
