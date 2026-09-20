@@ -10,7 +10,7 @@
 <body>
   <div id="loading">
     <div class="logo">DENDER COUNTY</div>
-    <div class="sub">Oost-Vlaanderen • 3D vertical slice v0.5</div>
+    <div class="sub">Oost-Vlaanderen • 3D vertical slice v0.6</div>
     <button id="startBtn">START SPEL</button>
     <div class="hint">WASD bewegen/rijden • Shift sprint • E instappen/uitstappen • Space handrem • C camera • H claxon • Q kwaliteit</div>
   </div>
@@ -54,6 +54,12 @@
     </div>
   </div>
 
-  <script type="module" src="./game.js?v=0.5"></script>
+  <script type="importmap">
+  {"imports":{
+    "three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+  }}
+  </script>
+  <script type="module" src="./game.js?v=0.6"></script>
 </body>
 </html>

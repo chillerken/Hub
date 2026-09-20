@@ -1,4 +1,7 @@
-import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js";
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
 const canvas = document.querySelector("#game");
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:"high-performance"});
@@ -11,6 +14,8 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 
 const scene = new THREE.Scene();
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.background = new THREE.Color(0x91a3ad);
 scene.fog = new THREE.FogExp2(0x8d9aa1, 0.0025);
 
@@ -999,3 +1004,110 @@ function v05Loop(now){
   updateWetRoad05();
 }
 requestAnimationFrame(v05Loop);
+
+
+// ===== DENDER COUNTY 0.6 — PRODUCTION GLB ASSET PIPELINE =====
+window.__DENDER_VERSION__="0.6";
+const assetManager06={
+  loader:null,
+  draco:null,
+  cache:new Map(),
+  status:new Map(),
+  init(){
+    this.draco=new DRACOLoader();
+    this.draco.setDecoderPath("https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/libs/draco/");
+    this.loader=new GLTFLoader();
+    this.loader.setDRACOLoader(this.draco);
+  },
+  async loadGLB(id,url){
+    if(this.cache.has(id))return this.cache.get(id);
+    this.status.set(id,"loading");
+    try{
+      const gltf=await this.loader.loadAsync(url);
+      gltf.scene.traverse(o=>{
+        if(o.isMesh){
+          o.castShadow=true;o.receiveShadow=true;
+          if(o.material){
+            const mats=Array.isArray(o.material)?o.material:[o.material];
+            mats.forEach(m=>{
+              if("envMapIntensity" in m)m.envMapIntensity=1.25;
+              m.needsUpdate=true;
+            });
+          }
+        }
+      });
+      this.cache.set(id,gltf);this.status.set(id,"ready");return gltf;
+    }catch(err){
+      console.warn("Asset load failed",id,err);
+      this.status.set(id,"failed");return null;
+    }
+  }
+};
+assetManager06.init();
+
+const ASSETS06={
+  heroCar:{
+    id:"khronos-toycar-cc0",
+    url:"https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/ToyCar/glTF-Binary/ToyCar.glb",
+    license:"CC0-1.0",
+    credit:"Guido Odendahl / Eric Chadwick, Khronos glTF Sample Assets"
+  }
+};
+
+function fitModel06(model,targetSize=4.35){
+  const box=new THREE.Box3().setFromObject(model);
+  const size=box.getSize(new THREE.Vector3());
+  const max=Math.max(size.x,size.y,size.z)||1;
+  const scale=targetSize/max;
+  model.scale.setScalar(scale);
+  box.setFromObject(model);
+  const center=box.getCenter(new THREE.Vector3());
+  model.position.sub(center);
+  box.setFromObject(model);
+  model.position.y-=box.min.y;
+  return model;
+}
+
+function hidePrimitiveCarShell06(car){
+  for(const ch of car.children){
+    if(!ch.userData.asset06 && ch.isMesh){
+      ch.visible=false;
+    }
+  }
+}
+
+async function installHeroCarAsset06(){
+  const gltf=await assetManager06.loadGLB(ASSETS06.heroCar.id,ASSETS06.heroCar.url);
+  if(!gltf)return;
+  const visual=fitModel06(gltf.scene.clone(true),4.45);
+  visual.userData.asset06=true;
+  visual.rotation.y=Math.PI;
+  heroCar.add(visual);
+  hidePrimitiveCarShell06(heroCar);
+  // Preserve gameplay lights and externally added world helpers.
+  heroCar.userData.productionVisual=visual;
+  toast("HD 3D-voertuig geladen");
+}
+installHeroCarAsset06();
+
+async function installTrafficAssetClones06(){
+  const gltf=await assetManager06.loadGLB(ASSETS06.heroCar.id,ASSETS06.heroCar.url);
+  if(!gltf)return;
+  traffic.slice(0,6).forEach((car,i)=>{
+    const visual=fitModel06(gltf.scene.clone(true),4.15);
+    visual.userData.asset06=true;visual.rotation.y=Math.PI;
+    const tint=[0xffffff,0xc7d4df,0xe3b2a7,0xa8b597,0xb8b8bb,0x9daec4][i];
+    visual.traverse(o=>{
+      if(o.isMesh&&o.material){
+        o.material=o.material.clone();
+        if(o.material.color)o.material.color.multiply(new THREE.Color(tint));
+      }
+    });
+    car.add(visual);hidePrimitiveCarShell06(car);car.userData.productionVisual=visual;
+  });
+}
+installTrafficAssetClones06();
+
+function assetDebug06(){
+  return [...assetManager06.status.entries()].map(([k,v])=>k+":"+v).join(" • ");
+}
