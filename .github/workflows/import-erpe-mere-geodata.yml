@@ -1,0 +1,51 @@
+name: Import Erpe-Mere real-world geodata
+
+on:
+  push:
+    branches: [dender-county-3d]
+    paths:
+      - 'scripts/import_erpe_mere_geodata.py'
+      - '.github/workflows/import-erpe-mere-geodata.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dender-county-3d
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch and normalize full Erpe-Mere geodata
+        run: python scripts/import_erpe_mere_geodata.py
+      - name: Validate Erpe-Mere GeoJSON
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("dender-county-3d/geodata")
+          runtime=json.loads((root/"erpe_mere_runtime.geojson").read_text())
+          meta=json.loads((root/"erpe_mere_meta.json").read_text())
+          boundary=json.loads((root/"erpe_mere_boundaries.geojson").read_text())
+          roads=[f for f in runtime["features"] if f.get("properties",{}).get("kind")=="road"]
+          assert len(roads)>500
+          assert meta["named_street_count"]>80
+          assert "Burst" in meta["places"]
+          assert len(boundary["features"])==1
+          print("roads",len(roads),"named streets",meta["named_street_count"],"places",meta["places"],"stations",meta["stations"])
+          PY
+      - name: Commit Erpe-Mere geodata
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dender-county-3d/geodata
+          if git diff --cached --quiet; then
+            echo "No geodata changes"
+          else
+            git commit -m "Import full real-world Erpe-Mere geodata"
+            git push origin HEAD:dender-county-3d
+          fi
