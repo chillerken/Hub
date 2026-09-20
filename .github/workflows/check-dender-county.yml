@@ -135,6 +135,8 @@ jobs:
           test -s dender-county-3d/game.js
           grep -q 'type="importmap"' dender-county-3d/index.html
           grep -q 'GLTFLoader' dender-county-3d/game.js
+          grep -q 'SkeletonUtils' dender-county-3d/game.js
+          grep -q 'DENDER COUNTY 4.0' dender-county-3d/game.js
       - name: Inspect free Poly Haven manifest
         run: |
           python3 - <<'PY'
@@ -182,4 +184,14 @@ jobs:
           p=Path('/tmp/riggedfigure.glb')
           assert p.read_bytes()[:4] == b'glTF', 'Invalid RiggedFigure GLB magic'
           print('RiggedFigure GLB OK', p.stat().st_size)
+          PY
+          curl -L --fail --retry 2 --max-time 30 \
+            -o /tmp/deliverytruck.glb \
+            https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/CesiumMilkTruck/glTF-Binary/CesiumMilkTruck.glb
+          test -s /tmp/deliverytruck.glb
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/deliverytruck.glb')
+          assert p.read_bytes()[:4] == b'glTF', 'Invalid DeliveryTruck GLB magic'
+          print('DeliveryTruck GLB OK', p.stat().st_size)
           PY
