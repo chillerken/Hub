@@ -53,7 +53,7 @@ def official_roads(b,boundary):
     cid="Wegsegment"
     params={
         "bbox":f'{b["west"]},{b["south"]},{b["east"]},{b["north"]}',
-        "limit":1000,"f":"json"
+        "limit":10000,"f":"json"
     }
     url=f"{base}/collections/{cid}/items?"+urllib.parse.urlencode(params)
     raw=[];page_no=0;seen=set()
