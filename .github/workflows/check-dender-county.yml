@@ -105,6 +105,29 @@ jobs:
               assert b>=min_buildings,(key,b)
               print(key,"buildings",b,"environment",m.get("feature_count"))
           PY
+      - name: Validate 3.1 streamed chunk manifests
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("dender-county-3d/geodata")
+          base=json.loads((root/"erpe_mere_meta.json").read_text())
+          origin=base["center_wgs84"]
+          for key in ("erpe_mere","lede","aalst"):
+              env=root/f"{key}_environment_meta.json"
+              manifest=root/"chunks"/key/"manifest.json"
+              if not env.exists() or not manifest.exists():
+                  raise AssertionError(f"missing streamed environment for {key}")
+              em=json.loads(env.read_text())
+              m=json.loads(manifest.read_text())
+              assert abs(m["origin_wgs84"]["lat"]-origin["lat"])<1e-9
+              assert abs(m["origin_wgs84"]["lon"]-origin["lon"])<1e-9
+              assert m["chunk_size_m"]==750.0
+              total=sum(x["features"] for x in m["chunks"])
+              assert total==em["feature_count"],(key,total,em["feature_count"])
+              assert len(m["chunks"])>10
+              print(key,"chunks",len(m["chunks"]),"features",total)
+          PY
       - name: Verify required game files
         run: |
           test -s dender-county-3d/index.html
