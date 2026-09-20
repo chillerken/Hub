@@ -2363,3 +2363,195 @@ const movementFixWait20=setInterval(()=>{
   clearInterval(movementFixWait20);
   movePlayer=movePlayerRelease20;
 },550);
+
+
+// ===== DENDER COUNTY 3.0 — ERPE-MERE + LEDE + AALST CONTIGUOUS WORLD =====
+window.__DENDER_VERSION__="3.0";
+
+const REG30={
+  loaded:new Set(),
+  chunks:new Map(),
+  seenRoads:new Set(),
+  lastStream:0,
+  retryTimer:null,
+  allReady:false,
+  crossJobsAdded:false,
+  municipalities:["lede","aalst"]
+};
+
+function regChunkKey30(x,z){
+  return Math.floor(x/GEO10.chunkSize)+":"+Math.floor(z/GEO10.chunkSize);
+}
+function addRegSeg30(seg){
+  const key=regChunkKey30((seg.x1+seg.x2)/2,(seg.z1+seg.z2)/2);
+  let c=REG30.chunks.get(key);
+  if(!c){
+    c={key,group:new THREE.Group(),items:[],cx:(seg.x1+seg.x2)/2,cz:(seg.z1+seg.z2)/2,built:false};
+    c.group.userData.realGeo10=true;c.group.userData.region30=true;
+    REG30.chunks.set(key,c);GEO10.group.add(c.group);
+  }
+  c.items.push(seg);
+}
+function buildRegChunk30(c){
+  if(c.built||!c.items.length)return;
+  const yAxis=new THREE.Vector3(0,1,0);
+  const buckets=new Map();
+  for(const s of c.items){
+    const w=s.width<=2.4?2.2:s.width<=5.4?5.2:s.width<=6.3?5.8:s.width<=8?7.5:12;
+    if(!buckets.has(w))buckets.set(w,[]);
+    buckets.get(w).push(s);
+  }
+  for(const [width,items] of buckets){
+    const geo=new THREE.BoxGeometry(1,1,1),m=mat.road.clone();
+    if(width<=2.4){m.map=null;m.normalMap=null;m.roughnessMap=null;m.metalnessMap=null;m.color.set(0x6c6c67);m.needsUpdate=true}
+    const inst=new THREE.InstancedMesh(geo,m,items.length);inst.receiveShadow=true;
+    const p=new THREE.Vector3(),q=new THREE.Quaternion(),sc=new THREE.Vector3(),mx=new THREE.Matrix4();
+    items.forEach((s,i)=>{
+      const dx=s.x2-s.x1,dz=s.z2-s.z1,len=Math.hypot(dx,dz);
+      p.set((s.x1+s.x2)/2,.08,(s.z1+s.z2)/2);
+      q.setFromAxisAngle(yAxis,Math.atan2(dx,dz));
+      sc.set(s.width,.12,len+.25);mx.compose(p,q,sc);inst.setMatrixAt(i,mx);
+    });
+    inst.instanceMatrix.needsUpdate=true;c.group.add(inst);
+  }
+  c.built=true;
+}
+function streamReg30(actor){
+  const show2=2800*2800;
+  for(const c of REG30.chunks.values()){
+    const dx=c.cx-actor.x,dz=c.cz-actor.z,d2=dx*dx+dz*dz;
+    if(d2<show2&&!c.built)buildRegChunk30(c);
+    c.group.visible=d2<show2;
+  }
+}
+function extendBounds30(meta,key){
+  const b=meta.bbox_wgs84;
+  const a=geoToLocal10([b.west,b.south]),c=geoToLocal10([b.east,b.north]);
+  const minX=Math.min(a.x,c.x),maxX=Math.max(a.x,c.x),minZ=Math.min(a.z,c.z),maxZ=Math.max(a.z,c.z);
+  if(!GEO10.bounds)GEO10.bounds={minX,maxX,minZ,maxZ};
+  else{
+    GEO10.bounds.minX=Math.min(GEO10.bounds.minX,minX);GEO10.bounds.maxX=Math.max(GEO10.bounds.maxX,maxX);
+    GEO10.bounds.minZ=Math.min(GEO10.bounds.minZ,minZ);GEO10.bounds.maxZ=Math.max(GEO10.bounds.maxZ,maxZ);
+  }
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(maxX-minX+120,maxZ-minZ+120),mat.grass.clone());
+  ground.rotation.x=-Math.PI/2;ground.position.set((minX+maxX)/2,-.035,(minZ+maxZ)/2);
+  ground.receiveShadow=true;ground.userData.realGeo10=true;ground.userData.region30=true;GEO10.group.add(ground);
+}
+function addRegionGraph30(fc,meta,key){
+  extendBounds30(meta,key);
+  const municipality=meta.municipality||meta.sector||key;
+  for(const ft of fc.features||[]){
+    const p=ft.properties||{};
+    if(p.kind==="place"&&ft.geometry?.type==="Point"){
+      const pos=geoToLocal10(ft.geometry.coordinates);
+      if(!GEO10.places.some(x=>x.name===p.name&&x.municipality===municipality))
+        GEO10.places.push({name:p.name||municipality,pos,municipality});
+      continue;
+    }
+    if(p.kind==="station"&&ft.geometry?.type==="Point"){
+      const pos=geoToLocal10(ft.geometry.coordinates);
+      GEO10.places.push({name:p.name||"Station",pos,municipality,station:true});
+      continue;
+    }
+    if(p.kind==="railway"){
+      for(const line of lines10(ft.geometry)){
+        for(let i=1;i<line.length;i++){
+          const a=geoToLocal10(line[i-1]),b=geoToLocal10(line[i]);
+          const rail=meshBox(1.6,.12,a.distanceTo(b),new THREE.MeshStandardMaterial({color:0x3d3d3d,metalness:.5,roughness:.55}),0,.1,0);
+          rail.position.set((a.x+b.x)/2,.09,(a.z+b.z)/2);rail.rotation.y=Math.atan2(b.x-a.x,b.z-a.z);
+          rail.userData.realGeo10=true;rail.userData.region30=true;GEO10.group.add(rail);
+        }
+      }
+      continue;
+    }
+    if(p.kind!=="road")continue;
+    const sid=p.source_id||ft.id;
+    if(sid&&REG30.seenRoads.has(sid))continue;
+    if(sid)REG30.seenRoads.add(sid);
+    for(const line of lines10(ft.geometry)){
+      if(line.length<2)continue;
+      const pts=line.map(geoToLocal10),aKey=ensureNode10(p.begin_node,pts[0]),bKey=ensureNode10(p.end_node,pts[pts.length-1]);
+      const edge={a:aKey,b:bKey,points:pts,name:p.name||"",props:{...p,municipality},width:roadWidth10(p),drive:drivable10(p),length:pathLength10(pts)};
+      GEO10.edges.push(edge);if(edge.drive)GEO10.driveEdges.push(edge);
+      if(aKey&&bKey){
+        GEO10.adj.get(aKey).push({to:bKey,edge,points:pts});
+        GEO10.adj.get(bKey).push({to:aKey,edge,points:[...pts].reverse()});
+      }
+      for(let i=1;i<pts.length;i++)addRegSeg30({x1:pts[i-1].x,z1:pts[i-1].z,x2:pts[i].x,z2:pts[i].z,width:edge.width,name:edge.name,edge});
+    }
+  }
+}
+async function loadMunicipality30(key){
+  if(REG30.loaded.has(key)||!GEO10.active)return false;
+  try{
+    const [fcR,metaR]=await Promise.all([
+      fetch("./geodata/"+key+"_runtime.geojson?v=3.0"),
+      fetch("./geodata/"+key+"_meta.json?v=3.0")
+    ]);
+    if(!fcR.ok||!metaR.ok)return false;
+    const [fc,meta]=await Promise.all([fcR.json(),metaR.json()]);
+    addRegionGraph30(fc,meta,key);REG30.loaded.add(key);
+    toast((meta.municipality||key)+" toegevoegd aan open wereld");
+    return true;
+  }catch(err){console.warn("region load pending",key,err);return false}
+}
+function addCrossRegionJobs30(){
+  if(REG30.crossJobsAdded||REG30.loaded.size<2||!JOB20.jobs.length)return;
+  REG30.crossJobsAdded=true;
+  const places=GEO10.places.filter(p=>p.municipality&&p.municipality!=="Erpe-Mere");
+  const selected=[];
+  const seen=new Set();
+  for(const p of places){
+    const k=p.municipality+":"+p.name;if(seen.has(k))continue;seen.add(k);selected.push(p);
+    if(selected.length>=10)break;
+  }
+  selected.forEach((p,i)=>JOB20.jobs.push({
+    id:"regional-place-"+i,type:i%3===0?"timed":i%3===1?"delivery":"inspection",
+    name:"Regiorit: "+p.name,target:p.pos.clone(),reward:180+i*20
+  }));
+  const roads=GEO10.driveEdges.filter(e=>e.props?.municipality&&e.props.municipality!=="Erpe-Mere"&&e.name);
+  const roadSeen=new Set();let n=0;
+  for(const e of roads){
+    if(roadSeen.has(e.name))continue;roadSeen.add(e.name);
+    JOB20.jobs.push({id:"regional-road-"+n,type:n%2?"courier":"delivery",name:"Regio-opdracht: "+e.name,target:edgeMid20(e),street:e.name,reward:210+(n%5)*25});
+    if(++n>=10)break;
+  }
+}
+function district30(pos){
+  const p=nearestPlace10(pos);
+  if(!p)return "OOST-VLAANDEREN";
+  return (p.name||"REGIO").toUpperCase()+" • "+(p.municipality||"ERPE-MERE").toUpperCase();
+}
+function updatePhone30(){
+  const p=document.querySelector("#phone20"),s=document.querySelector("#phoneStats20");if(!p||!s)return;
+  p.style.display=GAME20.phoneOpen?"block":"none";if(!GAME20.phoneOpen)return;
+  const actor=inVehicle?heroCar.position:player.position,place=nearestPlace10(actor),street=nearestStreet10(actor);
+  s.innerHTML="<b>Saldo:</b> €"+GAME20.cash+"<br><b>Opdrachten:</b> "+GAME20.completed+"/"+JOB20.jobs.length+
+    "<br><b>Locatie:</b> "+(place?.name||"Oost-Vlaanderen")+"<br><b>Gemeente:</b> "+(place?.municipality||"Erpe-Mere")+
+    "<br><b>Straat:</b> "+(street.name||"—")+"<br><b>Wanted:</b> "+Math.ceil(wanted)+"/5"+
+    "<br><b>FPS:</b> "+Math.round(GAME20.fps)+"<br><b>Kwaliteit:</b> "+GAME20.quality+
+    "<br><b>Wereld:</b> Erpe-Mere"+(REG30.loaded.has("lede")?" + Lede":"")+(REG30.loaded.has("aalst")?" + Aalst":"");
+}
+const regionStart30=setInterval(async()=>{
+  if(!GEO10.active)return;
+  GEO10.places.forEach(p=>{if(!p.municipality)p.municipality="Erpe-Mere"});
+  const results=await Promise.all(REG30.municipalities.map(loadMunicipality30));
+  if(REG30.loaded.size===REG30.municipalities.length){
+    clearInterval(regionStart30);REG30.allReady=true;
+    districtName=district30;updatePhone20=updatePhone30;addCrossRegionJobs30();
+    camera.far=4200;camera.updateProjectionMatrix();
+    toast("REGIOWERELD ACTIEF • ERPE-MERE + LEDE + AALST");
+  }
+},3000);
+
+let regLast30=performance.now();
+function regionLoop30(now){
+  requestAnimationFrame(regionLoop30);
+  if(!running||!GEO10.active){regLast30=now;return}
+  if(now-REG30.lastStream>500){
+    REG30.lastStream=now;
+    const actor=inVehicle?heroCar.position:player.position;streamReg30(actor);
+    if(REG30.loaded.size) addCrossRegionJobs30();
+  }
+}
+requestAnimationFrame(regionLoop30);
