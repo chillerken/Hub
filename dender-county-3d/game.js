@@ -3045,3 +3045,415 @@ function qualityLoop40(now){
   for(const x of VIS40.npcMixers)x.mixer.update(dt*(.85+x.phase*.15));
 }
 requestAnimationFrame(qualityLoop40);
+
+// ===== DENDER COUNTY 5.0 — ROAD RULES / VEHICLE DAMAGE / PREDICTIVE POLICE =====
+window.__DENDER_VERSION__="5.0";
+
+const SIM50={
+  damage:0,
+  steer:0,
+  brakePitch:0,
+  bodyRoll:0,
+  lastSpeed:0,
+  lastCollision:0,
+  roadCache:{edge:null,pos:new THREE.Vector3(1e9,0,1e9)},
+  policeLastKnown:new THREE.Vector3(),
+  policeSearchUntil:0,
+  ui:null
+};
+
+function roadProfile50(e){
+  const s=((e?.props?.road_class||"")+" "+(e?.props?.road_category||"")+" "+(e?.props?.access||"")).toLowerCase();
+  const bike=s.includes("fiets")||s.includes("wandel");
+  const major=s.includes("hoofd")||s.includes("primaire")||s.includes("secundaire")||e?.width>=7.5;
+  const local=!major&&!bike;
+  return{bike,major,local};
+}
+
+const ROAD50={
+  maxCenter:1300,maxEdge:1500,maxBike:900,maxJunction:450,
+  lastActor:new THREE.Vector3(1e9,0,1e9),
+  center:null,edge:null,bike:null,junction:null
+};
+(function initRoadRules50(){
+  const white=new THREE.MeshStandardMaterial({color:0xf4f1e9,roughness:.76});
+  const red=new THREE.MeshStandardMaterial({color:0xa44539,roughness:.9});
+  ROAD50.center=new THREE.InstancedMesh(new THREE.BoxGeometry(.13,.025,2.8),white,ROAD50.maxCenter);
+  ROAD50.edge=new THREE.InstancedMesh(new THREE.BoxGeometry(.11,.025,4.2),white.clone(),ROAD50.maxEdge);
+  ROAD50.bike=new THREE.InstancedMesh(new THREE.BoxGeometry(1.7,.022,4.5),red,ROAD50.maxBike);
+  ROAD50.junction=new THREE.InstancedMesh(new THREE.BoxGeometry(1,.03,.22),white.clone(),ROAD50.maxJunction);
+  for(const m of [ROAD50.center,ROAD50.edge,ROAD50.bike,ROAD50.junction]){
+    m.count=0;m.receiveShadow=true;m.userData.realGeo10=true;GEO10.group.add(m);
+  }
+})();
+
+function composeBox50(mesh,index,pos,ang,sx,sz){
+  const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),ang);
+  const mx=new THREE.Matrix4();
+  mx.compose(new THREE.Vector3(pos.x,.158,pos.z),q,new THREE.Vector3(sx,1,sz));
+  mesh.setMatrixAt(index,mx);
+}
+
+function refreshRoadRules50(actor){
+  if(!GEO10.active||actor.distanceToSquared(ROAD50.lastActor)<110*110)return;
+  ROAD50.lastActor.copy(actor);
+  let nc=0,ne=0,nb=0,nj=0;
+  const radius2=950*950;
+  for(const e of GEO10.edges){
+    const profile=roadProfile50(e);
+    for(let i=1;i<e.points.length;i++){
+      const a=e.points[i-1],b=e.points[i],mid=a.clone().add(b).multiplyScalar(.5);
+      if(mid.distanceToSquared(actor)>radius2)continue;
+      const dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz),ang=Math.atan2(dx,dz);
+      if(profile.bike&&nb<ROAD50.maxBike){
+        const pieces=Math.max(1,Math.ceil(len/6));
+        for(let k=0;k<pieces&&nb<ROAD50.maxBike;k++){
+          const p=a.clone().lerp(b,(k+.5)/pieces);
+          composeBox50(ROAD50.bike,nb++,p,ang,1,Math.min(1.25,len/(pieces*4.5)));
+        }
+        continue;
+      }
+      if(e.width>=5.6&&nc<ROAD50.maxCenter){
+        const dashes=Math.max(1,Math.floor(len/7));
+        for(let k=0;k<dashes&&nc<ROAD50.maxCenter;k+=2){
+          const p=a.clone().lerp(b,(k+.5)/dashes);
+          composeBox50(ROAD50.center,nc++,p,ang,1,1);
+        }
+      }
+      if(profile.major&&ne+2<ROAD50.maxEdge){
+        const pieces=Math.max(1,Math.ceil(len/5));
+        const side=e.width*.43;
+        const nx=Math.cos(ang),nz=-Math.sin(ang);
+        for(let k=0;k<pieces&&ne+2<ROAD50.maxEdge;k++){
+          const p=a.clone().lerp(b,(k+.5)/pieces);
+          composeBox50(ROAD50.edge,ne++,new THREE.Vector3(p.x+nx*side,0,p.z+nz*side),ang,1,1);
+          composeBox50(ROAD50.edge,ne++,new THREE.Vector3(p.x-nx*side,0,p.z-nz*side),ang,1,1);
+        }
+      }
+    }
+    for(const endpoint of [e.a,e.b]){
+      if(!endpoint||nj>=ROAD50.maxJunction)continue;
+      const degree=(GEO10.adj.get(endpoint)||[]).filter(x=>x.edge.drive).length;
+      if(degree<3)continue;
+      const pts=endpoint===e.b?[...e.points].reverse():e.points;
+      if(pts.length<2)continue;
+      const node=pts[0],next=pts[1],dir=next.clone().sub(node).setY(0);
+      const len=dir.length();if(len<1)continue;dir.normalize();
+      const bar=node.clone().addScaledVector(dir,4.2);
+      const ang=Math.atan2(dir.x,dir.z)+Math.PI/2;
+      composeBox50(ROAD50.junction,nj++,bar,ang,Math.max(2.8,e.width*.72),1);
+    }
+  }
+  ROAD50.center.count=nc;ROAD50.edge.count=ne;ROAD50.bike.count=nb;ROAD50.junction.count=nj;
+  ROAD50.center.instanceMatrix.needsUpdate=ROAD50.edge.instanceMatrix.needsUpdate=
+  ROAD50.bike.instanceMatrix.needsUpdate=ROAD50.junction.instanceMatrix.needsUpdate=true;
+}
+
+function nearestDriveEdge50(pos){
+  if(SIM50.roadCache.edge&&pos.distanceToSquared(SIM50.roadCache.pos)<12*12)return SIM50.roadCache.edge;
+  let best=null,bd=Infinity;
+  for(const e of GEO10.driveEdges){
+    for(let i=1;i<e.points.length;i++){
+      const a=e.points[i-1],b=e.points[i];
+      const d=pointSegDistSq09(pos.x,pos.z,{x1:a.x,z1:a.z,x2:b.x,z2:b.z});
+      if(d<bd){bd=d;best=e}
+    }
+  }
+  SIM50.roadCache={edge:best,pos:pos.clone()};return best;
+}
+
+function buildVehicleConditionUI50(){
+  if(document.querySelector("#vehicleCondition50"))return;
+  const el=document.createElement("div");el.id="vehicleCondition50";
+  el.style.cssText="position:fixed;right:14px;top:82px;z-index:12;width:150px;padding:8px 10px;border-radius:8px;background:rgba(8,10,14,.62);color:#fff;font:700 10px system-ui;letter-spacing:.05em;pointer-events:none";
+  el.innerHTML='<div style="display:flex;justify-content:space-between"><span>VOERTUIG</span><span id="damageText50">100%</span></div><div style="height:5px;background:#30343a;border-radius:4px;margin-top:5px;overflow:hidden"><div id="damageBar50" style="height:100%;width:100%;background:#e4ddd0"></div></div>';
+  document.body.appendChild(el);SIM50.ui=el;
+}
+buildVehicleConditionUI50();
+
+function updateVehicleConditionUI50(){
+  const t=document.querySelector("#damageText50"),b=document.querySelector("#damageBar50");
+  if(!t||!b)return;
+  const condition=Math.max(0,Math.round(100-SIM50.damage));
+  t.textContent=condition+"%";b.style.width=condition+"%";
+  b.style.background=condition>65?"#e4ddd0":condition>30?"#d7a64a":"#c84b43";
+  SIM50.ui.style.display=inVehicle?"block":"none";
+}
+
+const SMOKE50={points:null,vel:[],life:[]};
+(function initSmoke50(){
+  const n=34,pos=new Float32Array(n*3);SMOKE50.vel.length=n;SMOKE50.life.length=n;
+  for(let i=0;i<n;i++){SMOKE50.vel[i]=.35+rnd()*.55;SMOKE50.life[i]=rnd()}
+  const g=new THREE.BufferGeometry();g.setAttribute("position",new THREE.BufferAttribute(pos,3));
+  const m=new THREE.PointsMaterial({color:0xb7b8b4,size:.23,transparent:true,opacity:.0,depthWrite:false});
+  SMOKE50.points=new THREE.Points(g,m);SMOKE50.points.visible=false;heroCar.add(SMOKE50.points);
+})();
+function updateSmoke50(dt){
+  const active=SIM50.damage>58&&inVehicle;SMOKE50.points.visible=active;if(!active)return;
+  SMOKE50.points.material.opacity=THREE.MathUtils.clamp((SIM50.damage-55)/45,.08,.58);
+  const a=SMOKE50.points.geometry.attributes.position.array;
+  for(let i=0;i<SMOKE50.life.length;i++){
+    SMOKE50.life[i]+=dt*SMOKE50.vel[i];
+    if(SMOKE50.life[i]>1)SMOKE50.life[i]=0;
+    const t=SMOKE50.life[i],ang=i*2.399;
+    a[i*3]=Math.cos(ang)*(.08+t*.28);a[i*3+1]=1.6+t*2.2;a[i*3+2]=.55+Math.sin(ang)*(.08+t*.25);
+  }
+  SMOKE50.points.geometry.attributes.position.needsUpdate=true;
+}
+
+function applyDamageVisual50(){
+  const visual=heroCar.userData.productionVisual;if(!visual)return;
+  const factor=THREE.MathUtils.clamp(SIM50.damage/100,0,1);
+  visual.traverse(o=>{
+    if(!o.isMesh||!o.material)return;
+    if(!o.userData.damageMat50){
+      o.material=o.material.clone();
+      if(o.material.color)o.userData.originalColor50=o.material.color.clone();
+      o.userData.damageMat50=true;
+    }
+    if(o.material.color&&o.userData.originalColor50){
+      o.material.color.copy(o.userData.originalColor50).lerp(new THREE.Color(0x343331),factor*.42);
+      o.material.roughness=THREE.MathUtils.clamp((o.material.roughness??.5)+factor*.22,0,1);
+    }
+  });
+}
+
+function addDamage50(amount,reason){
+  if(performance.now()-SIM50.lastCollision<400)return;
+  SIM50.lastCollision=performance.now();
+  SIM50.damage=THREE.MathUtils.clamp(SIM50.damage+amount,0,100);
+  applyDamageVisual50();updateVehicleConditionUI50();
+  if(reason)toast(reason+" • voertuig "+Math.round(100-SIM50.damage)+"%");
+}
+
+function driveHero50(dt){
+  const car=heroCar,edge=nearestDriveEdge50(car.position),profile=roadProfile50(edge);
+  const rain=v04.rainIntensity||0,condition=1-SIM50.damage/100;
+  const throttle=keys.KeyW?1:0,reverse=keys.KeyS?1:0,handbrake=keys.Space?1:0;
+  const rawSteer=(keys.KeyA?1:0)-(keys.KeyD?1:0);
+  SIM50.steer=THREE.MathUtils.lerp(SIM50.steer,rawSteer,Math.min(1,dt*6.5));
+  let max=profile.major?32:profile.bike?9:24;
+  max*=THREE.MathUtils.lerp(.72,1,condition);
+  const wetGrip=THREE.MathUtils.lerp(1,.72,rain);
+  const accel=(10.5+4.5*condition)*(1-Math.min(Math.abs(car.userData.speed)/Math.max(max,1),1)*.42);
+  if(throttle)car.userData.speed+=accel*dt;
+  if(reverse){
+    if(car.userData.speed>1)car.userData.speed-=24*dt;
+    else car.userData.speed-=7.5*dt;
+  }
+  if(!throttle&&!reverse)car.userData.speed*=Math.pow(profile.bike?.3:.57,dt);
+  if(handbrake)car.userData.speed*=Math.pow(.06,dt);
+  car.userData.speed=THREE.MathUtils.clamp(car.userData.speed,-8,max);
+  const speed=Math.abs(car.userData.speed);
+  const steerGain=THREE.MathUtils.lerp(1.7,.58,Math.min(speed/32,1))*wetGrip;
+  if(speed>.22)car.userData.heading+=SIM50.steer*dt*(car.userData.speed>=0?1:-1)*steerGain;
+  if(handbrake&&speed>7)car.userData.heading+=SIM50.steer*dt*.9*wetGrip;
+  car.rotation.y=car.userData.heading;
+  car.position.x+=Math.sin(car.userData.heading)*car.userData.speed*dt;
+  car.position.z+=Math.cos(car.userData.heading)*car.userData.speed*dt;
+  clampActor10(car);
+
+  const braking=reverse&&SIM50.lastSpeed>2;
+  SIM50.brakePitch=THREE.MathUtils.lerp(SIM50.brakePitch,braking?.055:throttle?-.025:0,Math.min(1,dt*5));
+  SIM50.bodyRoll=THREE.MathUtils.lerp(SIM50.bodyRoll,-SIM50.steer*Math.min(speed/25,1)*.075,Math.min(1,dt*4));
+  const visual=car.userData.productionVisual;
+  if(visual){
+    visual.position.y=THREE.MathUtils.lerp(visual.position.y,Math.sin(performance.now()*.012)*Math.min(speed/28,.035),Math.min(1,dt*6));
+    visual.rotation.x=SIM50.brakePitch;
+    visual.rotation.z=SIM50.bodyRoll;
+  }
+  SIM50.lastSpeed=speed;
+  animateCar04(car,dt,SIM50.steer,braking||handbrake);
+}
+
+function installCollisions50(){
+  if(!GEO10.active||!ENV20.ready){installCollisions20();return}
+  if(!inVehicle){
+    if(collidesBuildings20(player.position,.55))player.position.copy(v02.playerPrev);
+    else v02.playerPrev.copy(player.position);
+    return;
+  }
+  const speed=Math.abs(heroCar.userData.speed);
+  if(collidesBuildings20(heroCar.position,1.22)){
+    heroCar.position.copy(v02.carPrev);
+    addDamage50(Math.min(24,3+speed*1.15),"Botsing met gebouw");
+    heroCar.userData.speed*=-.16;
+    wanted=Math.min(5,wanted+(speed>8?.6:.15));wantedCooldown=12;
+    return;
+  }
+  for(const a of GEO10.trafficAgents){
+    if(a.car===heroCar)continue;
+    if(heroCar.position.distanceTo(a.car.position)<2.65){
+      addDamage50(Math.min(20,2+speed*.85),"Verkeersbotsing");
+      heroCar.position.copy(v02.carPrev);heroCar.userData.speed*=-.11;
+      wanted=Math.min(5,wanted+.55);wantedCooldown=14;return;
+    }
+  }
+  v02.carPrev.copy(heroCar.position);
+}
+
+function chooseNextVehicle50(agent){
+  const opts=(GEO10.adj.get(agent.next)||[]).filter(x=>x.edge.drive&&x.to!==agent.node);
+  if(!opts.length)return chooseNext10(agent.next,agent.node);
+  let total=0;const weighted=opts.map(x=>{
+    const p=roadProfile50(x.edge);
+    const w=(p.major?2.4:p.bike?.05:1.2)*(x.edge.width>=5.6?1.25:1);
+    total+=w;return{x,w};
+  });
+  let pick=rnd()*total;
+  for(const e of weighted){pick-=e.w;if(pick<=0)return e.x}
+  return weighted[weighted.length-1].x;
+}
+
+function updateTraffic50(dt){
+  for(const a of GEO10.trafficAgents){
+    if(!a.pts||a.index>=a.pts.length){
+      const next=chooseNextVehicle50(a);
+      if(!next){a.car.userData.speed=0;continue}
+      a.prev=a.node;a.node=a.next;a.next=next.to;a.entry=next;a.pts=next.points;a.index=1;
+    }
+    const target=a.pts[a.index];if(!target)continue;
+    const dir=target.clone().sub(a.car.position);dir.y=0;const dist=dir.length();
+    const edge=a.entry?.edge,profile=roadProfile50(edge);
+    let desired=a.car.userData.vehicleClass==="delivery"?6.6:profile.major?10.8:7.8;
+    const remaining=(a.pts.length-a.index);
+    const junctionDegree=(GEO10.adj.get(a.next)||[]).filter(x=>x.edge.drive).length;
+    if(remaining<=1&&junctionDegree>=3)desired=Math.min(desired,3.4);
+    desired*=THREE.MathUtils.lerp(1,.76,v04.rainIntensity||0);
+    for(const b of GEO10.trafficAgents){
+      if(a===b)continue;
+      const d=a.car.position.distanceTo(b.car.position);
+      if(d<9)desired=Math.min(desired,Math.max(0,(d-3.1)*1.05));
+    }
+    for(const ped of PED20.agents){
+      const d=a.car.position.distanceTo(ped.p.position);
+      if(d<5.2)desired=Math.min(desired,Math.max(0,(d-2)*.8));
+    }
+    if(wanted>0&&police.visible&&a.car.position.distanceTo(police.position)<18)desired*=.55;
+    a.car.userData.speed=THREE.MathUtils.lerp(a.car.userData.speed||0,desired,Math.min(1,dt*2.7));
+    if(dist<1.25){a.index++;continue}
+    dir.normalize();a.car.position.addScaledVector(dir,Math.min(dist,a.car.userData.speed*dt));
+    const targetYaw=Math.atan2(dir.x,dir.z);
+    let dy=((targetYaw-a.car.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
+    a.car.rotation.y+=dy*Math.min(1,dt*4.2);
+    animateCar04(a.car,dt,dy,desired<1.5);
+  }
+}
+
+function updatePeds50(dt){
+  for(const a of PED20.agents){
+    a.wait50=Math.max(0,(a.wait50||0)-dt);
+    if(a.wait50>0)continue;
+    if(!a.pts||a.index>=a.pts.length){
+      const n=choosePedEdge20(a.next,a.node);if(!n)continue;
+      const degree=(GEO10.adj.get(a.next)||[]).length;
+      if(degree>=3&&rnd()<.38)a.wait50=.6+rnd()*1.8;
+      a.prev=a.node;a.node=a.next;a.next=n.to;a.pts=n.points;a.index=1;
+    }
+    const t=a.pts[a.index];if(!t)continue;
+    tempV.copy(t).sub(a.p.position);tempV.y=0;
+    if(tempV.length()<.72){a.index++;continue}
+    let slow=1;
+    for(const b of PED20.agents){
+      if(a===b)continue;const d=a.p.position.distanceTo(b.p.position);if(d<1.05)slow=.35;
+    }
+    tempV.normalize();a.p.position.addScaledVector(tempV,a.p.userData.speed*slow*dt);
+    a.p.rotation.y=THREE.MathUtils.lerp(a.p.rotation.y,Math.atan2(tempV.x,tempV.z),Math.min(1,dt*6));
+  }
+}
+
+function routePolice50(start,goal){
+  if(!start||!goal)return[];
+  const pq=new MinHeap10(),dist=new Map([[start,0]]),prev=new Map();pq.push([0,start]);
+  while(pq.length){
+    const [d,u]=pq.pop();if(u===goal)break;if(d!==(dist.get(u)??Infinity))continue;
+    for(const x of GEO10.adj.get(u)||[]){
+      if(!x.edge.drive)continue;
+      const p=roadProfile50(x.edge),factor=p.major?.72:p.bike?2.8:1;
+      const nd=d+x.edge.length*factor;
+      if(nd<(dist.get(x.to)??Infinity)){dist.set(x.to,nd);prev.set(x.to,u);pq.push([nd,x.to])}
+    }
+  }
+  if(!dist.has(goal))return[];
+  const out=[];let u=goal;while(u){out.push(u);if(u===start)break;u=prev.get(u)}return out.reverse();
+}
+
+function predictiveTarget50(){
+  const target=inVehicle?heroCar.position:player.position;
+  const result=target.clone();
+  if(inVehicle){
+    const lead=THREE.MathUtils.clamp(Math.abs(heroCar.userData.speed)*1.4,12,70);
+    result.x+=Math.sin(heroCar.userData.heading)*lead;
+    result.z+=Math.cos(heroCar.userData.heading)*lead;
+  }
+  return result;
+}
+
+function updatePolice50(dt,elapsed){
+  if(wanted<=0){
+    police.visible=false;police.userData.spawned10=false;blueLight.intensity=redLight.intensity=0;SIM50.policeSearchUntil=0;return;
+  }
+  const target=inVehicle?heroCar.position:player.position;
+  SIM50.policeLastKnown.copy(target);
+  police.visible=true;
+  if(!police.userData.spawned10){
+    let best=null,score=Infinity;
+    for(const n of GEO10.nodes.values()){
+      const d=n.pos.distanceTo(target);
+      if(d>180&&d<420&&Math.abs(d-280)<score){score=Math.abs(d-280);best=n}
+    }
+    police.position.copy(best?best.pos:target.clone().add(new THREE.Vector3(220,0,180)));
+    police.userData.spawned10=true;GEO10.lastPoliceRoute=0;
+  }
+  if(performance.now()-GEO10.lastPoliceRoute>1050||GEO10.policePathIndex>=GEO10.policePath.length){
+    GEO10.lastPoliceRoute=performance.now();
+    const intercept=predictiveTarget50();
+    const s=nearestNode10(police.position,true),g=nearestNode10(intercept,true);
+    GEO10.policePath=routePolice50(s,g).map(id=>GEO10.nodes.get(id)?.pos.clone()).filter(Boolean);
+    GEO10.policePathIndex=0;
+  }
+  const p=GEO10.policePath[GEO10.policePathIndex];
+  if(p){
+    tempV.copy(p).sub(police.position);tempV.y=0;
+    if(tempV.length()<2.2)GEO10.policePathIndex++;
+    else{
+      tempV.normalize();
+      const speed=(12.2+wanted*1.45)*THREE.MathUtils.lerp(1,.86,v04.rainIntensity||0);
+      police.position.addScaledVector(tempV,speed*dt);
+      police.rotation.y=THREE.MathUtils.lerp(police.rotation.y,Math.atan2(tempV.x,tempV.z),Math.min(1,dt*5));
+    }
+  }
+  const flash=Math.sin(elapsed*15)>0;blueLight.intensity=flash?8:0;redLight.intensity=flash?0:8;
+  const d=police.position.distanceTo(target);
+  if(d<5){wanted=Math.max(0,wanted-.75);wantedCooldown=8;toast("Politie onderschept voertuig");GEO10.lastPoliceRoute=0}
+  else if(d>650&&wanted<2.1){
+    wantedCooldown-=dt*1.5;
+  }else wantedCooldown-=dt;
+  if(wantedCooldown<=0)wanted=Math.max(0,wanted-dt*.055);
+}
+
+const hook50=setInterval(()=>{
+  if(!GEO10.active)return;
+  clearInterval(hook50);
+  driveHero=driveHero50;
+  updateTraffic=updateTraffic50;
+  updatePeds=updatePeds50;
+  updatePolice=updatePolice50;
+  installCollisions=installCollisions50;
+  toast("5.0 simulatie actief");
+},350);
+
+let last50=performance.now();
+function simLoop50(now){
+  requestAnimationFrame(simLoop50);
+  const dt=Math.min((now-last50)/1000,.04);last50=now;
+  if(!running||!GEO10.active)return;
+  const actor=inVehicle?heroCar.position:player.position;
+  refreshRoadRules50(actor);
+  updateSmoke50(dt);updateVehicleConditionUI50();
+  for(const x of VIS40.npcMixers){
+    const moving=!x.p.wait50;
+    x.mixer.timeScale=moving?.92:.08;
+  }
+}
+requestAnimationFrame(simLoop50);
