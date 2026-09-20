@@ -3764,6 +3764,7 @@ function runMasterExtras70(now){
   systems71(now);
   systems80(now);
   systems81(now);
+  systems82(now);
   MASTER70.last=now;MASTER70.frames++;
 }
 
@@ -4281,3 +4282,190 @@ function runtimeHealth81(now){
   }
 }
 function systems81(now){runtimeHealth81(now)}
+
+// ===== DENDER COUNTY 8.2 — SPATIAL ROAD GRAPH PERFORMANCE =====
+window.__DENDER_VERSION__="8.2";
+const SP82={
+  size:600,
+  edges:new Map(),
+  nodes:new Map(),
+  edgeCount:-1,
+  nodeCount:-1,
+  lastBuild:0
+};
+function spKey82(cx,cz){return cx+":"+cz}
+function spCell82(x,z){return[Math.floor(x/SP82.size),Math.floor(z/SP82.size)]}
+function spPush82(map,key,value){
+  let a=map.get(key);if(!a){a=[];map.set(key,a)}a.push(value);
+}
+function rebuildSpatial82(){
+  SP82.edges.clear();SP82.nodes.clear();
+  for(const e of GEO10.edges){
+    let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+    for(const p of e.points){minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);minZ=Math.min(minZ,p.z);maxZ=Math.max(maxZ,p.z)}
+    const [a,b]=spCell82(minX,minZ),[c,d]=spCell82(maxX,maxZ);
+    for(let x=a;x<=c;x++)for(let z=b;z<=d;z++)spPush82(SP82.edges,spKey82(x,z),e);
+  }
+  for(const [id,n] of GEO10.nodes){
+    const [x,z]=spCell82(n.pos.x,n.pos.z);spPush82(SP82.nodes,spKey82(x,z),n);
+  }
+  SP82.edgeCount=GEO10.edges.length;SP82.nodeCount=GEO10.nodes.size;SP82.lastBuild=performance.now();
+}
+function localEdges82(pos,radius=1000){
+  const [cx,cz]=spCell82(pos.x,pos.z),r=Math.ceil(radius/SP82.size),set=new Set(),out=[];
+  for(let x=cx-r;x<=cx+r;x++)for(let z=cz-r;z<=cz+r;z++){
+    for(const e of SP82.edges.get(spKey82(x,z))||[])if(!set.has(e)){set.add(e);out.push(e)}
+  }
+  return out;
+}
+function localNodes82(pos,radius=1200){
+  const [cx,cz]=spCell82(pos.x,pos.z),r=Math.ceil(radius/SP82.size),set=new Set(),out=[];
+  for(let x=cx-r;x<=cx+r;x++)for(let z=cz-r;z<=cz+r;z++){
+    for(const n of SP82.nodes.get(spKey82(x,z))||[])if(!set.has(n.id)){set.add(n.id);out.push(n)}
+  }
+  return out;
+}
+
+const legacyNearestNode82=nearestNode10;
+nearestNode10=function(pos,driveOnly=false){
+  let best=null,bd=Infinity;
+  const list=localNodes82(pos,1500);
+  for(const n of list){
+    if(driveOnly&&!(GEO10.adj.get(n.id)||[]).some(x=>x.edge.drive))continue;
+    const d=n.pos.distanceToSquared(pos);if(d<bd){bd=d;best=n.id}
+  }
+  return best||legacyNearestNode82(pos,driveOnly);
+};
+
+const legacyNearestStreet82=nearestStreet10;
+nearestStreet10=function(pos){
+  let best="",bd=Infinity;
+  const list=localEdges82(pos,550);
+  for(const e of list){
+    if(!e.name)continue;
+    for(let i=1;i<e.points.length;i++){
+      const a=e.points[i-1],b=e.points[i];
+      const d=pointSegDistSq09(pos.x,pos.z,{x1:a.x,z1:a.z,x2:b.x,z2:b.z});
+      if(d<bd){bd=d;best=e.name}
+    }
+  }
+  return best?{name:best,dist:Math.sqrt(bd)}:legacyNearestStreet82(pos);
+};
+
+NAV80.lastRouteActor82=new THREE.Vector3(1e9,0,1e9);
+NAV80.lastRouteTarget82=new THREE.Vector3(1e9,0,1e9);
+const legacyRefreshRoute82=refreshRoute80;
+refreshRoute80=function(force=false){
+  const target=currentMissionTarget80(),actor=inVehicle?heroCar.position:player.position;
+  if(!target)return legacyRefreshRoute82(force);
+  const sameTarget=NAV80.lastRouteTarget82.distanceToSquared(target)<25;
+  const moved=NAV80.lastRouteActor82.distanceToSquared(actor)>85*85;
+  if(!force&&sameTarget&&!moved&&NAV80.nodePath.length)return;
+  NAV80.lastRouteActor82.copy(actor);NAV80.lastRouteTarget82.copy(target);
+  legacyRefreshRoute82(true);
+};
+
+function drawMap82(){
+  const S=180,actor=inVehicle?heroCar:player,radius=900,sc=S/(radius*2);
+  ctx.clearRect(0,0,S,S);ctx.fillStyle="#111a15";ctx.fillRect(0,0,S,S);ctx.lineCap="round";
+  const edges=localEdges82(actor.position,1050);
+  for(const e of edges){
+    for(let i=1;i<e.points.length;i++){
+      const a=e.points[i-1],b=e.points[i];
+      const x1=S/2+(a.x-actor.position.x)*sc,z1=S/2+(a.z-actor.position.z)*sc;
+      const x2=S/2+(b.x-actor.position.x)*sc,z2=S/2+(b.z-actor.position.z)*sc;
+      if((x1<0&&x2<0)||(x1>S&&x2>S)||(z1<0&&z2<0)||(z1>S&&z2>S))continue;
+      ctx.strokeStyle=e.drive?"#5d6467":"#777a72";ctx.lineWidth=Math.max(1,e.width*sc);
+      ctx.beginPath();ctx.moveTo(x1,z1);ctx.lineTo(x2,z2);ctx.stroke();
+    }
+  }
+  if(NAV80.points.length){
+    ctx.strokeStyle="#57a9ff";ctx.lineWidth=2.4;ctx.globalAlpha=.9;ctx.beginPath();let started=false;
+    for(const p of NAV80.points){
+      const x=S/2+(p.x-actor.position.x)*sc,z=S/2+(p.z-actor.position.z)*sc;
+      if(x<-20||x>S+20||z<-20||z>S+20)continue;
+      if(!started){ctx.moveTo(x,z);started=true}else ctx.lineTo(x,z);
+    }
+    if(started)ctx.stroke();ctx.globalAlpha=1;
+  }
+  const t=currentMissionTarget80();
+  if(t){const x=S/2+(t.x-actor.position.x)*sc,z=S/2+(t.z-actor.position.z)*sc;ctx.fillStyle="#ffd36b";ctx.beginPath();ctx.arc(x,z,5,0,Math.PI*2);ctx.fill()}
+  for(const a of GEO10.trafficAgents){
+    if(a.car.position.distanceToSquared(actor.position)>radius*radius)continue;
+    const x=S/2+(a.car.position.x-actor.position.x)*sc,z=S/2+(a.car.position.z-actor.position.z)*sc;
+    ctx.fillStyle="#9aa6af";ctx.fillRect(x-1.5,z-1.5,3,3);
+  }
+  if(police.visible){
+    const x=S/2+(police.position.x-actor.position.x)*sc,z=S/2+(police.position.z-actor.position.z)*sc;
+    ctx.fillStyle="#3388ff";ctx.beginPath();ctx.arc(x,z,3,0,Math.PI*2);ctx.fill();
+  }
+  ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(S/2,S/2,4,0,Math.PI*2);ctx.fill();
+}
+
+function refreshRoadRules82(actor){
+  if(!GEO10.active||actor.distanceToSquared(ROAD50.lastActor)<110*110)return;
+  ROAD50.lastActor.copy(actor);
+  let nc=0,ne=0,nb=0,nj=0;const edges=localEdges82(actor,1050);
+  for(const e of edges){
+    const profile=roadProfile50(e);
+    for(let i=1;i<e.points.length;i++){
+      const a=e.points[i-1],b=e.points[i],mid=a.clone().add(b).multiplyScalar(.5);
+      if(mid.distanceToSquared(actor)>950*950)continue;
+      const dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz),ang=Math.atan2(dx,dz);
+      if(profile.bike&&nb<ROAD50.maxBike){
+        const pieces=Math.max(1,Math.ceil(len/6));
+        for(let k=0;k<pieces&&nb<ROAD50.maxBike;k++)composeBox50(ROAD50.bike,nb++,a.clone().lerp(b,(k+.5)/pieces),ang,1,Math.min(1.25,len/(pieces*4.5)));
+        continue;
+      }
+      if(e.width>=5.6&&nc<ROAD50.maxCenter){
+        const dashes=Math.max(1,Math.floor(len/7));
+        for(let k=0;k<dashes&&nc<ROAD50.maxCenter;k+=2)composeBox50(ROAD50.center,nc++,a.clone().lerp(b,(k+.5)/dashes),ang,1,1);
+      }
+      if(profile.major&&ne+2<ROAD50.maxEdge){
+        const pieces=Math.max(1,Math.ceil(len/5)),side=e.width*.43,nx=Math.cos(ang),nz=-Math.sin(ang);
+        for(let k=0;k<pieces&&ne+2<ROAD50.maxEdge;k++){
+          const p=a.clone().lerp(b,(k+.5)/pieces);
+          composeBox50(ROAD50.edge,ne++,new THREE.Vector3(p.x+nx*side,0,p.z+nz*side),ang,1,1);
+          composeBox50(ROAD50.edge,ne++,new THREE.Vector3(p.x-nx*side,0,p.z-nz*side),ang,1,1);
+        }
+      }
+    }
+    for(const endpoint of [e.a,e.b]){
+      if(!endpoint||nj>=ROAD50.maxJunction)continue;
+      const degree=(GEO10.adj.get(endpoint)||[]).filter(x=>x.edge.drive).length;if(degree<3)continue;
+      const pts=endpoint===e.b?[...e.points].reverse():e.points;if(pts.length<2)continue;
+      const node=pts[0],next=pts[1],dir=next.clone().sub(node).setY(0);if(dir.length()<1)continue;dir.normalize();
+      const bar=node.clone().addScaledVector(dir,4.2),ang=Math.atan2(dir.x,dir.z)+Math.PI/2;
+      composeBox50(ROAD50.junction,nj++,bar,ang,Math.max(2.8,e.width*.72),1);
+    }
+  }
+  ROAD50.center.count=nc;ROAD50.edge.count=ne;ROAD50.bike.count=nb;ROAD50.junction.count=nj;
+  ROAD50.center.instanceMatrix.needsUpdate=ROAD50.edge.instanceMatrix.needsUpdate=ROAD50.bike.instanceMatrix.needsUpdate=ROAD50.junction.instanceMatrix.needsUpdate=true;
+}
+
+function refreshSignals82(actor){
+  SIG60.nodes.clear();const cand=[];
+  for(const n of localNodes82(actor,1000)){
+    const info=classifySignalNode60(n.id);if(info)cand.push({...info,pos:n.pos});
+  }
+  cand.sort((a,b)=>b.score-a.score);
+  for(let i=0;i<SIG60.pool.length;i++){
+    const g=SIG60.pool[i],c=cand[i];
+    if(!c){g.visible=false;continue}
+    SIG60.nodes.set(c.id,c);g.visible=c.signal;g.position.copy(c.pos);
+    if(c.adj[0]?.points?.length>1){const pts=c.adj[0].points,a=pts[0],b=pts[1];g.rotation.y=Math.atan2(b.x-a.x,b.z-a.z)+Math.PI/2}
+  }
+}
+
+const hook82=setInterval(()=>{
+  if(!GEO10.active)return;
+  clearInterval(hook82);rebuildSpatial82();
+  drawMap=drawMap82;refreshRoadRules50=refreshRoadRules82;refreshSignals60=refreshSignals82;
+  NAV80.drawWrapped=true;
+  toast("8.2 spatial index actief");
+},900);
+
+function systems82(now){
+  if(!GEO10.active)return;
+  if((SP82.edgeCount!==GEO10.edges.length||SP82.nodeCount!==GEO10.nodes.size)&&now-SP82.lastBuild>2500)rebuildSpatial82();
+}
