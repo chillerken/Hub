@@ -1,0 +1,14 @@
+{
+  "source": "Infrabel Open Data",
+  "dataset": "geoow",
+  "dataset_url": "https://opendata.infrabel.be/explore/dataset/geoow/",
+  "api_url": "https://opendata.infrabel.be/api/explore/v2.1/catalog/datasets/geoow/exports/geojson?lang=nl&timezone=Europe%2FBrussels",
+  "attribution": "Infrabel",
+  "feature_count": 55,
+  "bbox_wgs84": {
+    "south": 50.8741244,
+    "north": 50.9948309,
+    "west": 3.867538,
+    "east": 4.1634322
+  }
+}
