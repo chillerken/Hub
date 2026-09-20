@@ -27,6 +27,25 @@ jobs:
           test -s dender-county-3d/game.js
           grep -q 'type="importmap"' dender-county-3d/index.html
           grep -q 'GLTFLoader' dender-county-3d/game.js
+      - name: Inspect free Poly Haven manifest
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request
+          req=urllib.request.Request(
+            "https://api.polyhaven.com/files/covered_car",
+            headers={"User-Agent":"DenderCounty/0.8 (https://dender-county-3d.onrender.com)"}
+          )
+          with urllib.request.urlopen(req, timeout=30) as r:
+            data=json.load(r)
+          def walk(x,path="root"):
+            if isinstance(x,dict):
+              for k,v in x.items(): walk(v,path+"."+k)
+            elif isinstance(x,list):
+              for i,v in enumerate(x): walk(v,path+f"[{i}]")
+            elif isinstance(x,str) and ("gltf" in x.lower() or x.lower().endswith(".glb")):
+              print(path, x)
+          walk(data)
+          PY
       - name: Verify production GLB asset
         run: |
           curl -L --fail --retry 2 --max-time 30 \
