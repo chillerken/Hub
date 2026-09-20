@@ -1,0 +1,29 @@
+{
+  "primary_building_source": "Digitaal Vlaanderen Gebouwenregister",
+  "supplement_source": "OpenStreetMap",
+  "building_source_access": "public OGC API Features",
+  "osm_license": "ODbL",
+  "osm_attribution": "© OpenStreetMap contributors",
+  "official_attribution": "© Digitaal Vlaanderen",
+  "official": {
+    "endpoint": "https://geo.api.vlaanderen.be/Gebouwenregister/ogc/features/v1",
+    "collection_id": "Gebouw",
+    "numberMatched": null,
+    "municipality_count": 21825,
+    "pages": 51
+  },
+  "bbox_wgs84": {
+    "south": 50.8741244,
+    "north": 50.9559796,
+    "west": 3.8927333,
+    "east": 4.0112362
+  },
+  "counts": {
+    "building": 21825,
+    "water": 90,
+    "waterway": 409,
+    "vegetation": 329
+  },
+  "feature_count": 22653,
+  "generated_by": "scripts/import_erpe_mere_environment.py"
+}
