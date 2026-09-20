@@ -128,9 +128,55 @@ def nominatim_boundary(query):
         "geometry": r.get("geojson"),
     }
 
+def geometry_bbox(geom):
+    xs, ys = [], []
+    def walk(c):
+        if isinstance(c, list) and len(c) >= 2 and isinstance(c[0], (int, float)) and isinstance(c[1], (int, float)):
+            xs.append(c[0]); ys.append(c[1])
+        elif isinstance(c, list):
+            for q in c: walk(q)
+    if geom: walk(geom.get("coordinates"))
+    if not xs: return None
+    return min(xs), min(ys), max(xs), max(ys)
+
+def overlaps_sector(geom):
+    bb = geometry_bbox(geom)
+    if not bb: return False
+    minx, miny, maxx, maxy = bb
+    return not (maxx < BBOX["west"] or minx > BBOX["east"] or maxy < BBOX["south"] or miny > BBOX["north"])
+
+def normalize_official_roads(data):
+    out = []
+    for ft in data.get("features", []):
+        if not overlaps_sector(ft.get("geometry")):
+            continue
+        p = ft.get("properties", {})
+        left = (p.get("linkerstraatnaam") or "").strip()
+        right = (p.get("rechterstraatnaam") or "").strip()
+        name = left or right or None
+        out.append({
+            "type": "Feature",
+            "id": f'wegenregister/{p.get("objectId")}',
+            "properties": {
+                "source": "Digitaal Vlaanderen Wegenregister",
+                "source_id": f'wegenregister/{p.get("objectId")}',
+                "kind": "road",
+                "name": name,
+                "left_name": left or None,
+                "right_name": right or None,
+                "status": p.get("wegsegmentstatus"),
+                "road_class": p.get("morfologischeWegklasse"),
+                "road_category": p.get("wegcategorie"),
+                "access": p.get("toegangsbeperking"),
+                "manager": p.get("labelWegbeheerder"),
+            },
+            "geometry": ft.get("geometry"),
+        })
+    return out
+
 def official_wegenregister_probe():
     base = "https://geo.api.vlaanderen.be/Wegenregister/ogc/features/v1"
-    result = {"endpoint": base, "reachable": False, "collection_id": None, "feature_count": 0}
+    result = {"endpoint": base, "reachable": False, "collection_id": None, "feature_count": 0, "sector_feature_count": 0}
     try:
         collections = get_json(base + "/collections?f=json", timeout=45)
         result["reachable"] = True
@@ -150,8 +196,15 @@ def official_wegenregister_probe():
             data = get_json(f"{base}/collections/{urllib.parse.quote(str(cid))}/items?{params}", timeout=90)
             if data.get("type") == "FeatureCollection":
                 result["feature_count"] = len(data.get("features", []))
+                clipped = {
+                    "type": "FeatureCollection",
+                    "name": "Burst - Digitaal Vlaanderen Wegenregister",
+                    "bbox": [BBOX["west"], BBOX["south"], BBOX["east"], BBOX["north"]],
+                    "features": normalize_official_roads(data),
+                }
+                result["sector_feature_count"] = len(clipped["features"])
                 (OUT / "burst_wegenregister.geojson").write_text(
-                    json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+                    json.dumps(clipped, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
                 )
     except Exception as e:
         result["error"] = type(e).__name__ + ": " + str(e)
@@ -178,6 +231,32 @@ def main():
     )
 
     official = official_wegenregister_probe()
+
+    # Runtime layer: official Flemish road geometry first; OSM only for rail/place/station supplements.
+    official_fc = {"type":"FeatureCollection","features":[]}
+    official_path = OUT / "burst_wegenregister.geojson"
+    if official_path.exists():
+        official_fc = json.loads(official_path.read_text(encoding="utf-8"))
+    supplements = [
+        ft for ft in geo["features"]
+        if ft.get("properties", {}).get("kind") in ("railway", "station", "place")
+    ]
+    runtime = {
+        "type": "FeatureCollection",
+        "name": "Burst runtime geography",
+        "bbox": [BBOX["west"], BBOX["south"], BBOX["east"], BBOX["north"]],
+        "features": official_fc.get("features", []) + supplements,
+    }
+    (OUT / "burst_runtime.geojson").write_text(
+        json.dumps(runtime, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+    )
+
+    official_streets = sorted({
+        ft.get("properties", {}).get("name")
+        for ft in official_fc.get("features", [])
+        if ft.get("properties", {}).get("name")
+    })
+
     meta = {
         "sector": "Burst",
         "municipality": "Erpe-Mere",
@@ -185,14 +264,15 @@ def main():
         "center_wgs84": CENTER,
         "bbox_wgs84": BBOX,
         "world_scale": "1 real metre = 1 game metre",
-        "runtime_geometry_source": "OpenStreetMap pilot import",
+        "runtime_geometry_source": "Digitaal Vlaanderen Wegenregister (roads) + OpenStreetMap (rail/station/place supplements)",
         "official_validation_source": "Digitaal Vlaanderen Wegenregister OGC API Features",
         "wegenregister": official,
         "osm_attribution": "© OpenStreetMap contributors, ODbL",
         "official_attribution_note": "Use Digitaal Vlaanderen source attribution rules for official data.",
-        "street_count_named": len(streets),
-        "street_names": streets,
+        "street_count_named": len(official_streets) if official_streets else len(streets),
+        "street_names": official_streets if official_streets else streets,
         "feature_count": len(geo["features"]),
+        "runtime_feature_count": len(runtime["features"]),
         "generated_by": "scripts/import_burst_geodata.py",
     }
     (OUT / "burst_meta.json").write_text(
@@ -200,6 +280,7 @@ def main():
     )
     print(json.dumps({
         "features": meta["feature_count"],
+        "runtime_features": meta["runtime_feature_count"],
         "named_streets": meta["street_count_named"],
         "wegenregister": official,
     }, indent=2))
