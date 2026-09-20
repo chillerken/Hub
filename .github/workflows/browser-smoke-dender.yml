@@ -40,13 +40,22 @@ jobs:
               args:['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist']
             });
             const page=await browser.newPage({viewport:{width:1280,height:720}});
-            const errors=[];
+            const errors=[],failed=[];
             page.on('pageerror',e=>errors.push('pageerror: '+e.message));
             page.on('console',m=>{if(m.type()==='error')errors.push('console: '+m.text())});
+            page.on('requestfailed',r=>failed.push('requestfailed: '+r.url()+' '+(r.failure()?.errorText||'')));
+            page.on('response',r=>{if(r.status()>=400)failed.push('http '+r.status()+': '+r.url())});
             await page.goto('http://127.0.0.1:8080/index.html',{waitUntil:'domcontentloaded',timeout:120000});
             await page.waitForSelector('#startBtn',{timeout:30000});
+            const scriptSrc=await page.evaluate(()=>document.querySelector('script[type="module"][src]')?.src||'');
+            console.log('MODULE_SRC',scriptSrc);
             await page.click('#startBtn');
-            await page.waitForFunction(()=>window.__DENDER_VERSION__==='9.2',{timeout:30000});
+            await page.waitForTimeout(7000);
+            const early=await page.evaluate(()=>({version:window.__DENDER_VERSION__||null,health:window.__DENDER_HEALTH__||null}));
+            console.log('EARLY',JSON.stringify(early));
+            console.log('EARLY_ERRORS',JSON.stringify(errors.slice(0,12)));
+            console.log('FAILED_REQUESTS',JSON.stringify(failed.slice(0,12)));
+            if(early.version!=='9.2')throw new Error('wrong runtime version '+early.version+' | '+errors.slice(0,6).join(' | ')+' | '+failed.slice(0,6).join(' | '));
             await page.waitForFunction(()=>window.__DENDER_HEALTH__?.geoActive===true,{timeout:120000});
             await page.waitForFunction(()=>window.__DENDER_HEALTH__?.saveVersion===3,{timeout:60000});
             await page.waitForFunction(()=>window.__DENDER_HEALTH__?.crossings>0,{timeout:90000});
