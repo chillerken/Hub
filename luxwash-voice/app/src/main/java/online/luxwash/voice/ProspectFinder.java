@@ -10,29 +10,46 @@ import java.util.regex.*;
 import javax.net.ssl.HttpsURLConnection;
 
 public final class ProspectFinder {
-    private static final String OVERPASS = "https://overpass-api.de/api/interpreter";
+    private static final String[] OVERPASS = {
+            "https://overpass.private.coffee/api/interpreter",
+            "https://overpass-api.de/api/interpreter",
+            "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
+    };
     private static final Pattern EMAIL = Pattern.compile("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", Pattern.CASE_INSENSITIVE);
 
     public static List<Prospect> findNew(Context ctx, int max) throws Exception {
-        String q = "[out:json][timeout:25];(" +
-                "nwr[\"name\"][\"shop\"~\"car|car_repair|car_parts\"](around:18000,50.945,3.99);" +
-                "nwr[\"name\"][\"amenity\"=\"taxi\"](around:18000,50.945,3.99);" +
-                "nwr[\"name\"][\"office\"~\"estate_agent|company|logistics\"](around:18000,50.945,3.99);" +
-                "nwr[\"name\"][\"amenity\"~\"restaurant|cafe|clinic\"](around:18000,50.945,3.99);" +
-                ");out center tags 100;";
+        String[] queries = {
+                "[out:json][timeout:18];(" +
+                        "nwr[\"name\"][\"shop\"~\"car|car_repair|car_parts\"](around:14000,50.945,3.99);" +
+                        "nwr[\"name\"][\"amenity\"=\"taxi\"](around:14000,50.945,3.99);" +
+                        "nwr[\"name\"][\"office\"=\"logistics\"](around:14000,50.945,3.99);" +
+                        ");out center tags 60;",
+                "[out:json][timeout:18];(" +
+                        "nwr[\"name\"][\"office\"=\"estate_agent\"](around:14000,50.945,3.99);" +
+                        "nwr[\"name\"][\"office\"=\"company\"](around:14000,50.945,3.99);" +
+                        ");out center tags 60;",
+                "[out:json][timeout:18];(" +
+                        "nwr[\"name\"][\"amenity\"~\"restaurant|cafe|clinic\"](around:12000,50.945,3.99);" +
+                        ");out center tags 60;"
+        };
 
-        String body = "data=" + URLEncoder.encode(q, StandardCharsets.UTF_8.name());
-        HttpsURLConnection c = (HttpsURLConnection) new URL(OVERPASS).openConnection();
-        c.setConnectTimeout(12000); c.setReadTimeout(30000); c.setRequestMethod("POST");
-        c.setRequestProperty("Content-Type","application/x-www-form-urlencoded; charset=UTF-8");
-        c.setRequestProperty("User-Agent","LuxWashVoice/1.0 (+https://www.luxwash.online)");
-        c.setDoOutput(true);
-        try(OutputStream os=c.getOutputStream()) { os.write(body.getBytes(StandardCharsets.UTF_8)); }
-        if (c.getResponseCode() < 200 || c.getResponseCode() >= 300) throw new IOException("Bedrijfszoeker gaf HTTP " + c.getResponseCode());
-
-        String json = readAll(c.getInputStream(), 2_000_000);
-        JSONArray elements = new JSONObject(json).optJSONArray("elements");
-        if (elements == null) return Collections.emptyList();
+        JSONArray elements = new JSONArray();
+        int successfulBatches = 0;
+        Exception lastError = null;
+        for (String q : queries) {
+            try {
+                JSONArray batch = runOverpass(q);
+                successfulBatches++;
+                for (int i = 0; i < batch.length(); i++) elements.put(batch.get(i));
+                if (elements.length() >= Math.max(40, max * 3)) break;
+            } catch (Exception e) {
+                lastError = e;
+            }
+        }
+        if (successfulBatches == 0) {
+            throw new IOException("Alle bedrijfszoekservers zijn tijdelijk onbereikbaar. " +
+                    (lastError == null ? "" : lastError.getMessage()));
+        }
 
         DbHelper db = new DbHelper(ctx);
         List<Prospect> out = new ArrayList<>();
@@ -68,6 +85,39 @@ public final class ProspectFinder {
         return out;
     }
 
+    private static JSONArray runOverpass(String q) throws Exception {
+        Exception last = null;
+        String body = "data=" + URLEncoder.encode(q, StandardCharsets.UTF_8.name());
+        for (String endpoint : OVERPASS) {
+            HttpsURLConnection c = null;
+            try {
+                c = (HttpsURLConnection) new URL(endpoint).openConnection();
+                c.setConnectTimeout(8000);
+                c.setReadTimeout(22000);
+                c.setRequestMethod("POST");
+                c.setRequestProperty("Content-Type","application/x-www-form-urlencoded; charset=UTF-8");
+                c.setRequestProperty("Accept","application/json");
+                c.setRequestProperty("User-Agent","LuxWashVoice/1.3 (+https://www.luxwash.online)");
+                c.setDoOutput(true);
+                try(OutputStream os=c.getOutputStream()) {
+                    os.write(body.getBytes(StandardCharsets.UTF_8));
+                }
+                int code = c.getResponseCode();
+                if (code >= 200 && code < 300) {
+                    String json = readAll(c.getInputStream(), 1_500_000);
+                    JSONArray a = new JSONObject(json).optJSONArray("elements");
+                    return a == null ? new JSONArray() : a;
+                }
+                last = new IOException("HTTP " + code + " via " + new URL(endpoint).getHost());
+            } catch (Exception e) {
+                last = e;
+            } finally {
+                if (c != null) c.disconnect();
+            }
+        }
+        throw last == null ? new IOException("Geen bedrijfszoekserver beschikbaar.") : last;
+    }
+
     private static String sector(JSONObject t) {
         String shop=t.optString("shop","");
         String office=t.optString("office","");
@@ -93,7 +143,7 @@ public final class ProspectFinder {
             String u = rawUrl.startsWith("http://") || rawUrl.startsWith("https://") ? rawUrl : "https://" + rawUrl;
             URL url = new URL(u);
             URLConnection con = url.openConnection();
-            con.setConnectTimeout(6000); con.setReadTimeout(7000);
+            con.setConnectTimeout(4000); con.setReadTimeout(5000);
             con.setRequestProperty("User-Agent","Mozilla/5.0 LuxWashVoice/1.0");
             String html = readAll(con.getInputStream(), 500_000);
             Matcher m = EMAIL.matcher(html);
