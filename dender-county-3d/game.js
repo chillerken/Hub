@@ -3761,5 +3761,277 @@ function runMasterExtras70(now){
   qualityLoop40(now);
   simLoop50(now);
   loop60(now);
+  systems71(now);
   MASTER70.last=now;MASTER70.frames++;
 }
+
+// ===== DENDER COUNTY 7.1 — POLICE SEARCH / ROADBLOCKS / RAIL WORLD EVENT =====
+const SYS71={
+  policeState:"PATROL",
+  lastSeen:new THREE.Vector3(),
+  lastSeenAt:0,
+  searchUntil:0,
+  roadblocks:[],
+  policeHud:null,
+  railLoaded:false,
+  railLoading:false,
+  railPath:null,
+  railCum:null,
+  train:null,
+  trainDistance:0,
+  trainDir:1,
+  trainStop:0,
+  visibilityWasRunning:false
+};
+
+function makePoliceHud71(){
+  if(SYS71.policeHud)return;
+  const el=document.createElement("div");
+  el.id="policeState71";
+  el.style.cssText="position:fixed;left:14px;top:105px;z-index:13;padding:6px 9px;border-radius:6px;background:rgba(7,10,14,.62);color:#dfe8f2;font:800 10px system-ui;letter-spacing:.08em;pointer-events:none;display:none";
+  document.body.appendChild(el);SYS71.policeHud=el;
+}
+makePoliceHud71();
+
+function lineBlocked71(a,b){
+  if(!ENV20.ready)return false;
+  const mid=a.clone().add(b).multiplyScalar(.5);
+  const boxes=[...nearbyCollisionBoxes20(a),...nearbyCollisionBoxes20(mid),...nearbyCollisionBoxes20(b)];
+  const seen=new Set();
+  for(const box of boxes){
+    const key=box.x.toFixed(1)+":"+box.z.toFixed(1)+":"+box.w.toFixed(1)+":"+box.d.toFixed(1);
+    if(seen.has(key))continue;seen.add(key);
+    const t=segmentAabbHit60(a,b,box,.15);
+    if(t!=null&&t>.015&&t<.985)return true;
+  }
+  return false;
+}
+
+function clearRoadblocks71(){
+  for(const rb of SYS71.roadblocks)rb.group.visible=false;
+}
+function ensureRoadblocks71(){
+  if(SYS71.roadblocks.length)return;
+  for(let i=0;i<2;i++){
+    const g=createCar(0x173f68);g.visible=false;g.userData.roadblock71=true;
+    const blue=new THREE.PointLight(0x3388ff,0,10);blue.position.set(-.55,1.9,0);g.add(blue);
+    const red=new THREE.PointLight(0xff3322,0,10);red.position.set(.55,1.9,0);g.add(red);
+    g.userData.blue=blue;g.userData.red=red;scene.add(g);
+    SYS71.roadblocks.push({group:g,node:null});
+  }
+}
+ensureRoadblocks71();
+
+function placeRoadblocks71(target){
+  if(wanted<3){clearRoadblocks71();return}
+  const start=nearestNode10(target,true),lead=predictiveTarget50(),goal=nearestNode10(lead,true);
+  let path=routePolice50(start,goal);
+  if(path.length<7){
+    const far=lead.clone();
+    far.x+=Math.sin(heroCar.userData.heading||0)*180;
+    far.z+=Math.cos(heroCar.userData.heading||0)*180;
+    path=routePolice50(start,nearestNode10(far,true));
+  }
+  const picks=[path[Math.min(path.length-1,3)],path[Math.min(path.length-1,6)]];
+  picks.forEach((id,i)=>{
+    const rb=SYS71.roadblocks[i],node=GEO10.nodes.get(id);
+    if(!node){rb.group.visible=false;return}
+    const adj=(GEO10.adj.get(id)||[]).filter(x=>x.edge.drive);
+    rb.group.visible=true;rb.group.position.copy(node.pos);rb.node=id;
+    if(adj[0]?.points?.length>1){
+      const pts=adj[0].points,a=pts[0],b=pts[1];
+      rb.group.rotation.y=Math.atan2(b.x-a.x,b.z-a.z)+Math.PI/2;
+    }
+  });
+}
+
+function updateRoadblockLights71(elapsed){
+  const flash=Math.sin(elapsed*16)>0;
+  for(const rb of SYS71.roadblocks){
+    if(!rb.group.visible)continue;
+    rb.group.userData.blue.intensity=flash?7:0;
+    rb.group.userData.red.intensity=flash?0:7;
+  }
+}
+
+function updatePolice71(dt,elapsed){
+  if(wanted<=0){
+    SYS71.policeState="PATROL";SYS71.searchUntil=0;
+    police.visible=false;police.userData.spawned10=false;
+    blueLight.intensity=redLight.intensity=0;clearRoadblocks71();
+    if(SYS71.policeHud)SYS71.policeHud.style.display="none";
+    return;
+  }
+  const target=inVehicle?heroCar.position:player.position;
+  const dist=police.visible?police.position.distanceTo(target):9999;
+  const visibleTarget=police.visible&&dist<210&&!lineBlocked71(police.position,target);
+
+  if(visibleTarget||!SYS71.lastSeenAt){
+    SYS71.lastSeen.copy(target);SYS71.lastSeenAt=performance.now();
+    SYS71.searchUntil=performance.now()+9000+Math.ceil(wanted)*2500;
+    SYS71.policeState="PURSUIT";
+  }else if(performance.now()<SYS71.searchUntil){
+    SYS71.policeState="SEARCH";
+  }else{
+    SYS71.policeState="LOST";
+  }
+
+  police.visible=true;
+  if(!police.userData.spawned10){
+    let best=null,score=Infinity;
+    for(const n of GEO10.nodes.values()){
+      const d=n.pos.distanceTo(target);
+      if(d>190&&d<460&&Math.abs(d-310)<score){score=Math.abs(d-310);best=n}
+    }
+    police.position.copy(best?best.pos:target.clone().add(new THREE.Vector3(260,0,180)));
+    police.userData.spawned10=true;GEO10.lastPoliceRoute=0;
+  }
+
+  const routeTarget=SYS71.policeState==="PURSUIT"?predictiveTarget50():SYS71.lastSeen;
+  if(performance.now()-GEO10.lastPoliceRoute>950||GEO10.policePathIndex>=GEO10.policePath.length){
+    GEO10.lastPoliceRoute=performance.now();
+    const s=nearestNode10(police.position,true),g=nearestNode10(routeTarget,true);
+    GEO10.policePath=routePolice50(s,g).map(id=>GEO10.nodes.get(id)?.pos.clone()).filter(Boolean);GEO10.policePathIndex=0;
+  }
+  const p=GEO10.policePath[GEO10.policePathIndex];
+  if(p){
+    tempV.copy(p).sub(police.position);tempV.y=0;
+    if(tempV.length()<2.1)GEO10.policePathIndex++;
+    else{
+      tempV.normalize();
+      const stateMul=SYS71.policeState==="PURSUIT"?1:SYS71.policeState==="SEARCH"?.8:.55;
+      police.position.addScaledVector(tempV,(12.4+wanted*1.45)*stateMul*dt);
+      police.rotation.y=THREE.MathUtils.lerp(police.rotation.y,Math.atan2(tempV.x,tempV.z),Math.min(1,dt*5));
+    }
+  }
+
+  const flash=Math.sin(elapsed*15)>0;blueLight.intensity=flash?8:0;redLight.intensity=flash?0:8;
+  if(dist<5&&visibleTarget){
+    wanted=Math.max(0,wanted-.8);wantedCooldown=8;toast("Politie onderschept voertuig");GEO10.lastPoliceRoute=0;
+  }
+  if(SYS71.policeState==="LOST")wanted=Math.max(0,wanted-dt*.16);
+  else if(SYS71.policeState==="SEARCH"&&dist>280)wanted=Math.max(0,wanted-dt*.085);
+  else{wantedCooldown-=dt;if(wantedCooldown<=0)wanted=Math.max(0,wanted-dt*.04)}
+
+  placeRoadblocks71(routeTarget);updateRoadblockLights71(elapsed);
+  if(SYS71.policeHud){
+    SYS71.policeHud.style.display="block";
+    SYS71.policeHud.textContent=SYS71.policeState+(wanted>=3?" • ROADBLOCKS":"");
+  }
+}
+
+const oldInstallCollisions71=installCollisions50;
+function installCollisions71(){
+  oldInstallCollisions71();
+  if(!inVehicle)return;
+  for(const rb of SYS71.roadblocks){
+    if(!rb.group.visible)continue;
+    const d=heroCar.position.distanceTo(rb.group.position);
+    if(d<2.8){
+      heroCar.position.copy(v02.carPrev);
+      addDamage50(Math.min(24,5+Math.abs(heroCar.userData.speed)),"Botsing met wegversperring");
+      heroCar.userData.speed*=-.18;
+      wanted=Math.min(5,wanted+.35);wantedCooldown=14;
+      break;
+    }
+  }
+}
+
+// --- Rail world event ---
+function railLength71(pts){
+  let n=0;for(let i=1;i<pts.length;i++)n+=pts[i].distanceTo(pts[i-1]);return n;
+}
+async function loadRailPath71(){
+  if(SYS71.railLoaded||SYS71.railLoading||!GEO10.active)return;
+  SYS71.railLoading=true;
+  try{
+    const files=["erpe_mere","lede","aalst"];
+    const all=[];
+    for(const key of files){
+      const r=await fetch("./geodata/"+key+"_runtime.geojson?v=7.1");
+      if(!r.ok)continue;
+      const fc=await r.json();
+      for(const ft of fc.features||[]){
+        if(ft.properties?.kind!=="railway")continue;
+        for(const line of lines10(ft.geometry)){
+          if(line.length>1)all.push(line.map(geoToLocal10));
+        }
+      }
+    }
+    all.sort((a,b)=>railLength71(b)-railLength71(a));
+    SYS71.railPath=all[0]||null;
+    if(!SYS71.railPath)throw new Error("no railway line");
+    SYS71.railCum=[0];
+    for(let i=1;i<SYS71.railPath.length;i++)SYS71.railCum[i]=SYS71.railCum[i-1]+SYS71.railPath[i].distanceTo(SYS71.railPath[i-1]);
+    createTrain71();SYS71.railLoaded=true;
+    toast("Treinverkeer actief op echte spoorgeometrie");
+  }catch(err){console.warn("rail event unavailable",err)}
+  finally{SYS71.railLoading=false}
+}
+function createTrain71(){
+  if(SYS71.train)return;
+  const g=new THREE.Group();g.userData.realGeo10=true;g.userData.train71=true;
+  const body=new THREE.MeshStandardMaterial({color:0x394b58,metalness:.35,roughness:.46});
+  const accent=new THREE.MeshStandardMaterial({color:0xd4c46f,metalness:.12,roughness:.52});
+  const glass=new THREE.MeshStandardMaterial({color:0x1c2c36,metalness:.3,roughness:.18});
+  const makeCar=(z,engine=false)=>{
+    const c=new THREE.Group();c.position.z=z;
+    addBox(c,2.8,2.7,8.6,body,0,1.75,0);
+    addBox(c,2.86,.35,8.0,accent,0,1.55,0);
+    for(let w=-3;w<=3;w+=2){addBox(c,2.9,.72,1.15,glass,0,2.25,w)}
+    if(engine)addBox(c,2.3,.72,1.0,glass,0,2.35,4.1);
+    g.add(c);
+  };
+  makeCar(0,true);makeCar(-9.1,false);makeCar(-18.2,false);
+  const front=new THREE.PointLight(0xfff0cc,2.2,24,2);front.position.set(0,1.4,4.6);g.add(front);
+  scene.add(g);SYS71.train=g;
+}
+function sampleRail71(distance){
+  const cum=SYS71.railCum,pts=SYS71.railPath,total=cum[cum.length-1];
+  distance=THREE.MathUtils.clamp(distance,0,total);
+  let hi=1;while(hi<cum.length&&cum[hi]<distance)hi++;
+  hi=Math.min(hi,cum.length-1);const lo=Math.max(0,hi-1);
+  const seg=Math.max(.001,cum[hi]-cum[lo]),t=(distance-cum[lo])/seg;
+  const p=pts[lo].clone().lerp(pts[hi],t);
+  const dir=pts[hi].clone().sub(pts[lo]).setY(0).normalize();
+  return{p,dir,total};
+}
+function updateTrain71(dt){
+  if(!SYS71.railLoaded||!SYS71.train)return;
+  if(SYS71.trainStop>0){SYS71.trainStop-=dt;return}
+  const speed=16;
+  SYS71.trainDistance+=speed*dt*SYS71.trainDir;
+  const s=sampleRail71(SYS71.trainDistance);
+  if(SYS71.trainDistance<=0){SYS71.trainDistance=0;SYS71.trainDir=1;SYS71.trainStop=4}
+  if(SYS71.trainDistance>=s.total){SYS71.trainDistance=s.total;SYS71.trainDir=-1;SYS71.trainStop=4}
+  const cur=sampleRail71(SYS71.trainDistance);
+  SYS71.train.position.copy(cur.p);
+  SYS71.train.rotation.y=Math.atan2(cur.dir.x,cur.dir.z)+(SYS71.trainDir<0?Math.PI:0);
+  const actor=inVehicle?heroCar.position:player.position;
+  SYS71.train.visible=actor.distanceToSquared(SYS71.train.position)<2600*2600;
+}
+
+const railPoll71=setInterval(()=>{if(GEO10.active){clearInterval(railPoll71);loadRailPath71()}},1800);
+
+// Pause all simulation cleanly when the tab/app is backgrounded.
+document.addEventListener("visibilitychange",()=>{
+  if(document.hidden){
+    SYS71.visibilityWasRunning=running;
+    if(running){saveMeta20();running=false}
+  }else if(SYS71.visibilityWasRunning){
+    running=true;clock.start();SYS71.visibilityWasRunning=false;
+  }
+});
+
+function systems71(now){
+  if(!running||!GEO10.active)return;
+  const dt=Math.min((now-(systems71.last||now))/1000,.04);systems71.last=now;
+  updateTrain71(dt);
+}
+
+const hook71=setInterval(()=>{
+  if(!GEO10.active)return;
+  clearInterval(hook71);
+  updatePolice=updatePolice71;
+  installCollisions=installCollisions71;
+},550);
