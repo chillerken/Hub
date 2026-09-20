@@ -2340,3 +2340,26 @@ function releaseLoop20(now){
   updateRoadState20(now);updateNavigation20(now);
 }
 requestAnimationFrame(releaseLoop20);
+
+
+// Full-region on-foot controller: never inherit the old Burst-only clamp.
+function movePlayerRelease20(dt){
+  const forward=new THREE.Vector3(Math.sin(camYaw),0,-Math.cos(camYaw));
+  const right=new THREE.Vector3(Math.cos(camYaw),0,Math.sin(camYaw));
+  tempV.set(0,0,0);
+  if(keys.KeyW)tempV.add(forward);
+  if(keys.KeyS)tempV.sub(forward);
+  if(keys.KeyD)tempV.add(right);
+  if(keys.KeyA)tempV.sub(right);
+  if(tempV.lengthSq()>0){
+    tempV.normalize();
+    player.position.addScaledVector(tempV,(keys.ShiftLeft?8.3:4.7)*dt);
+    player.rotation.y=Math.atan2(tempV.x,tempV.z);
+  }
+  clampActor10(player);
+}
+const movementFixWait20=setInterval(()=>{
+  if(!GEO10.active)return;
+  clearInterval(movementFixWait20);
+  movePlayer=movePlayerRelease20;
+},550);
