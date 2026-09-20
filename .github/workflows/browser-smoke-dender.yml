@@ -1,0 +1,72 @@
+name: Dender County browser smoke
+
+on:
+  push:
+    branches: [dender-county-3d]
+    paths:
+      - 'dender-county-3d/index.html'
+      - 'dender-county-3d/style.css'
+      - 'dender-county-3d/game.js'
+      - 'dender-county-3d/sw.js'
+      - 'dender-county-3d/geodata/**'
+      - '.github/workflows/browser-smoke-dender.yml'
+
+jobs:
+  chromium-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start local game server
+        run: |
+          python3 -m http.server 8080 --directory dender-county-3d >/tmp/dender-http.log 2>&1 &
+          echo $! >/tmp/dender-http.pid
+          sleep 2
+          curl --fail http://127.0.0.1:8080/index.html >/dev/null
+      - name: Run WebGL browser smoke
+        run: |
+          node <<'JS'
+          const { chromium } = require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({
+              headless:true,
+              args:['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist']
+            });
+            const page=await browser.newPage({viewport:{width:1280,height:720}});
+            const errors=[];
+            page.on('pageerror',e=>errors.push('pageerror: '+e.message));
+            page.on('console',m=>{if(m.type()==='error')errors.push('console: '+m.text())});
+            await page.goto('http://127.0.0.1:8080/index.html',{waitUntil:'domcontentloaded',timeout:120000});
+            await page.waitForSelector('#startBtn',{timeout:30000});
+            await page.click('#startBtn');
+            await page.waitForFunction(()=>window.__DENDER_VERSION__==='8.1',{timeout:30000});
+            await page.waitForFunction(()=>window.__DENDER_HEALTH__?.geoActive===true,{timeout:120000});
+            await page.waitForTimeout(9000);
+            const health=await page.evaluate(()=>window.__DENDER_HEALTH__);
+            console.log('HEALTH',JSON.stringify(health));
+            if(!health.started)throw new Error('game did not start');
+            if(!health.geoActive)throw new Error('real-world geography inactive');
+            if(health.masterFrames<20)throw new Error('master loop not advancing');
+            if(health.roads<2000)throw new Error('road graph too small: '+health.roads);
+            if(health.nodes<500)throw new Error('routing graph too small: '+health.nodes);
+            const fatal=errors.filter(e=>!e.includes('favicon')&&!e.includes('ERR_BLOCKED_BY_CLIENT'));
+            if(fatal.length)throw new Error('browser errors: '+fatal.slice(0,8).join(' | '));
+            await page.screenshot({path:'/tmp/dender-smoke.png',fullPage:true});
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
+      - name: Upload smoke screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dender-county-browser-smoke
+          path: /tmp/dender-smoke.png
+          if-no-files-found: ignore
+          retention-days: 7

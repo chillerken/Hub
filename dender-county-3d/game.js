@@ -3763,6 +3763,7 @@ function runMasterExtras70(now){
   loop60(now);
   systems71(now);
   systems80(now);
+  systems81(now);
   MASTER70.last=now;MASTER70.frames++;
 }
 
@@ -4228,3 +4229,55 @@ function systems80(now){
   if(!running||!GEO10.active)return;
   refreshRoute80(false);updateNavHud80();updateAmbience80();updateDiag80(now);
 }
+
+// ===== DENDER COUNTY 8.1 — RUNTIME HEALTH / SELF-RECOVERY =====
+window.__DENDER_VERSION__="8.1";
+const HEALTH81={
+  errors:[],
+  recoveries:0,
+  lastError:"",
+  lastRouteRecovery:0,
+  lastCheck:0
+};
+window.__DENDER_HEALTH__={
+  version:"8.1",started:false,geoActive:false,masterFrames:0,roads:0,nodes:0,
+  regions:0,chunks:0,errors:0,recoveries:0,fps:0
+};
+function recordHealthError81(msg){
+  const s=String(msg||"unknown").slice(0,240);
+  HEALTH81.lastError=s;HEALTH81.errors.push({time:Date.now(),message:s});
+  if(HEALTH81.errors.length>20)HEALTH81.errors.shift();
+}
+addEventListener("error",e=>recordHealthError81(e.message||e.error));
+addEventListener("unhandledrejection",e=>recordHealthError81(e.reason));
+
+function finitePos81(v){return Number.isFinite(v.x)&&Number.isFinite(v.y)&&Number.isFinite(v.z)}
+function recoverActor81(){
+  const spawn=GEO10.station||GEO10.places.find(p=>p.name==="Burst")?.pos||new THREE.Vector3();
+  if(inVehicle){
+    heroCar.position.copy(spawn).add(new THREE.Vector3(12,0,4));heroCar.userData.speed=0;heroCar.userData.heading=0;heroCar.rotation.y=0;
+  }else player.position.copy(spawn).add(new THREE.Vector3(5,0,5));
+  v02.playerPrev.copy(player.position);v02.carPrev.copy(heroCar.position);
+  HEALTH81.recoveries++;toast("Runtimepositie automatisch hersteld");
+}
+function runtimeHealth81(now){
+  const h=window.__DENDER_HEALTH__;
+  h.version=window.__DENDER_VERSION__;h.started=running;h.geoActive=!!GEO10.active;
+  h.masterFrames=MASTER70.frames;h.roads=GEO10.edges.length;h.nodes=GEO10.nodes.size;
+  h.regions=REG30.loaded.size;h.chunks=CHUNK31.loaded.size;h.errors=HEALTH81.errors.length;
+  h.recoveries=HEALTH81.recoveries;h.fps=Math.round(GAME20.fps||0);
+  if(!running||!GEO10.active||now-HEALTH81.lastCheck<1000)return;
+  HEALTH81.lastCheck=now;
+  const actor=inVehicle?heroCar.position:player.position;
+  if(!finitePos81(actor)){recordHealthError81("non-finite actor position");recoverActor81()}
+  if(!finitePos81(camera.position)){
+    recordHealthError81("non-finite camera position");
+    camera.position.copy(actor).add(new THREE.Vector3(0,6,8));HEALTH81.recoveries++;
+  }
+  if(!Number.isFinite(heroCar.userData.speed)){recordHealthError81("non-finite vehicle speed");heroCar.userData.speed=0;HEALTH81.recoveries++}
+  const target=currentMissionTarget80();
+  if(target&&NAV80.nodePath.length===0&&now-HEALTH81.lastRouteRecovery>4000){
+    HEALTH81.lastRouteRecovery=now;recordHealthError81("navigation route recovered");refreshRoute80(true);HEALTH81.recoveries++;
+  }
+}
+function systems81(now){runtimeHealth81(now)}
