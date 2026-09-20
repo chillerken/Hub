@@ -3762,6 +3762,7 @@ function runMasterExtras70(now){
   simLoop50(now);
   loop60(now);
   systems71(now);
+  systems80(now);
   MASTER70.last=now;MASTER70.frames++;
 }
 
@@ -4035,3 +4036,195 @@ const hook71=setInterval(()=>{
   updatePolice=updatePolice71;
   installCollisions=installCollisions71;
 },550);
+
+// ===== DENDER COUNTY 8.0 — GPS / ROUTINES / AMBIENCE / DIAGNOSTICS =====
+window.__DENDER_VERSION__="8.0";
+
+const NAV80={
+  nodePath:[],
+  points:[],
+  target:null,
+  lastRefresh:0,
+  line:null,
+  hud:null,
+  drawWrapped:false
+};
+
+function currentMissionTarget80(){
+  const j=JOB20.jobs[JOB20.index];
+  if(j?.target)return j.target;
+  const t=GEO10.missionTargets?.[GEO10.missionIndex];
+  return t?.pos||null;
+}
+function buildRoutePoints80(ids){
+  const pts=[];
+  for(let i=1;i<ids.length;i++){
+    const a=ids[i-1],b=ids[i];
+    const entry=(GEO10.adj.get(a)||[]).find(x=>x.to===b&&x.edge.drive);
+    if(entry?.points){
+      for(const p of entry.points){
+        if(!pts.length||pts[pts.length-1].distanceToSquared(p)>.5)pts.push(p.clone());
+      }
+    }
+  }
+  return pts;
+}
+function routeDistance80(points){
+  let d=0;for(let i=1;i<points.length;i++)d+=points[i].distanceTo(points[i-1]);return d;
+}
+function ensureNavHud80(){
+  if(NAV80.hud)return;
+  const el=document.createElement("div");el.id="navHud80";
+  el.style.cssText="position:fixed;left:50%;transform:translateX(-50%);top:14px;z-index:16;min-width:210px;max-width:72vw;padding:7px 12px;border-radius:8px;background:rgba(7,10,14,.66);color:#f2f5f7;font:800 11px system-ui;text-align:center;letter-spacing:.05em;pointer-events:none";
+  document.body.appendChild(el);NAV80.hud=el;
+}
+ensureNavHud80();
+
+function refreshRoute80(force=false){
+  if(!GEO10.active)return;
+  const target=currentMissionTarget80();
+  if(!target){NAV80.nodePath=[];NAV80.points=[];if(NAV80.line)NAV80.line.visible=false;return}
+  const actor=inVehicle?heroCar.position:player.position;
+  if(!force&&performance.now()-NAV80.lastRefresh<1700&&NAV80.target&&NAV80.target.distanceToSquared(target)<25)return;
+  NAV80.lastRefresh=performance.now();NAV80.target=target.clone();
+  const s=nearestNode10(actor,true),g=nearestNode10(target,true);
+  NAV80.nodePath=route10(s,g);NAV80.points=buildRoutePoints80(NAV80.nodePath);
+  if(!NAV80.line){
+    NAV80.line=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0x57a9ff,transparent:true,opacity:.62}));
+    NAV80.line.userData.realGeo10=true;GEO10.group.add(NAV80.line);
+  }
+  if(NAV80.points.length){
+    const elevated=NAV80.points.map(p=>new THREE.Vector3(p.x,.24,p.z));
+    NAV80.line.geometry.dispose();NAV80.line.geometry=new THREE.BufferGeometry().setFromPoints(elevated);NAV80.line.visible=true;
+  }else NAV80.line.visible=false;
+}
+
+function nextNavPoint80(actor){
+  if(!NAV80.points.length)return null;
+  let best=0,bd=Infinity;
+  for(let i=0;i<NAV80.points.length;i++){
+    const d=actor.distanceToSquared(NAV80.points[i]);if(d<bd){bd=d;best=i}
+  }
+  return NAV80.points[Math.min(NAV80.points.length-1,best+Math.min(6,NAV80.points.length-best-1))];
+}
+function arrow80(actor,next){
+  if(!next)return"•";
+  const v=next.clone().sub(actor);const targetAng=Math.atan2(v.x,v.z);
+  const heading=inVehicle?heroCar.userData.heading:(camYaw+Math.PI);
+  let d=((targetAng-heading+Math.PI*3)%(Math.PI*2))-Math.PI;
+  if(Math.abs(d)<.32)return"↑";
+  if(d>.32&&d<1.15)return"↗";
+  if(d>=1.15)return"→";
+  if(d<-.32&&d>-1.15)return"↖";
+  return"←";
+}
+function updateNavHud80(){
+  const actor=inVehicle?heroCar.position:player.position,target=currentMissionTarget80();
+  if(!target||!NAV80.hud){if(NAV80.hud)NAV80.hud.style.display="none";return}
+  NAV80.hud.style.display="block";
+  const next=nextNavPoint80(actor),street=nearestStreet10(next||actor);
+  NAV80.hud.textContent=arrow80(actor,next)+"  "+(street.name||"VOLG ROUTE")+"  •  "+Math.round(routeDistance80(NAV80.points))+" m";
+}
+
+function wrapMinimap80(){
+  if(NAV80.drawWrapped)return;NAV80.drawWrapped=true;
+  const base=drawMap;
+  drawMap=function(){
+    base();
+    if(!NAV80.points.length)return;
+    const S=180,actor=inVehicle?heroCar:player,radius=900,sc=S/(radius*2);
+    ctx.strokeStyle="#57a9ff";ctx.lineWidth=2.4;ctx.globalAlpha=.85;ctx.beginPath();
+    let started=false;
+    for(const p of NAV80.points){
+      const x=S/2+(p.x-actor.position.x)*sc,z=S/2+(p.z-actor.position.z)*sc;
+      if(x<-20||x>S+20||z<-20||z>S+20)continue;
+      if(!started){ctx.moveTo(x,z);started=true}else ctx.lineTo(x,z);
+    }
+    if(started)ctx.stroke();ctx.globalAlpha=1;
+  };
+}
+
+// NPC routines respond to real game time and rain.
+const legacyPeds80=updatePeds50;
+function updatePeds80(dt){
+  const night=day<6.5||day>22,commute=(day>7&&day<9)||(day>16&&day<19);
+  const rain=v04.rainIntensity||0;
+  PED20.agents.forEach((a,i)=>{
+    const activeScore=(i%10)/10;
+    const threshold=night?.45:commute?.95:.72;
+    a.p.visible=activeScore<threshold*(1-rain*.28);
+    if(a.p.visible)a.p.userData.speed=THREE.MathUtils.lerp(1.0,1.65,commute?.7:.35)*(1-rain*.12);
+  });
+  legacyPeds80(dt);
+}
+
+// Low-cost procedural ambience that starts only after user audio activation.
+const AUDIO80={ready:false,trainOsc:null,trainGain:null,cityOsc:null,cityGain:null};
+function initAudio80(){
+  if(AUDIO80.ready||!v02.audioReady||!v02.audio?.ac)return;
+  const ac=v02.audio.ac;
+  const make=(freq,type="sine")=>{
+    const o=ac.createOscillator(),g=ac.createGain();o.type=type;o.frequency.value=freq;g.gain.value=.0001;o.connect(g);g.connect(ac.destination);o.start();return{o,g};
+  };
+  const t=make(42,"triangle"),c=make(71,"sine");
+  AUDIO80.trainOsc=t.o;AUDIO80.trainGain=t.g;AUDIO80.cityOsc=c.o;AUDIO80.cityGain=c.g;AUDIO80.ready=true;
+}
+function updateAmbience80(){
+  initAudio80();if(!AUDIO80.ready)return;
+  const ac=v02.audio.ac,actor=inVehicle?heroCar.position:player.position;
+  let train=.0001;
+  if(SYS71.train?.visible){
+    const d=actor.distanceTo(SYS71.train.position);train=THREE.MathUtils.clamp(1-d/900,0,1)*.025+.0001;
+  }
+  const urban=nearestPlace10(actor)?.name?1:0;
+  const city=(.0025+.0035*urban)*(1-(v04.rainIntensity||0)*.2);
+  AUDIO80.trainGain.gain.setTargetAtTime(train,ac.currentTime,.18);
+  AUDIO80.cityGain.gain.setTargetAtTime(city,ac.currentTime,.4);
+  AUDIO80.trainOsc.frequency.setTargetAtTime(38+(SYS71.trainDir>0?4:0),ac.currentTime,.25);
+}
+
+// Diagnostics overlay: F3 toggles live runtime state.
+const DIAG80={open:false,el:null,last:0};
+function ensureDiag80(){
+  if(DIAG80.el)return;
+  const e=document.createElement("pre");e.id="diag80";
+  e.style.cssText="display:none;position:fixed;left:12px;bottom:12px;z-index:50;max-width:72vw;max-height:42vh;overflow:auto;margin:0;padding:9px 11px;border-radius:7px;background:rgba(0,0,0,.82);color:#b9f6ca;font:10px/1.45 ui-monospace,monospace;pointer-events:none";
+  document.body.appendChild(e);DIAG80.el=e;
+}
+ensureDiag80();
+addEventListener("keydown",e=>{
+  if(e.code==="F3"&&!e.repeat){e.preventDefault();DIAG80.open=!DIAG80.open;DIAG80.el.style.display=DIAG80.open?"block":"none"}
+});
+function updateDiag80(now){
+  if(!DIAG80.open||now-DIAG80.last<500)return;DIAG80.last=now;
+  const actor=inVehicle?heroCar.position:player.position;
+  DIAG80.el.textContent=[
+    "DENDER COUNTY "+window.__DENDER_VERSION__,
+    "FPS            "+Math.round(GAME20.fps),
+    "single RAF     yes",
+    "master frames  "+MASTER70.frames,
+    "roads          "+GEO10.edges.length,
+    "graph nodes    "+GEO10.nodes.size,
+    "loaded regions "+[...REG30.loaded].join(", "),
+    "geo chunks     "+CHUNK31.loaded.size,
+    "env chunks     "+[...ENV20.chunks.values()].filter(c=>c.built).length,
+    "rigged NPCs    "+VIS40.npcMixers.length,
+    "traffic        "+GEO10.trafficAgents.length,
+    "police         "+SYS71.policeState+" / wanted "+wanted.toFixed(2),
+    "route nodes    "+NAV80.nodePath.length,
+    "route metres   "+Math.round(routeDistance80(NAV80.points)),
+    "train          "+(SYS71.railLoaded?"active":"loading"),
+    "position       "+actor.x.toFixed(1)+", "+actor.z.toFixed(1)
+  ].join("\n");
+}
+
+const hook80=setInterval(()=>{
+  if(!GEO10.active)return;
+  clearInterval(hook80);
+  updatePeds=updatePeds80;wrapMinimap80();refreshRoute80(true);
+},650);
+
+function systems80(now){
+  if(!running||!GEO10.active)return;
+  refreshRoute80(false);updateNavHud80();updateAmbience80();updateDiag80(now);
+}
