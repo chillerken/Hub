@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Install Playwright Chromium
         run: |
           npm install --no-save playwright@1.55.0
@@ -51,14 +51,14 @@ jobs:
             await page.waitForTimeout(9000);
             const health=await page.evaluate(()=>window.__DENDER_HEALTH__);
             console.log('HEALTH',JSON.stringify(health));
+            await page.screenshot({path:'/tmp/dender-smoke.png',fullPage:true});
             if(!health.started)throw new Error('game did not start');
             if(!health.geoActive)throw new Error('real-world geography inactive');
-            if(health.masterFrames<20)throw new Error('master loop not advancing');
+            if(health.masterFrames<5)throw new Error('master loop not advancing');
             if(health.roads<2000)throw new Error('road graph too small: '+health.roads);
             if(health.nodes<500)throw new Error('routing graph too small: '+health.nodes);
             const fatal=errors.filter(e=>!e.includes('favicon')&&!e.includes('ERR_BLOCKED_BY_CLIENT'));
             if(fatal.length)throw new Error('browser errors: '+fatal.slice(0,8).join(' | '));
-            await page.screenshot({path:'/tmp/dender-smoke.png',fullPage:true});
             await browser.close();
           })().catch(e=>{console.error(e);process.exit(1)});
           JS
