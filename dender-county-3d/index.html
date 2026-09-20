@@ -10,9 +10,9 @@
 <body>
   <div id="loading">
     <div class="logo">DENDER COUNTY</div>
-    <div class="sub">Oost-Vlaanderen • 3D vertical slice v0.2</div>
+    <div class="sub">Oost-Vlaanderen • 3D vertical slice v0.4</div>
     <button id="startBtn">START SPEL</button>
-    <div class="hint">WASD bewegen/rijden • Shift sprint • E instappen/uitstappen • muis = camera • P opslaan</div>
+    <div class="hint">WASD bewegen/rijden • Shift sprint • E instappen/uitstappen • Space handrem • C camera • H claxon • Q kwaliteit</div>
   </div>
 
   <canvas id="game"></canvas>
@@ -49,11 +49,11 @@
       </div>
       <div class="actions">
         <button id="mobileAction">E</button>
-        <button id="mobileSprint">RUN</button>
+        <button id="mobileSprint">RUN</button><button id="mobileBrake">BRAKE</button><button id="mobileCam">CAM</button><button id="mobileHorn">HORN</button>
       </div>
     </div>
   </div>
 
-  <script type="module" src="./game.js?v=0.2"></script>
+  <script type="module" src="./game.js?v=0.4"></script>
 </body>
 </html>
