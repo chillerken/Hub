@@ -2555,3 +2555,44 @@ function regionLoop30(now){
   }
 }
 requestAnimationFrame(regionLoop30);
+
+
+// ===== DENDER COUNTY 3.0 — MULTI-MUNICIPALITY ENVIRONMENT STREAMING =====
+REG30.environmentLoaded=new Set();
+ENV20.seenFeatureIds=ENV20.seenFeatureIds||new Set(
+  (ENV20.features||[]).map(f=>f.properties?.source_id||f.id).filter(Boolean)
+);
+
+function appendEnvironment30(fc,key){
+  for(const ft of fc.features||[]){
+    const fid=ft.properties?.source_id||ft.id;
+    if(fid&&ENV20.seenFeatureIds.has(fid))continue;
+    if(fid)ENV20.seenFeatureIds.add(fid);
+    const pts=featurePoints20(ft);if(pts.length<2)continue;
+    const c=centroid20(pts),ck=envChunkKey20(c.x,c.z);
+    let ch=ENV20.chunks.get(ck);
+    if(!ch){ch={key:ck,cx:c.x,cz:c.z,features:[],group:null,built:false};ENV20.chunks.set(ck,ch)}
+    ch.features.push({ft,pts,c,region:key});
+    if(ft.properties?.kind==="building"&&pts.length>=4){
+      let arr=ENV20.collisionChunks.get(ck);
+      if(!arr){arr=[];ENV20.collisionChunks.set(ck,arr)}
+      const b=bounds20(pts);arr.push({x:(b.minX+b.maxX)/2,z:(b.minZ+b.maxZ)/2,w:Math.max(1,b.maxX-b.minX),d:Math.max(1,b.maxZ-b.minZ)});
+    }
+  }
+}
+async function loadRegionEnvironment30(key){
+  if(REG30.environmentLoaded.has(key)||!GEO10.active)return false;
+  try{
+    const r=await fetch("./geodata/"+key+"_environment.geojson?v=3.0");
+    if(!r.ok)return false;
+    const fc=await r.json();appendEnvironment30(fc,key);
+    REG30.environmentLoaded.add(key);
+    toast(key.toUpperCase()+" gebouwen/water/groen geladen");
+    return true;
+  }catch(err){console.warn("regional environment pending",key,err);return false}
+}
+const regionEnvironmentPoll30=setInterval(async()=>{
+  if(!GEO10.active)return;
+  await Promise.all(REG30.municipalities.map(loadRegionEnvironment30));
+  if(REG30.environmentLoaded.size===REG30.municipalities.length)clearInterval(regionEnvironmentPoll30);
+},5000);
