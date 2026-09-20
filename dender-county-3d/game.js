@@ -1176,3 +1176,96 @@ function v07Loop(now){
   }
 }
 requestAnimationFrame(v07Loop);
+
+
+// ===== DENDER COUNTY 0.8 — FREE POLY HAVEN PBR / MODEL PIPELINE =====
+window.__DENDER_VERSION__="0.8";
+
+const textureLoader08=new THREE.TextureLoader();
+function loadTex08(url,{srgb=false,repeat=[1,1]}={}){
+  const t=textureLoader08.load(url);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  t.repeat.set(repeat[0],repeat[1]);
+  if(srgb)t.colorSpace=THREE.SRGBColorSpace;
+  t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
+  return t;
+}
+
+const PH08={
+  asphalt:{
+    diff:"https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/asphalt_01/asphalt_01_diff_1k.png",
+    normal:"https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/asphalt_01/asphalt_01_nor_gl_1k.png",
+    arm:"https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/asphalt_01/asphalt_01_arm_1k.png"
+  },
+  brick:{
+    diff:"https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/brick_wall_07/brick_wall_07_diff_1k.png",
+    normal:"https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/brick_wall_07/brick_wall_07_nor_gl_1k.png",
+    arm:"https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/brick_wall_07/brick_wall_07_arm_1k.png"
+  },
+  coveredCar:{
+    gltf:"https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/covered_car/covered_car_1k.gltf"
+  }
+};
+
+function applyPolyHavenPBR08(){
+  const aDiff=loadTex08(PH08.asphalt.diff,{srgb:true,repeat:[18,3]});
+  const aNorm=loadTex08(PH08.asphalt.normal,{repeat:[18,3]});
+  const aArm=loadTex08(PH08.asphalt.arm,{repeat:[18,3]});
+  mat.road.map=aDiff;
+  mat.road.normalMap=aNorm;
+  mat.road.roughnessMap=aArm;
+  mat.road.metalnessMap=aArm;
+  mat.road.normalScale.set(.65,.65);
+  mat.road.color.set(0xffffff);
+  mat.road.roughness=.92;
+  mat.road.metalness=.02;
+  mat.road.needsUpdate=true;
+
+  const bDiff=loadTex08(PH08.brick.diff,{srgb:true,repeat:[3,2]});
+  const bNorm=loadTex08(PH08.brick.normal,{repeat:[3,2]});
+  const bArm=loadTex08(PH08.brick.arm,{repeat:[3,2]});
+  mat.brick.forEach((m,i)=>{
+    m.map=bDiff.clone();m.map.needsUpdate=true;
+    m.normalMap=bNorm.clone();m.normalMap.needsUpdate=true;
+    m.roughnessMap=bArm.clone();m.roughnessMap.needsUpdate=true;
+    m.metalnessMap=bArm.clone();m.metalnessMap.needsUpdate=true;
+    m.normalScale.set(.45,.45);
+    m.color.set([0xe4d1c5,0xd5c0b6,0xc5aa9f,0xe0c9bc,0xbda69d][i%5]);
+    m.roughness=.9;m.metalness=.0;m.needsUpdate=true;
+  });
+}
+applyPolyHavenPBR08();
+
+async function installCoveredCar08(){
+  try{
+    const gltf=await assetManager06.loader.loadAsync(PH08.coveredCar.gltf);
+    const model=gltf.scene;
+    model.traverse(o=>{
+      if(o.isMesh){
+        o.castShadow=true;o.receiveShadow=true;
+        const mats=Array.isArray(o.material)?o.material:[o.material];
+        mats.filter(Boolean).forEach(m=>{if("envMapIntensity" in m)m.envMapIntensity=1.15;});
+      }
+    });
+    fitModel06(model,4.7);
+    model.position.set(68,0,-63);
+    model.rotation.y=-Math.PI*.18;
+    scene.add(model);
+
+    const second=model.clone(true);
+    second.position.set(-132,0,28);
+    second.rotation.y=Math.PI*.58;
+    second.scale.multiplyScalar(.96);
+    scene.add(second);
+
+    toast("Gratis Poly Haven 3D-assets geladen");
+  }catch(err){
+    console.warn("Poly Haven covered car fallback",err);
+  }
+}
+installCoveredCar08();
+
+const polyHavenBadge08=document.createElement("div");
+polyHavenBadge08.textContent="PBR & environment assets: Poly Haven • CC0";
+polyHavenBadge08.style.cssText="position:fixed;right:14px;top:48px;z-index:11;font:600 10px system-ui;color:#d5d9df;background:rgba(8,10,14,.55);padding:5px 8px;border-radius:4px;pointer-events:none";
+document.body.appendChild(polyHavenBadge08);
