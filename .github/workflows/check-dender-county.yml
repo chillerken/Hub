@@ -25,3 +25,17 @@ jobs:
           test -s dender-county-3d/index.html
           test -s dender-county-3d/style.css
           test -s dender-county-3d/game.js
+          grep -q 'type="importmap"' dender-county-3d/index.html
+          grep -q 'GLTFLoader' dender-county-3d/game.js
+      - name: Verify production GLB asset
+        run: |
+          curl -L --fail --retry 2 --max-time 30 \
+            -o /tmp/toycar.glb \
+            https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/ToyCar/glTF-Binary/ToyCar.glb
+          test -s /tmp/toycar.glb
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/toycar.glb')
+          assert p.read_bytes()[:4] == b'glTF', 'Invalid GLB magic'
+          print('GLB OK', p.stat().st_size)
+          PY
