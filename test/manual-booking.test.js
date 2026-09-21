@@ -5,7 +5,7 @@ for(const fail of [false,true])test(`Handmatige boeking: beheerlink ${fail?'weig
  const events=[];let finished;
  const config={cookieSecret:'test-only-secret',baseUrl:'https://example.invalid',resend:{apiKey:'test-only',from:'test@example.invalid'}};
  const appointment={id:'test-appointment',idempotency_key:'test-idempotency',status:'requested',starts_at:'2026-12-01T09:00:00+01:00',price_cents:9000,price_mode:'estimate'};
- const customer={id:'test-customer',name:'Test',email:'qa@example.org',status:'active'};
+ const customer={id:'test-customer',name:'Test',email:'qa@customer.be',status:'active'};
  const job={id:'test-job',kind:'request_received',attempts:1,lease_token:'test-lease'};
  const db=async(action,p)=>{
   if(action==='flow_delivery_allowed')return {allowed:true};
@@ -17,7 +17,8 @@ for(const fail of [false,true])test(`Handmatige boeking: beheerlink ${fail?'weig
   if(action==='finish_job')finished=p;
   return {};
  };
- t.mock.method(globalThis,'fetch',async()=>{events.push('send');return {ok:true,json:async()=>({id:'test-provider-id'})};});
+ // All provider requests are intercepted; this fixture must pass the production test-domain guard.
+ t.mock.method(globalThis,'fetch',async(url)=>{assert.equal(url,'https://api.resend.com/emails');events.push('send');return {ok:true,json:async()=>({id:'test-provider-id'})};});
  await makeAutomation(config,db).run();
  assert.deepEqual(events,fail?['prepare']:['prepare','send']);
  assert.equal(finished.status,fail?'queued':'sent');
