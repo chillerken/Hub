@@ -29,8 +29,8 @@ module.exports=function automation(config,db){
    else{
     const permission=await db('flow_delivery_allowed',{id:job.id,lease_token:job.lease_token});
     if(permission?.allowed!==true){await db('finish_job',{id:job.id,lease_token:job.lease_token,status:'skipped',provider_id:'',error:'Verzending gestopt door opvolgings- of toestemmingscontrole'});results.push({id:job.id,status:'skipped'});continue;}
-    if(c.email&&/@(?:[^@]*\.)?(?:invalid|example|test)$/i.test(c.email))throw Object.assign(new Error('Herkenbare testgegevens: geen e-mail verstuurd'),{nonRetryable:true});
-    if(!c.email)throw new Error('E-mailadres ontbreekt; klant telefonisch bevestigen');
+    if(c.email&&/@(?:(?:[^@]*\.)?(?:invalid|example|test)|(?:[^@]*\.)?example\.(?:com|net|org))$/i.test(c.email))throw Object.assign(new Error('Herkenbare testgegevens: geen e-mail verstuurd'),{nonRetryable:true});
+    if(!c.email)throw Object.assign(new Error('E-mailadres ontbreekt; klant telefonisch bevestigen'),{nonRetryable:true});
     if(!config.resend.apiKey||!config.resend.from)throw new Error('RESEND_API_KEY en geverifieerde afzender ontbreken');
     if(a?.idempotency_key){
      const token=crypto.createHmac('sha256',config.cookieSecret).update(a.idempotency_key).digest('base64url');
@@ -40,7 +40,8 @@ module.exports=function automation(config,db){
     const budget=await db('email_budget',{id:job.id});
     if(!budget.allowed)throw Object.assign(new Error('Gratis verzendlimiet bereikt. Open het handmatige e-mailconcept in de wachtrij.'),{nonRetryable:true});
     const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${config.resend.apiKey}`,'Content-Type':'application/json','Idempotency-Key':`luxwash/${job.id}`},body:JSON.stringify({from:config.resend.from,to:[c.email],reply_to:settings.business.email,...message}),signal:AbortSignal.timeout(20000)});
-    const data=await response.json();if(!response.ok)throw new Error(`Mailprovider: ${response.status}`);provider_id=data.id;
+    if(!response.ok)throw Object.assign(new Error(`Mailprovider: ${response.status}`),{nonRetryable:response.status>=400&&response.status<500&&![408,429].includes(response.status)});
+    const data=await response.json();if(!data.id)throw Object.assign(new Error('Bezorging onzeker: provider gaf geen bericht-ID'),{deliveryUncertain:true});provider_id=data.id;
     // This journal write is idempotent; after a crash Resend receives the same key.
     try{await db('save',{table:'emails',data:{customer_id:c.id,subject:message.subject,body:message.text,direction:'outbound',recipient:c.email,sender:config.resend.from,provider_id,status:'sent'}});}catch(e){if(e.code!=='23505')throw e;}
    }
