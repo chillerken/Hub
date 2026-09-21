@@ -6,6 +6,8 @@ const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '';
 const SESSION_SECRET_HEX = process.env.SESSION_SECRET_HEX || '';
 const SUPABASE_EDGE_BASE = (process.env.SUPABASE_EDGE_BASE || '').replace(/\/+$/, '');
 const SUPABASE_PROXY_SESSION_SECRET_HEX = process.env.SUPABASE_PROXY_SESSION_SECRET_HEX || '';
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
 
 function hmacHex(secretHex, value) {
   return crypto.createHmac('sha256', Buffer.from(secretHex, 'hex')).update(value).digest('hex');
@@ -97,6 +99,33 @@ async function proxyApi(req, res, path) {
   });
 }
 
+async function claudeApi(req, res) {
+  if (!ANTHROPIC_API_KEY) return sendJson(res, 503, { error: 'anthropic_not_configured' });
+  const raw = await readBody(req, 256 * 1024);
+  let input;
+  try { input = JSON.parse(raw || '{}'); } catch { return sendJson(res, 400, { error: 'invalid_json' }); }
+  const prompt = String(input.prompt || '').trim();
+  if (!prompt) return sendJson(res, 400, { error: 'prompt_required' });
+  const upstream = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: ANTHROPIC_MODEL,
+      max_tokens: Math.min(Math.max(Number(input.max_tokens) || 1024, 1), 4096),
+      system: 'Je bent de Claude-assistent binnen LuxWash AI OS. Help zakelijk, nauwkeurig en veilig. Verzin geen klant-, prijs- of CRM-gegevens.',
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+  const data = await upstream.json().catch(() => ({}));
+  if (!upstream.ok) return sendJson(res, upstream.status, { error: 'anthropic_error', detail: data?.error?.message || 'request_failed' });
+  const text = Array.isArray(data.content) ? data.content.filter(x => x.type === 'text').map(x => x.text).join('\n') : '';
+  return sendJson(res, 200, { ok: true, provider: 'anthropic', model: data.model || ANTHROPIC_MODEL, text, usage: data.usage || null });
+}
+
 const LOGIN = `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#090909"><title>LuxWash AI OS</title><style>
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 30% 0,#302715,#111 35%,#050505);color:#f7f2e5;font-family:Inter,system-ui,-apple-system,sans-serif}.card{width:min(430px,100%);padding:29px;border-radius:24px;background:#121212f2;border:1px solid #6f5720;box-shadow:0 30px 90px #000a}.brand{color:#ddba55;letter-spacing:.22em;font-size:12px;font-weight:900}.title{font-size:34px;font-weight:900;margin:7px 0}.sub{color:#999;margin:0 0 24px}.in{width:100%;border:1px solid #3b3528;background:#080808;color:#fff;border-radius:13px;padding:15px;font-size:16px;outline:none}.in:focus{border-color:#ddba55}.btn{width:100%;margin-top:12px;border:0;border-radius:13px;padding:15px;background:linear-gradient(135deg,#efd46f,#a97b1c);font-weight:900;color:#171105;font-size:16px}.note{font-size:12px;color:#777;text-align:center;margin-top:17px}.err{margin:0 0 14px;padding:10px 12px;border-radius:10px;background:#361616;color:#ffaaa5;font-size:13px}
 </style></head><body><form class="card" method="post" action="/login"><div class="brand">LUXWASH</div><div class="title">AI OS</div><p class="sub">Beveiligde bedrijfscockpit</p>__ERROR__<input class="in" type="password" name="password" placeholder="Toegangscode" autocomplete="current-password" required><button class="btn">Open dashboard</button><div class="note">🔒 Sessie vervalt automatisch na 7 dagen.</div></form></body></html>`;
@@ -127,7 +156,7 @@ document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelect
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    if (url.pathname === '/health') return sendJson(res, 200, { ok: true, service: 'luxwash-ai-os-host', version: '1.0' });
+    if (url.pathname === '/health') return sendJson(res, 200, { ok: true, service: 'luxwash-ai-os-host', version: '1.1', claudeConfigured: Boolean(ANTHROPIC_API_KEY), claudeModel: ANTHROPIC_MODEL });
 
     if (url.pathname === '/login' && req.method === 'POST') {
       const raw = await readBody(req, 16 * 1024);
@@ -145,6 +174,7 @@ const server = http.createServer(async (req, res) => {
     const isAuthed = validLocalSession(req);
     if (url.pathname.startsWith('/api/')) {
       if (!isAuthed) return sendJson(res, 401, { error: 'unauthorized' });
+      if (url.pathname === '/api/claude' && req.method === 'POST') return claudeApi(req, res);
       return proxyApi(req, res, url.pathname);
     }
     if (!isAuthed) return sendHtml(res, LOGIN.replace('__ERROR__', ''));
