@@ -18,9 +18,10 @@ function database(){
 }
 test('Astra bootstrap advertises the active policy and excludes booking/payment/messaging mutations',()=>{
  const tools={definitions:require('../src/core/tools').TOOL_DEFS};const b=policy.bootstrap(tools);
- assert.equal(b.assistant_name,'Astra');assert.equal(b.policy_version,'astra-2026-09-14');
- assert.match(b.instructions,/één of twee korte zinnen/);assert.match(b.instructions,/053 89 64 00/);assert.match(b.instructions,/vanaf €45/);
- assert.match(b.instructions,/vanaf €40/);assert.match(b.instructions,/vanaf €4 per m²/);
+ assert.equal(b.assistant_name,'Astra');assert.equal(b.policy_version,'astra-2026-09-21');
+ assert.match(b.instructions,/één of twee korte zinnen/);assert.match(b.instructions,/053 89 64 00/);assert.match(b.instructions,/Clean & Shine: Sedan €49/);
+ assert.match(b.instructions,/1-zit vanaf €45/);assert.match(b.instructions,/Oprit vanaf €4,50\/m²/);
+ assert.match(b.instructions,/Alleen interieur \(Interior Refresh\): Sedan €55, Break\/SUV €65, kleine bestelwagen €75/);
  assert.equal(b.greeting.split(/[.!?]+/).filter(s=>s.trim()).length,2);
  assert.deepEqual(b.tools.map(t=>t.name),['getServices','calculatePrice','checkAvailability','recordCallDetails','createFollowup']);
 });
