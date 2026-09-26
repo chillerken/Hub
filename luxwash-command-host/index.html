@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#090b0d"><title>LuxWash · Sales Command Center</title>
+<style>
+:root{color-scheme:dark;--bg:#090b0d;--panel:#111518;--panel2:#171b1d;--line:#2e3536;--gold:#e0bd6a;--muted:#9aa6a5;--text:#f6f3eb;--green:#75ddb0;--red:#ff8787;--blue:#8eb8ff;--amber:#edc778}
+*{box-sizing:border-box}body{margin:0;color:var(--text);font:14px/1.45 Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:radial-gradient(circle at 70% -10%,#4e412b55,transparent 35%),var(--bg)}
+button,input,textarea,select{font:inherit}button{cursor:pointer}a{color:var(--gold)}.muted{color:var(--muted)}.small{font-size:12px}.hide{display:none!important}
+.shell{max-width:1540px;margin:auto;padding:19px;display:grid;grid-template-columns:230px minmax(0,1fr);gap:20px}.sidebar{background:#0d1012;border:1px solid var(--line);border-radius:20px;padding:21px 13px;position:sticky;top:14px;height:calc(100vh - 28px);display:flex;flex-direction:column;gap:16px}
+.logo{font-weight:950;letter-spacing:.19em;color:var(--gold);font-size:22px;padding:3px 7px}.logo small{display:block;font-size:9px;letter-spacing:.12em;color:#a7a49b;margin-top:1px}
+nav{display:grid;gap:5px}.navbtn{width:100%;background:transparent;border:1px solid transparent;text-align:left;color:#b7c0be;border-radius:11px;padding:11px;font-weight:750}.navbtn.active{background:#282318;border-color:#64512c;color:#ffdf8b}
+.sidefoot{margin-top:auto;font-size:11px;color:#8c9a98;border-top:1px solid var(--line);padding:15px 8px}.sidefoot a{display:block;margin-top:8px}
+main{min-width:0}.header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin:3px 0 20px}.eyebrow{font-size:11px;color:var(--gold);font-weight:850;letter-spacing:.16em;text-transform:uppercase}h1{font-size:clamp(26px,3vw,36px);line-height:1.1;margin:7px 0 7px;letter-spacing:-.035em}h2{font-size:16px;margin:0 0 12px}h3{font-size:14px;margin:0 0 4px}.btn,.field,textarea,select{border:1px solid var(--line);background:#0d1012;color:var(--text);border-radius:10px;padding:10px 12px;min-height:40px}.btn{font-weight:750}.btn:hover,.navbtn:hover{border-color:#ad955c}.btn.gold{background:var(--gold);color:#19170f;border-color:var(--gold)}.btn.red{color:#ffc2c2;border-color:#724446}.btn.sm{padding:7px 10px;min-height:32px;font-size:12px}.btn:disabled{opacity:.4;cursor:not-allowed}.actions{display:flex;gap:7px;flex-wrap:wrap}.tag{font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:850;border-radius:999px;padding:5px 9px;background:#2e291b;color:#e9c979;display:inline-flex}.tag.green{background:#123328;color:#8ceab9}.tag.red{background:#3d1e22;color:#ff9b9b}.tag.blue{background:#192d44;color:#9fcaff}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}.card,.panel{background:linear-gradient(140deg,#171b1c,#0f1315);border:1px solid var(--line);border-radius:17px;padding:17px;min-width:0}.metric{font-weight:950;font-size:27px;letter-spacing:-.03em;margin:8px 0 3px}.metriclabel{color:var(--muted);font-size:11px}.twocol{display:grid;grid-template-columns:1.2fr 1fr;gap:15px}.list{display:grid;gap:9px}.entry{background:#0b0f11;border:1px solid #2b3435;border-radius:12px;padding:12px;min-width:0}.between{display:flex;gap:10px;justify-content:space-between;align-items:flex-start}.entrytitle{font-weight:850}.subline{color:var(--muted);font-size:11px;margin-top:5px;word-break:break-word}.body{white-space:pre-wrap;word-break:break-word;font-size:12px;margin:10px 0;color:#d7dfdc}.twofield{display:grid;grid-template-columns:1fr 1fr;gap:10px}.formgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.formgrid label{font-size:12px;color:var(--muted);display:grid;gap:5px}.formgrid .span{grid-column:1/-1}.formgrid textarea{min-height:100px;resize:vertical}.formgrid input,.formgrid select{width:100%;min-width:0}
+section[data-section]{display:none}section[data-section].show{display:block}.tablebox{overflow:auto;border:1px solid var(--line);border-radius:12px}table{width:100%;border-collapse:collapse;min-width:760px}th,td{padding:12px 10px;border-bottom:1px solid #2b3131;text-align:left;vertical-align:top;font-size:12px}th{color:#b6ad91;background:#171a1a;position:sticky;top:0;font-weight:850}td .btn{margin:3px 2px 3px 0}.tools{display:flex;gap:9px;margin-bottom:12px;flex-wrap:wrap}.tools .field{flex:1;min-width:160px}.tools select{min-width:140px}.barrow{display:grid;grid-template-columns:135px 1fr 28px;gap:9px;align-items:center;margin:10px 0;font-size:12px}.track{height:9px;background:#343536;border-radius:99px;overflow:hidden}.fill{height:100%;background:linear-gradient(90deg,#8b723e,#f0d180)}.draftgrid{display:grid;grid-template-columns:1fr 1fr;gap:13px}.draftbox textarea{width:100%;resize:vertical;min-height:135px;line-height:1.45}.draftbox input{width:100%}.draftbox label{display:block;color:var(--muted);font-size:11px;margin:10px 0 4px}
+.notice{border:1px solid #64512b;background:#292315;border-radius:12px;padding:12px;color:#f0d18a;font-size:12px;margin-bottom:12px}.empty{border:1px dashed #424545;border-radius:12px;padding:22px;color:var(--muted);text-align:center}.toast{position:fixed;right:17px;bottom:17px;padding:14px 17px;background:#202729;border:1px solid #6b5b36;box-shadow:0 20px 80px #000c;z-index:50;border-radius:13px;display:none;max-width:min(440px,90vw)}
+#login{min-height:100vh;display:grid;place-items:center;padding:20px}.loginbox{width:min(420px,100%);padding:28px;background:#141818;border:1px solid #736039;border-radius:20px;box-shadow:0 20px 80px #000b}.loginbox h1{font-size:27px}.loginbox input{width:100%;margin:10px 0}.loginbox .btn{width:100%}
+@media(max-width:1050px){.shell{grid-template-columns:1fr}.sidebar{height:auto;position:static;padding:12px;gap:7px}.logo{font-size:17px}.sidefoot{display:none}nav{display:flex;overflow:auto;gap:6px}.navbtn{white-space:nowrap;width:auto}.cards{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:710px){.shell{padding:10px;gap:11px}.header{flex-direction:column}.twocol,.draftgrid,.twofield,.formgrid{grid-template-columns:1fr}.cards{gap:7px}.card,.panel{padding:12px}.metric{font-size:23px}.barrow{grid-template-columns:105px 1fr 23px}.header h1{font-size:27px}}
+</style></head><body>
+<div id="login" class="hide"><form id="loginform" class="loginbox"><div class="eyebrow">LUXWASH</div><h1>Sales Command Center</h1><p class="muted">De bestaande beveiligde LuxWash-toegangscode.</p><input class="field" type="password" id="pass" required autocomplete="current-password" placeholder="Toegangscode"><button class="btn gold">Aanmelden</button><p id="loginerror" class="small muted" role="status"></p></form></div>
+<div id="shell" class="shell hide">
+ <aside class="sidebar"><div class="logo">LUXWASH<small>AI · SALES COMMAND CENTER</small></div>
+ <nav id="nav">
+ <button class="navbtn active" data-go="home">◈ Overzicht</button>
+ <button class="navbtn" data-go="leads">◎ Pipeline</button>
+ <button class="navbtn" data-go="drafts">✎ Salesconcepten</button>
+ <button class="navbtn" data-go="responses">↩ Reacties</button>
+ <button class="navbtn" data-go="deals">▣ Deals & planning</button>
+ <button class="navbtn" data-go="system">⚙ Systeem</button>
+ </nav><div class="sidefoot">🔒 Enkel interne goedkeuringen, nooit automatisch koud verzenden.
+ 
+ 
+ <a href="https://www.luxwash.online/prijzen" target="_blank" rel="noopener">Officiële prijzen ↗</a>
+ </div></aside>
+ <main><header class="header"><div><div class="eyebrow">Productie · Lede / Aalst / Erpe-Mere</div><h1 id="title">Goedemorgen, Gert-Jan</h1><div id="stamp" class="small muted">Gegevens laden…</div></div><div class="actions"><button class="btn" id="refresh">↻ Vernieuwen</button><button class="btn gold" data-go="drafts">Concepten beoordelen</button><button class="btn" id="logout">Uitloggen</button></div></header>
+ <section data-section="home" class="show">
+  <div id="metrics" class="cards"></div>
+  <div class="notice">🛡️ Goedkeuren betekent <b>niet verzenden</b>. Iedere externe verzending vereist een toegestane verzendroute, correcte afzender, toestemming/rechtsgrond en actuele contactcontrole. Onbekende agenda- of offertegegevens worden niet ingevuld.</div>
+  <div class="twocol"><div class="panel"><h2>Acties die aandacht vragen</h2><div id="tasks" class="list"></div></div>
+  <div class="panel"><h2>Pipeline in één oogopslag</h2><div id="pipeline"></div><h2 style="margin-top:21px">Laatste prospectonderzoek</h2><div id="research"></div></div></div>
+ </section>
+ <section data-section="leads"><div class="panel"><h2>CRM & leadpipeline</h2><div class="tools"><input id="search" class="field" placeholder="Zoek bedrijf, sector, gemeente of e-mail"><select id="stagefilter"><option value="">Alle fases</option><option>new</option><option>analyzed</option><option>contact_planned</option><option>replied</option><option>interested</option><option>appointment_planned</option><option>quote_created</option><option>customer</option><option>fleet_care</option><option>not_interested</option></select></div><div class="tablebox"><table><thead><tr><th>Bedrijf</th><th>Locatie / sector</th><th>Score</th><th>Fase</th><th>Actie</th></tr></thead><tbody id="leadrows"></tbody></table></div></div></section>
+ <section data-section="drafts"><div class="notice">📧 Concepten zijn bewerkbaar zolang ze nog niet zijn goedgekeurd. Controleer bij koude acquisitie eerst de volledige Gmail-, Outlook- en CRM-historiek. <b>Er is hier geen knop voor automatisch verzenden.</b></div><div class="tools"><select id="draftfilter"><option value="draft">Te beoordelen</option><option value="approved">Goedgekeurd</option><option value="rejected">Afgewezen</option><option value="all">Alle</option></select><input id="draftsearch" class="field" placeholder="Zoek prospect of onderwerp"></div><div id="draftlist" class="draftgrid"></div></section>
+ <section data-section="responses"><div class="twocol"><div class="panel"><h2>Vastgelegde reacties</h2><div id="responselist" class="list"></div></div><div class="panel"><h2>Een echte reactie manueel registreren</h2><p class="small muted">Alleen gebruiken voor een bericht dat u daadwerkelijk zelf hebt ontvangen. Geen autoresponses of bounces als interesse registreren.</p>
+ <form id="responseform" class="formgrid"><label class="span">Prospect<select id="responselead" required></select></label><label>Kanaal<select id="responsechannel"><option value="email">E-mail</option><option value="whatsapp">WhatsApp</option><option value="phone">Telefoon</option><option value="website">Website</option><option value="manual">Andere</option></select></label><label>Reactie<select id="responseclass"><option value="interested">Heeft interesse</option><option value="appointment_request">Vraagt afspraak</option><option value="quote_request">Vraagt offerte</option><option value="fleet_interest">Fleet Care interesse</option><option value="question">Stelt vraag</option><option value="not_interested">Geen interesse</option><option value="opt_out">Afmelden / geen contact meer</option><option value="unknown">Onduidelijk / beoordelen</option></select></label><label class="span">Korte samenvatting<textarea id="responsesummary" minlength="8" maxlength="1200" required placeholder="Noteer de exacte vraag of kern van de ontvangen reactie."></textarea></label><label class="span"><span><input type="checkbox" id="responseverify" required> Ik heb gecontroleerd dat dit een echte, ontvangen menselijke reactie is.</span></label><button class="btn gold span" type="submit">Registreer en bereid volgende stap voor</button></form></div></div></section>
+ <section data-section="deals"><div class="cards" id="dealstats"></div><div class="twocol"><div class="panel"><h2>Offertes</h2><div id="quotelist" class="list"></div></div><div class="panel"><h2>Afspraken en Fleet Care</h2><div id="appointmentlist" class="list"></div><h2 style="margin-top:18px">Periodieke contracten</h2><div id="fleetlist" class="list"></div></div></div><div class="notice" style="margin-top:13px">B2B/Fleet Care blijft een offerte op maat. Geen afspraak definitief bevestigen zonder controle van de werkelijk gebruikte agenda's. Nieuwe afspraken en offertes blijven via de bestaande CRM-/boekingsflow lopen.</div></section>
+ <section data-section="system"><div class="twocol"><div class="panel"><h2>Automatiseringen</h2><div class="actions" style="margin-bottom:11px"><button class="btn gold" id="process">Verwerk veilige concepttaken nu</button></div><div id="joblist" class="list"></div></div><div class="panel"><h2>Integraties</h2><div id="integrationlist" class="list"></div><p class="small muted">Een opgeslagen status is niet automatisch een geslaagde live publicatie, bezorging of WhatsApp-synchronisatie.</p><div class="notice">AI: free-first (Groq → OpenRouter Free → lokale regels). Deze cockpit schakelt geen betaalde API of abonnement in.</div></div></div></section>
+ </main></div><div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script>
+const API='/api';
+let DATA=null,tab='home';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const euro=c=>new Intl.NumberFormat('nl-BE',{style:'currency',currency:'EUR'}).format(Number(c||0)/100);
+const date=v=>v?new Date(v).toLocaleString('nl-BE',{dateStyle:'short',timeStyle:'short'}):'—';
+const stageName={new:'Nieuw',analyzed:'Geanalyseerd',contact_planned:'Contact gepland',email_sent:'E-mail verstuurd',replied:'Reactie',interested:'Geïnteresseerd',appointment_planned:'Afspraak in voorbereiding',quote_created:'Offerte',customer:'Klant',fleet_care:'Fleet Care',not_interested:'Niet geïnteresseerd'};
+const clsName={interested:'Interesse',appointment_request:'Afspraak gevraagd',quote_request:'Offerte gevraagd',fleet_interest:'Fleet Care',question:'Vraag',not_interested:'Geen interesse',opt_out:'Afmelding',unknown:'Menselijk nakijken'};
+function name(id){const x=(DATA?.leads||[]).find(x=>x.id===id);return x?.company||x?.name||'Onbekende prospect'}
+function notify(s,err=false){const n=$('#toast');n.textContent=s;n.style.display='block';n.style.borderColor=err?'#8c4242':'#6b5b36';setTimeout(()=>n.style.display='none',4500)}
+async function api(path,opt={}){const r=await fetch(API+path,{...opt,credentials:'same-origin',headers:{'content-type':'application/json',...(opt.headers||{})}});const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.error||('HTTP '+r.status));return j}
+async function check(){try{DATA=await api('/overview');$('#login').classList.add('hide');$('#shell').classList.remove('hide');render()}catch(e){$('#login').classList.remove('hide');$('#shell').classList.add('hide');$('#loginerror').textContent=e.message==='unauthorized'?'Meld u aan om de actuele CRM te openen.':'Verbinding mislukt: '+e.message}}
+$('#loginform').onsubmit=async e=>{e.preventDefault();$('#loginerror').textContent='Beveiligd aanmelden…';const fd=JSON.stringify({password:$('#pass').value});try{const r=await fetch('/login',{method:'POST',body:fd,headers:{'content-type':'application/json'},credentials:'same-origin'});if(!r.ok)throw Error('Toegangscode onjuist.');await check()}catch(err){$('#loginerror').textContent=err.message}};
+$('#logout').onclick=()=>location.href='/logout';
+$('#refresh').onclick=()=>load();
+function go(t){tab=t;document.querySelectorAll('[data-section]').forEach(x=>x.classList.toggle('show',x.dataset.section===t));document.querySelectorAll('.navbtn').forEach(x=>x.classList.toggle('active',x.dataset.go===t));}
+document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+async function load(){try{DATA=await api('/overview');render();notify('Live CRM bijgewerkt')}catch(e){notify('Vernieuwen mislukt: '+e.message,true)}}
+function metric(l,v){return '<div class="card"><div class="metriclabel">'+esc(l)+'</div><div class="metric">'+esc(v)+'</div></div>'}
+function entry(title,subtitle,body='',right=''){return '<div class="entry"><div class="between"><div><div class="entrytitle">'+esc(title)+'</div><div class="subline">'+esc(subtitle)+'</div></div>'+right+'</div>'+(body?'<div class="body">'+esc(body)+'</div>':'')+'</div>'}
+function render(){
+ const d=DATA.dashboard||{},le=d.leads||{},draft=d.sales_drafts||{},ap=d.appointments||{},qu=d.quotes||{},fleet=d.fleet_care||{},rev=DATA.responses||[];
+ $('#stamp').textContent='LIVE · Laatst opgehaald '+date(DATA.at)+' · Geen fictieve data';
+ $('#metrics').innerHTML=metric('Prospects',le.total??'—')+metric('Concepten beoordelen',draft.pending??'—')+metric('Warme reacties',rev.filter(x=>['interested','appointment_request','quote_request','fleet_interest'].includes(x.classification)).length)+metric('Afspraken binnenkort',ap.upcoming??'—')+metric('Open offertes',qu.open??'—')+metric('Offertewaarde',euro(qu.open_value_cents))+metric('Fleet Care actief',fleet.active??'—')+metric('Geregistreerde MRR',euro(fleet.mrr_cents));
+ const important=(DATA.jobs||[]).filter(x=>x.status==='queued'&&['sales_draft_ready','prepare_appointment','prepare_quote','prepare_fleet_offer','prepare_reply','review_human_reply','calendar_conflict_check','quote_review_ready'].includes(x.kind));
+ const actionable=(DATA.drafts||[]).filter(x=>x.status==='draft').slice(0,4);
+ let html=important.slice(0,5).map(x=>entry(x.kind.replaceAll('_',' '),date(x.scheduled_at),'Lead: '+name(x.payload?.lead_id)+(x.last_error?' · '+x.last_error:''))).join('');
+ html+=actionable.map(x=>entry('Concept beoordelen',name(x.lead_id),x.subject||x.channel,'<span class="tag blue">OPEN</span>')).join('');
+ $('#tasks').innerHTML=html||'<div class="empty">Geen salesactie in de wachtrij.</div>';
+ const p=d.pipeline||{},max=Math.max(1,...Object.values(p).map(Number));$('#pipeline').innerHTML=Object.entries(p).sort((a,b)=>b[1]-a[1]).map(([k,v])=>'<div class="barrow"><span>'+esc(stageName[k]||k)+'</span><div class="track"><div class="fill" style="width:'+Math.min(100,Number(v)*100/max)+'%"></div></div><b>'+Number(v)+'</b></div>').join('')||'<div class="empty">Geen pipeline-data.</div>';
+ $('#research').innerHTML=(DATA.discovery||[]).slice(0,3).map(x=>entry(x.source||'LuxScout',date(x.started_at),String(x.inserted_count||0)+' toegevoegd · '+String(x.duplicate_count||0)+' dubbele · '+esc(x.status||''))).join('')||'<div class="empty">Nog geen prospectrun geregistreerd.</div>';
+ renderLeads();renderDrafts();renderResponses();renderDeals();renderSystem();
+}
+function renderLeads(){
+ const query=$('#search').value.toLowerCase(),stage=$('#stagefilter').value;
+ const rows=(DATA.leads||[]).filter(x=>(!stage||x.pipeline_stage===stage)&&(!query||[x.company,x.name,x.email,x.city,x.sector].join(' ').toLowerCase().includes(query)));
+ $('#leadrows').innerHTML=rows.map(x=>'<tr><td><b>'+esc(x.company||x.name)+'</b><div class="subline">'+esc(x.email||x.phone||'Contactgegevens controleren')+'</div></td><td>'+esc(x.city||'—')+'<div class="subline">'+esc(x.sector||'')+'</div></td><td>'+esc(x.commercial_score??'—')+'</td><td><span class="tag">'+esc(stageName[x.pipeline_stage]||x.pipeline_stage||'—')+'</span></td><td><div class="actions"><button class="btn sm" data-reply="'+x.id+'">Reactie</button><select class="sm" data-select="'+x.id+'" aria-label="Pipeline fase"><option value="">Fase wijzigen</option>'+['new','analyzed','contact_planned','replied','interested','not_interested'].map(s=>'<option value="'+s+'">'+esc(stageName[s])+'</option>').join('')+'</select><button class="btn sm" data-stage="'+x.id+'">Opslaan</button></div><div class="subline">'+esc(x.next_action||'')+'</div></td></tr>').join('')||'<tr><td colspan="5">Geen overeenkomstige prospects.</td></tr>';
+}
+$('#search').oninput=renderLeads;$('#stagefilter').onchange=renderLeads;
+function renderDrafts(){
+ const filter=$('#draftfilter').value,q=$('#draftsearch').value.toLowerCase();
+ const rows=(DATA.drafts||[]).filter(x=>(filter==='all'||x.status===filter)&&(!q||(name(x.lead_id)+' '+x.subject+' '+x.body).toLowerCase().includes(q)));
+ $('#draftlist').innerHTML=rows.map(x=>{
+ const can=x.status==='draft';
+ return '<div class="panel draftbox" data-draft="'+x.id+'"><div class="between"><div><h3>'+esc(name(x.lead_id))+'</h3><div class="subline">'+esc(x.channel)+' · '+date(x.created_at)+'</div></div><span class="tag '+(x.status==='approved'?'green':x.status==='rejected'?'red':'blue')+'">'+esc(x.status)+'</span></div><label>Onderwerp</label><input class="field" data-subject value="'+esc(x.subject||'')+'" '+(can?'':'disabled')+'><label>Bericht</label><textarea data-body '+(can?'':'disabled')+'>'+esc(x.body||'')+'</textarea><div class="subline">Laatste wijziging: '+date(x.updated_at)+'</div>'+(can?'<div class="actions" style="margin-top:12px"><button class="btn sm" data-edit="'+x.id+'">Wijzigingen bewaren</button><button class="btn gold sm" data-approve="'+x.id+'">Goedkeuren, niet verzenden</button><button class="btn red sm" data-reject="'+x.id+'">Afwijzen</button></div>':'<div class="subline">Dit bericht is niet vanuit deze cockpit verzonden.</div>')+'</div>';
+ }).join('')||'<div class="empty">Geen concepten voor deze filter.</div>';
+}
+$('#draftfilter').onchange=renderDrafts;$('#draftsearch').oninput=renderDrafts;
+function renderResponses(){
+ $('#responselist').innerHTML=(DATA.responses||[]).slice(0,60).map(x=>entry(name(x.lead_id),date(x.received_at)+' · '+(clsName[x.classification]||x.classification)+' · '+x.channel,x.summary,'<span class="tag '+(x.classification==='opt_out'?'red':['interested','appointment_request','quote_request','fleet_interest'].includes(x.classification)?'green':'blue')+'">'+esc(clsName[x.classification]||x.classification)+'</span>')).join('')||'<div class="empty">Geen reacties in de CRM-historiek.</div>';
+ const current=$('#responselead').value;
+ $('#responselead').innerHTML='<option value="">Kies prospect…</option>'+(DATA.leads||[]).map(x=>'<option value="'+esc(x.id)+'" '+(x.id===current?'selected':'')+'>'+esc(x.company||x.name)+'</option>').join('');
+}
+$('#responseform').onsubmit=async e=>{
+ e.preventDefault();if(!$('#responseverify').checked)return;
+ if(!confirm('Bevestigt u dat dit een echt ontvangen bericht is? De CRM-fase en de interne wachtrij worden bijgewerkt, maar er wordt niets verzonden.'))return;
+ try{const r=await api('/response',{method:'POST',body:JSON.stringify({
+ lead_id:$('#responselead').value,channel:$('#responsechannel').value,
+ classification:$('#responseclass').value,summary:$('#responsesummary').value
+ })});notify('Reactie geregistreerd; volgende stap voorbereid.');$('#responseform').reset();await load()}
+ catch(err){notify('Registratie mislukt: '+err.message,true)}
+};
+function renderDeals(){
+ $('#dealstats').innerHTML=metric('Offertes',DATA.quotes.length)+metric('Afspraken',DATA.appointments.length)+metric('Fleet Care',DATA.fleet.length)+metric('Automatische boekingen',0+' vanuit deze cockpit');
+ $('#quotelist').innerHTML=DATA.quotes.map(x=>entry(x.number||x.title||'Offerte',date(x.created_at)+' · '+esc(x.status),euro(x.total_cents)+' · '+name(x.lead_id))).join('')||'<div class="empty">Geen offertes.</div>';
+ $('#appointmentlist').innerHTML=DATA.appointments.map(x=>entry(date(x.starts_at),esc(x.status)+' · '+esc(x.provider||'intern'),name(x.lead_id)+' · '+esc(x.service_id||''))).join('')||'<div class="empty">Geen afspraken.</div>';
+ $('#fleetlist').innerHTML=DATA.fleet.map(x=>entry(x.package||'Fleet Care',esc(x.status)+' · volgende: '+date(x.next_visit_at),euro(x.monthly_value_cents)+'/maand')).join('')||'<div class="empty">Geen geregistreerde contracten.</div>';
+}
+function renderSystem(){
+ const salesKinds=['sales_draft_ready','prepare_appointment','prepare_quote','prepare_fleet_offer','prepare_reply','review_human_reply','prepare_sales_next_step','calendar_conflict_check','quote_review_ready'];
+ $('#joblist').innerHTML=DATA.jobs.filter(x=>salesKinds.includes(x.kind)).slice(0,45).map(x=>entry(x.kind.replaceAll('_',' '),date(x.scheduled_at)+' · '+esc(x.status),name(x.payload?.lead_id)+(x.last_error?' · '+x.last_error:''))).join('')||'<div class="empty">Nog geen salesjobs.</div>';
+ $('#integrationlist').innerHTML=DATA.integrations.map(x=>entry(x.display_name||x.service,esc(x.status),'Laatst gecontroleerd: '+date(x.checked_at||x.updated_at))).join('')||'<div class="empty">Geen integraties geregistreerd.</div>';
+}
+$('#process').onclick=async()=>{try{const r=await api('/process',{method:'POST',body:'{}'});notify('Verwerkt: '+r.completed_jobs+' taken, '+r.drafts_created+' concepten. Niets verzonden.');await load()}catch(e){notify('Verwerken mislukt: '+e.message,true)}};
+document.body.addEventListener('click',async e=>{
+ const b=e.target.closest('button');if(!b||!DATA)return;
+ if(b.dataset.reply){go('responses');$('#responselead').value=b.dataset.reply;$('#responsesummary').focus();return}
+ if(b.dataset.stage){const id=b.dataset.stage, s=document.querySelector('select[data-select="'+id+'"]').value;
+  if(!s)return; if(!confirm('Pipelinefase voor '+name(id)+' aanpassen naar '+(stageName[s]||s)+'? Geen automatisch extern contact.'))return;
+  try{await api('/pipeline',{method:'POST',body:JSON.stringify({lead_id:id,pipeline_stage:s})});await load()}catch(err){notify('Pipeline mislukt: '+err.message,true)}return;
+ }
+ const draft=b.dataset.edit||b.dataset.approve||b.dataset.reject;
+ if(draft){
+  const x=DATA.drafts.find(x=>x.id===draft);if(!x)return;
+  const box=document.querySelector('[data-draft="'+draft+'"]'),subject=box.querySelector('[data-subject]').value,body=box.querySelector('[data-body]').value;
+  const action=b.dataset.edit?'edit':b.dataset.approve?'approve':'reject';
+  if(action==='approve' && (subject!==x.subject||body!==x.body)){notify('Sla eerst uw tekstwijzigingen op vóór goedkeuring.',true);return}
+  if(action==='approve' && !confirm('U keurt alleen dit concept goed. Geen verzending. Heeft u de actuele contacthistoriek, afzender en toepasselijke regels gecontroleerd?'))return;
+  if(action==='reject'&&!confirm('Dit concept afwijzen?'))return;
+  try{const res=await api('/review',{method:'POST',body:JSON.stringify({id:draft,action,version:x.updated_at,subject,body})});notify(action==='edit'?'Wijzigingen opgeslagen.':action==='approve'?'Goedgekeurd — NIET verzonden.':'Concept afgewezen.');await load()}catch(err){notify('Actie mislukt: '+err.message,true)}
+ }
+});
+check();
+</script></body></html>
