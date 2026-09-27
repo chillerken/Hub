@@ -14,7 +14,7 @@ class Store {
       headers: {
         'Content-Type': 'application/json',
         'apikey': this.key,
-        'Authorization': `Bearer ${this.key}`
+        ...(this.key.startsWith('sb_secret_') ? {} : { 'Authorization': `Bearer ${this.key}` })
       },
       body: JSON.stringify({ p_secret: this.secret, p_action: action, p_payload: payload })
     });
