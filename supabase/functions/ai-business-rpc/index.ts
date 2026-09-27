@@ -12,6 +12,7 @@ Deno.serve(async (request: Request) => {
     const input = JSON.parse(raw);
     if (!input || typeof input !== 'object' || typeof input.p_secret !== 'string' ||
         typeof input.p_action !== 'string' || !/^[a-z_]{1,40}$/.test(input.p_action) ||
+        !['ai_business_rpc', 'luxwash_rpc'].includes(input.p_rpc ?? 'ai_business_rpc') ||
         !input.p_payload || typeof input.p_payload !== 'object' || Array.isArray(input.p_payload)) {
       return json({ error: 'invalid_request' }, 400);
     }
@@ -20,11 +21,12 @@ Deno.serve(async (request: Request) => {
     if (actual !== secretHash) return json({ error: 'unauthorized' }, 401);
 
     const url = Deno.env.get('SUPABASE_URL');
-    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const secretKeys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') || '{}');
+    const key = secretKeys.default || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!url || !key) return json({ error: 'upstream_unavailable' }, 503);
-    const upstream = await fetch(url.replace(/\/$/, '') + '/rest/v1/rpc/ai_business_rpc', {
+    const upstream = await fetch(url.replace(/\/$/, '') + '/rest/v1/rpc/' + (input.p_rpc ?? 'ai_business_rpc'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': 'Bearer ' + key },
+      headers: { 'Content-Type': 'application/json', 'apikey': key, ...(key.startsWith('sb_secret_') ? {} : { 'Authorization': 'Bearer ' + key }) },
       body: JSON.stringify({ p_secret: input.p_secret, p_action: input.p_action, p_payload: input.p_payload }),
     });
     const body = await upstream.text();
