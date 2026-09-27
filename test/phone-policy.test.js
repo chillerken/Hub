@@ -68,7 +68,7 @@ test('Malformed logs and failed storage never report success',async()=>{
 });
 test('Signed phone bootstrap and log routes use Astra while forged signatures are denied',async t=>{
  const makeRoutes=require('../src/core/routes');const {db,call}=database();const oldFetch=global.fetch;t.after(()=>global.fetch=oldFetch);
- global.fetch=async(url,opts)=>{assert.equal(url,'https://database.invalid/rest/v1/rpc/luxwash_rpc');const b=JSON.parse(opts.body);return Response.json(await db(b.p_action,b.p_payload));};
+ global.fetch=async(url,opts)=>{assert.equal(url,'https://database.invalid/functions/v1/ai-business-rpc');const b=JSON.parse(opts.body);assert.equal(b.p_rpc,'luxwash_rpc');return Response.json(await db(b.p_action,b.p_payload));};
  const secret='qa-test-secret-'.repeat(4);const cfg={baseUrl:'https://phone.invalid',aiMode:'rules',supabase:{url:'https://database.invalid',appSecret:secret},resend:{}};
  const router=makeRoutes(cfg,{});
  async function invoke(path,payload,forged=false){
