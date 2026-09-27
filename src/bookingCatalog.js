@@ -19,7 +19,7 @@ function publicServices() {
 }
 
 function promptText() {
-  return SERVICES.map(s => `- ${s.name}: ${s.id === '72f4773f-0fc6-429b-abe0-201ab013fb80' ? 'vanaf ' : ''}€${s.price}${s.durationMinutes ? `, ${s.durationMinutes} min` : ''}, ${s.manualApproval ? 'aanvraag vereist bevestiging' : 'aanvraag vereist bevestiging'}, ${s.bookingUrl}`).join('\n');
+  return SERVICES.map(s => `- ${s.name}: ${s.id === '72f4773f-0fc6-429b-abe0-201ab013fb80' ? 'vanaf ' : ''}€${s.price}${s.durationMinutes ? `, ${s.durationMinutes} min` : ''}, aanvraag vereist bevestiging, ${s.bookingUrl}`).join('\n');
 }
 
 module.exports = { SERVICES, UPDATED_AT, publicServices, promptText };
