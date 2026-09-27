@@ -9,12 +9,11 @@ class Store {
   }
 
   async rpc(action, payload = {}) {
-    const res = await fetch(`${this.url}/rest/v1/rpc/ai_business_rpc`, {
+    const res = await fetch(`${this.url}/functions/v1/ai-business-rpc`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': this.key,
-        'Authorization': `Bearer ${this.key}`
+        'apikey': this.key
       },
       body: JSON.stringify({ p_secret: this.secret, p_action: action, p_payload: payload })
     });

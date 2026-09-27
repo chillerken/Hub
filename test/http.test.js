@@ -2,7 +2,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 test('Echte HTTP-server: boekingsscherm, bundel, admin- en webhookbeveiliging',async t=>{
  // Configuration only: this test makes no external database/provider calls.
- Object.assign(process.env,{SUPABASE_URL:'https://example.invalid',SUPABASE_PUBLISHABLE_KEY:'test-only',SUPABASE_APP_SECRET:'test-only-secret',NODE_ENV:'test'});
+ Object.assign(process.env,{SUPABASE_URL:'https://example.invalid',SUPABASE_PUBLISHABLE_KEY:'test-only',SUPABASE_SERVICE_ROLE_KEY:'test-only-server-key',SUPABASE_APP_SECRET:'test-only-secret',NODE_ENV:'test'});
  const {server}=require('../server');
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  t.after(()=>new Promise(resolve=>server.close(resolve)));
