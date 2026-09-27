@@ -115,7 +115,7 @@ const server = http.createServer(async (req,res) => {
     }
 
     if(req.method==='GET' && p==='/api/booking/services') {
-      return json(res,200,{ok:true,source:'wix-bookings',updatedAt:bookingCatalog.UPDATED_AT,services:bookingCatalog.publicServices()},{'Cache-Control':'public, max-age=300'});
+      return json(res,200,{ok:true,source:'luxwash-site',updatedAt:bookingCatalog.UPDATED_AT,services:bookingCatalog.publicServices()},{'Cache-Control':'public, max-age=300'});
     }
 
     if(req.method==='GET' && p==='/') return redirect(res,'/boeken');
