@@ -1,20 +1,19 @@
 class Store {
   constructor(config) {
     if (!config.supabase.url) throw new Error('SUPABASE_URL is verplicht.');
-    if (!config.supabase.serviceRoleKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY is verplicht.');
+    if (!config.supabase.publishableKey) throw new Error('SUPABASE_PUBLISHABLE_KEY is verplicht.');
     if (!config.supabase.appSecret) throw new Error('SUPABASE_APP_SECRET is verplicht.');
     this.url = config.supabase.url.replace(/\/$/, '');
-    this.key = config.supabase.serviceRoleKey;
+    this.key = config.supabase.publishableKey;
     this.secret = config.supabase.appSecret;
   }
 
   async rpc(action, payload = {}) {
-    const res = await fetch(`${this.url}/rest/v1/rpc/ai_business_rpc`, {
+    const res = await fetch(`${this.url}/functions/v1/ai-business-rpc`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': this.key,
-        ...(this.key.startsWith('sb_secret_') ? {} : { 'Authorization': `Bearer ${this.key}` })
+        'apikey': this.key
       },
       body: JSON.stringify({ p_secret: this.secret, p_action: action, p_payload: payload })
     });
