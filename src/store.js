@@ -1,10 +1,10 @@
 class Store {
   constructor(config) {
     if (!config.supabase.url) throw new Error('SUPABASE_URL is verplicht.');
-    if (!config.supabase.publishableKey) throw new Error('SUPABASE_PUBLISHABLE_KEY is verplicht.');
+    if (!config.supabase.serviceRoleKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY is verplicht.');
     if (!config.supabase.appSecret) throw new Error('SUPABASE_APP_SECRET is verplicht.');
     this.url = config.supabase.url.replace(/\/$/, '');
-    this.key = config.supabase.publishableKey;
+    this.key = config.supabase.serviceRoleKey;
     this.secret = config.supabase.appSecret;
   }
 
