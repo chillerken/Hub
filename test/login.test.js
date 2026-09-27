@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 
 // This file runs with test-only credentials and never starts the worker or providers.
 Object.assign(process.env,{
- NODE_ENV:'test',SUPABASE_URL:'https://example.invalid',SUPABASE_PUBLISHABLE_KEY:'test-only',
+ NODE_ENV:'test',SUPABASE_URL:'https://example.invalid',SUPABASE_PUBLISHABLE_KEY:'test-only',SUPABASE_SERVICE_ROLE_KEY:'test-only-server-key',
  SUPABASE_APP_SECRET:'test-only-'.repeat(4),COOKIE_SECRET:'login-test-only-'.repeat(3),
  ADMIN_PASSWORD:'isolated-login-test-password',CRON_SECRET:'login-test-only-'.repeat(3),
  OPENAI_API_KEY:'',RESEND_API_KEY:'',WHATSAPP_TOKEN:'',CENTRAL_DASHBOARD:''
