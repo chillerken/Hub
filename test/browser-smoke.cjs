@@ -1,6 +1,6 @@
 // Isolated browser checks. Fixtures never reach Supabase or any real provider.
 const assert=require('node:assert/strict');
-Object.assign(process.env,{NODE_ENV:'test',SUPABASE_URL:'https://example.invalid',SUPABASE_PUBLISHABLE_KEY:'test-only',SUPABASE_APP_SECRET:'test-only-'.repeat(4),COOKIE_SECRET:'browser-test-only-'.repeat(3),ADMIN_PASSWORD:'browser-test-password',CRON_SECRET:'browser-test-only-'.repeat(3),OPENAI_API_KEY:'',RESEND_API_KEY:'',WHATSAPP_TOKEN:''});
+Object.assign(process.env,{NODE_ENV:'test',SUPABASE_URL:'https://example.invalid',SUPABASE_PUBLISHABLE_KEY:'test-only',SUPABASE_SERVICE_ROLE_KEY:'test-only-server-key',SUPABASE_APP_SECRET:'test-only-'.repeat(4),COOKIE_SECRET:'browser-test-only-'.repeat(3),ADMIN_PASSWORD:'browser-test-password',CRON_SECRET:'browser-test-only-'.repeat(3),OPENAI_API_KEY:'',RESEND_API_KEY:'',WHATSAPP_TOKEN:''});
 const {chromium}=require('playwright');
 const {server}=require('../server');
 const sid='00000000-0000-4000-8000-000000000001',qid='00000000-0000-4000-8000-000000000002';
