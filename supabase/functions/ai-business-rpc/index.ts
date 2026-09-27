@@ -12,7 +12,7 @@ Deno.serve(async (request: Request) => {
     const input = JSON.parse(raw);
     if (!input || typeof input !== 'object' || typeof input.p_secret !== 'string' ||
         typeof input.p_action !== 'string' || !/^[a-z_]{1,40}$/.test(input.p_action) ||
-        !['ai_business_rpc', 'luxwash_rpc'].includes(input.p_rpc ?? 'ai_business_rpc') ||
+        !['ai_business_rpc', 'luxwash_rpc', 'appointment_agent_rpc'].includes(input.p_rpc ?? 'ai_business_rpc') ||
         !input.p_payload || typeof input.p_payload !== 'object' || Array.isArray(input.p_payload)) {
       return json({ error: 'invalid_request' }, 400);
     }
