@@ -34,6 +34,7 @@ const config = {
   supabase: {
     url: process.env.SUPABASE_URL || '',
     publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || '',
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
     appSecret: process.env.SUPABASE_APP_SECRET || ''
   },
   openaiKey: process.env.OPENAI_API_KEY || '',
@@ -76,6 +77,7 @@ function validate() {
   const errors = [];
   if (!config.supabase.url) errors.push('SUPABASE_URL ontbreekt');
   if (!config.supabase.publishableKey) errors.push('SUPABASE_PUBLISHABLE_KEY ontbreekt');
+  if (!config.supabase.serviceRoleKey) errors.push('SUPABASE_SERVICE_ROLE_KEY ontbreekt');
   if (!config.supabase.appSecret || config.supabase.appSecret.length < 32) errors.push('SUPABASE_APP_SECRET moet minstens 32 tekens bevatten');
   if (!config.adminPassword || config.adminPassword.length < 12) errors.push('ADMIN_PASSWORD moet minstens 12 tekens bevatten');
   if (!config.cookieSecret || config.cookieSecret.length < 32) errors.push('COOKIE_SECRET moet minstens 32 tekens bevatten');
