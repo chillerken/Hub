@@ -11,10 +11,10 @@ function makeAppointmentAgent(config) {
   const base = config.supabase.url.replace(/\/$/, '');
 
   async function stateRpc(action, payload = {}) {
-    const r = await fetch(`${base}/rest/v1/rpc/appointment_agent_rpc`, {
+    const r = await fetch(`${base}/functions/v1/ai-business-rpc`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json', apikey: config.supabase.publishableKey},
-      body: JSON.stringify({p_secret: config.supabase.appSecret, p_action: action, p_payload: payload}),
+      body: JSON.stringify({p_secret: config.supabase.appSecret, p_rpc: 'appointment_agent_rpc', p_action: action, p_payload: payload}),
       signal: AbortSignal.timeout(15000),
     });
     const data = await r.json().catch(() => null);
