@@ -18,21 +18,7 @@ COOKIE_NAME = "luxwash_player"
 SESSION_SECONDS = 7 * 24 * 60 * 60
 ATTEMPTS = defaultdict(list)
 
-BRIEFING = """Goedenavond Gert-Jan. Dit is de LuxWash avondplanning van maandag 28 september.
-
-Eerst: controleer de afspraak van Sylvie Van den Bossche voor morgen om negen uur. Vergelijk adres en klantgegevens met de oorspronkelijke bevestiging. Verstuur de herinnering niet opnieuw als die al handmatig verzonden is.
-
-Ten tweede: controleer of het bedankbericht aan Martine Daelman al verzonden is. Registreer dit slechts één keer. Voeg ontbrekende contactgegevens alleen toe na verificatie.
-
-Ten derde: de LuxWash beheerapp. Bewaar een back-up van de lokale gegevens. Gebruik facturen voorlopig als concepten. De Android APK, Supabase synchronisatie en wettelijke factuurcontrole zijn nog niet volledig getest.
-
-Ten vierde: controleer de prijzenpagina. Behoud bestaande prijzen. Controleer of het combipakket voor interieur en exterieur vanaf vijfennegentig euro correct zichtbaar is. Voer pas daarna promotie.
-
-Ten vijfde: noteer voor morgen maximaal tien nieuwe zakelijke prospects in Aalst, Lede, Erpe-Mere en omgeving. Controleer dubbele contacten voordat je iemand benadert.
-
-Sluit af met een korte planning voor morgen: materiaal klaarzetten, route nakijken en voldoende rust nemen.
-
-Dit was de LuxWash avondbriefing."""
+BRIEFING = os.environ.get("BRIEFING_TEXT", "Goedenavond. Controleer de afspraken, klantopvolging, prijspagina en materiaal voor morgen.")
 
 class Speech(BaseModel):
     text: str = Field(min_length=1, max_length=12000)
