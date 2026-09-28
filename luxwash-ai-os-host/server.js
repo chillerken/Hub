@@ -211,4 +211,12 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '0.0.0.0', () => console.log(`LuxWash AI OS listening on ${PORT}`));
+server.listen(PORT, '0.0.0.0', async () => {
+  console.log('LuxWash AI OS listening on ' + PORT);
+  if (SUPABASE_EDGE_BASE && SUPABASE_PROXY_SESSION_SECRET_HEX) {
+    try {
+      const r = await fetch(SUPABASE_EDGE_BASE + '/api/snapshot', {headers:{Cookie:supabaseCookie(),Accept:'application/json'},signal:AbortSignal.timeout(15000)});
+      console.log('Backend connection check HTTP:', r.status, 'JSON:', (r.headers.get('content-type')||'').includes('json'));
+    } catch(e) {console.log('Backend connection check failed:',String(e.message).slice(0,120));}
+  }
+});
