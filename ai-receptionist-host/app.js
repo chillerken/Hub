@@ -1,6 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
 const URL="https://ndecxbsrxspkuxjsbndq.supabase.co",KEY="sb_publishable_rhEeG3_B95xt8PA_MlG86Q_oti2Rklc";
 const supabase=createClient(URL,KEY);
+window.__jarvisInvoke=()=>supabase.functions.invoke("jarvis-orchestrator",{body:{}});
+window.__jarvisEsc=esc;
 const app=document.querySelector("#app");
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\\\"":"&quot;","'":"&#39;"}[c]));
 const arr=v=>Array.isArray(v)?v:[];
