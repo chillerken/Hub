@@ -29,6 +29,14 @@ alter table public.luxwash_calendar_sync_jobs enable row level security;
 revoke all on table public.luxwash_calendar_sync_jobs from public,anon,authenticated;
 grant all on table public.luxwash_calendar_sync_jobs to service_role;
 
+drop policy if exists luxwash_calendar_sync_jobs_deny_client on public.luxwash_calendar_sync_jobs;
+create policy luxwash_calendar_sync_jobs_deny_client
+on public.luxwash_calendar_sync_jobs
+for all
+to anon, authenticated
+using (false)
+with check (false);
+
 create or replace function private.luxwash_enqueue_calendar_sync()
 returns trigger
 language plpgsql
