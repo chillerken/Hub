@@ -244,11 +244,13 @@ Deno.serve(async(req:Request)=>{
         let webhookSecret=clean(stored?.webhook_secret,2000);
         let webhookEndpointId=clean(nextConfig.webhook_endpoint_id||stored?.webhook_endpoint_id,500);
 
-        if(webhookSecret && webhookEndpointId && nextConfig.webhook_managed===true && nextConfig.webhook_endpoint_url!==webhookUrl){
+        if(webhookSecret && webhookEndpointId && nextConfig.webhook_managed===true){
           const form=new URLSearchParams();
           form.append("url",webhookUrl);
           form.append("enabled_events[]","checkout.session.completed");
           form.append("enabled_events[]","checkout.session.async_payment_succeeded");
+          form.append("enabled_events[]","checkout.session.async_payment_failed");
+          form.append("enabled_events[]","checkout.session.expired");
           const wr=await fetch(`https://api.stripe.com/v1/webhook_endpoints/${encodeURIComponent(webhookEndpointId)}`,{
             method:"POST",
             headers:{Authorization:`Bearer ${stripeKey}`,"Content-Type":"application/x-www-form-urlencoded"},
@@ -270,6 +272,8 @@ Deno.serve(async(req:Request)=>{
           form.append("url",webhookUrl);
           form.append("enabled_events[]","checkout.session.completed");
           form.append("enabled_events[]","checkout.session.async_payment_succeeded");
+          form.append("enabled_events[]","checkout.session.async_payment_failed");
+          form.append("enabled_events[]","checkout.session.expired");
           form.append("description","mijn.ai Business customer payment verification");
           form.append("metadata[organization_id]",String(membership.organization_id));
 
