@@ -53,18 +53,43 @@ Deno.serve(async(req:Request)=>{
     if(intErr||!integration) return out({error:"Integration not found"},404);
 
     if(action==="disconnect"){
+      let disconnectWarning:any=null;
+      if(integration.provider==="stripe" && integration.config?.webhook_managed && integration.config?.webhook_endpoint_id){
+        try{
+          const {data:rawStripe}=await serviceDb.rpc("get_integration_credential",{
+            p_integration_id:integration.id,p_organization_id:membership.organization_id
+          });
+          let stripeKey="";
+          try{stripeKey=clean(JSON.parse(rawStripe||"{}")?.secret_key,2000)}catch{}
+          if(stripeKey){
+            const form=new URLSearchParams({disabled:"true"});
+            const wr=await fetch(`https://api.stripe.com/v1/webhook_endpoints/${encodeURIComponent(integration.config.webhook_endpoint_id)}`,{
+              method:"POST",
+              headers:{Authorization:`Bearer ${stripeKey}`,"Content-Type":"application/x-www-form-urlencoded"},
+              body:form
+            });
+            if(!wr.ok){
+              const wj=await wr.json().catch(()=>({}));
+              disconnectWarning="Stripe webhook could not be disabled automatically: "+clean(wj?.error?.message||wr.statusText,500);
+            }
+          }
+        }catch(e){
+          disconnectWarning="Stripe webhook disable check failed";
+        }
+      }
+
       const {error:removeErr}=await serviceDb.rpc("remove_integration_credential",{
         p_integration_id:integration.id,
         p_organization_id:membership.organization_id
       });
       if(removeErr) throw removeErr;
       const {data:updated,error:updErr}=await serviceDb.from("tenant_integrations")
-        .update({status:"disabled",last_error:null,last_verified_at:null})
+        .update({status:"disabled",last_error:disconnectWarning,last_verified_at:null})
         .eq("id",integration.id).eq("organization_id",membership.organization_id)
         .select("id,channel,provider,status,config,last_verified_at,last_error")
         .single();
       if(updErr) throw updErr;
-      return out({ok:true,integration:updated});
+      return out({ok:true,integration:updated,warning:disconnectWarning});
     }
 
     if(action!=="configure") return out({error:"Unknown action"},400);
@@ -107,6 +132,7 @@ Deno.serve(async(req:Request)=>{
     }
 
     let credentialToStore=secret;
+    let stripeCredential:any=null;
     if(integration.provider==="stripe"){
       let existing:any={};
       const {data:existingRaw}=await serviceDb.rpc("get_integration_credential",{
@@ -116,8 +142,9 @@ Deno.serve(async(req:Request)=>{
       const webhookSecret=clean(body.webhook_secret,2000)||clean(existing?.webhook_secret,2000);
       const secretKey=secret||clean(existing?.secret_key,2000);
       if(activate && (!secretKey || (!secretKey.startsWith("sk_")&&!secretKey.startsWith("rk_")))) return out({error:"Stripe secret/restricted key required before activation"},400);
-      if(activate && !webhookSecret.startsWith("whsec_")) return out({error:"Stripe webhook signing secret required before activation"},400);
-      credentialToStore=(secret||body.webhook_secret)?JSON.stringify({secret_key:secretKey,webhook_secret:webhookSecret}):"";
+      if(body.webhook_secret && !webhookSecret.startsWith("whsec_")) return out({error:"Stripe webhook signing secret must start with whsec_"},400);
+      stripeCredential={...existing,secret_key:secretKey,webhook_secret:webhookSecret};
+      credentialToStore=(secret||body.webhook_secret)?JSON.stringify(stripeCredential):"";
     }
 
     if(credentialToStore){
@@ -131,6 +158,45 @@ Deno.serve(async(req:Request)=>{
 
     let verifiedAt:any=null;
     let lastError:any=null;
+
+    if(activate && integration.provider==="resend"){
+      const {data:resendKey}=await serviceDb.rpc("get_integration_credential",{
+        p_integration_id:integration.id,p_organization_id:membership.organization_id
+      });
+      const {data:profile}=await serviceDb.from("business_profiles")
+        .select("business_name,notification_email")
+        .eq("organization_id",membership.organization_id)
+        .single();
+      const target=clean(profile?.notification_email,250);
+      if(!isEmail(target)) return out({error:"A valid notification email is required before activating Resend"},400);
+
+      try{
+        const rr=await fetch("https://api.resend.com/emails",{
+          method:"POST",
+          headers:{
+            Authorization:`Bearer ${resendKey}`,
+            "Content-Type":"application/json",
+            "Idempotency-Key":`integration-${integration.id}-verify-${Date.now()}`
+          },
+          body:JSON.stringify({
+            from:`${clean(nextConfig.sender_name||profile?.business_name||"mijn.ai Business",120)} <${clean(nextConfig.sender_email,250)}>`,
+            to:[target],
+            subject:"mijn.ai Business – e-mailkoppeling getest",
+            text:"Deze test bevestigt dat de e-mailintegratie correct kan verzenden. Er is geen klantbericht verstuurd."
+          })
+        });
+        const rj=await rr.json().catch(()=>({}));
+        if(!rr.ok){
+          return out({error:"Resend sending verification failed",detail:clean(rj?.message||rj?.error||rr.statusText,800)},400);
+        }
+        verifiedAt=new Date().toISOString();
+        nextConfig.resend_test_email_id=rj?.id||null;
+        nextConfig.verified_sender=nextConfig.sender_email;
+      }catch(e){
+        lastError=clean(e instanceof Error?e.message:e,800);
+        return out({error:"Resend verification failed",detail:lastError},400);
+      }
+    }
 
     if(activate && integration.provider==="meta_whatsapp"){
       const {data:tokenValue}=await serviceDb.rpc("get_integration_credential",{
@@ -158,15 +224,63 @@ Deno.serve(async(req:Request)=>{
       const {data:rawStripe}=await serviceDb.rpc("get_integration_credential",{
         p_integration_id:integration.id,p_organization_id:membership.organization_id
       });
-      let stripeKey="";
-      try{stripeKey=clean(JSON.parse(rawStripe||"{}")?.secret_key,2000)}catch{}
+      let stored:any={};
+      try{stored=JSON.parse(rawStripe||"{}")}catch{}
+      const stripeKey=clean(stored?.secret_key,2000);
       try{
         const vr=await fetch("https://api.stripe.com/v1/account",{headers:{Authorization:`Bearer ${stripeKey}`}});
         const vj=await vr.json().catch(()=>({}));
         if(!vr.ok) return out({error:"Stripe credential verification failed",detail:clean(vj?.error?.message||vr.statusText,800)},400);
-        verifiedAt=new Date().toISOString();
+
+        const webhookUrl="https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/customer-payment-webhook";
+        let webhookSecret=clean(stored?.webhook_secret,2000);
+        let webhookEndpointId=clean(nextConfig.webhook_endpoint_id||stored?.webhook_endpoint_id,500);
+
+        if(!webhookSecret){
+          const form=new URLSearchParams();
+          form.append("url",webhookUrl);
+          form.append("enabled_events[]","checkout.session.completed");
+          form.append("enabled_events[]","checkout.session.async_payment_succeeded");
+          form.append("description","mijn.ai Business customer payment verification");
+          form.append("metadata[organization_id]",String(membership.organization_id));
+
+          const wr=await fetch("https://api.stripe.com/v1/webhook_endpoints",{
+            method:"POST",
+            headers:{Authorization:`Bearer ${stripeKey}`,"Content-Type":"application/x-www-form-urlencoded"},
+            body:form
+          });
+          const wj=await wr.json().catch(()=>({}));
+          if(!wr.ok){
+            return out({
+              error:"Stripe account verified, but webhook provisioning failed",
+              detail:clean(wj?.error?.message||wr.statusText,800),
+              code:"stripe_webhook_manual_setup_required",
+              webhook_url:webhookUrl
+            },400);
+          }
+          webhookSecret=clean(wj?.secret,2000);
+          webhookEndpointId=clean(wj?.id,500);
+          if(!webhookSecret.startsWith("whsec_")||!webhookEndpointId){
+            return out({error:"Stripe webhook was created without a usable signing secret"},500);
+          }
+
+          stored={...stored,secret_key:stripeKey,webhook_secret:webhookSecret,webhook_endpoint_id:webhookEndpointId};
+          const {error:storeWebhookErr}=await serviceDb.rpc("set_integration_credential",{
+            p_integration_id:integration.id,
+            p_organization_id:membership.organization_id,
+            p_secret:JSON.stringify(stored)
+          });
+          if(storeWebhookErr) throw storeWebhookErr;
+          nextConfig.webhook_managed=true;
+        }else{
+          nextConfig.webhook_managed=nextConfig.webhook_managed??false;
+        }
+
+        nextConfig.webhook_endpoint_id=webhookEndpointId||null;
+        nextConfig.webhook_endpoint_url=webhookUrl;
         nextConfig.stripe_account_id=vj?.id||nextConfig.stripe_account_id||null;
         nextConfig.stripe_country=vj?.country||nextConfig.stripe_country||null;
+        verifiedAt=new Date().toISOString();
       }catch(e){
         lastError=clean(e instanceof Error?e.message:e,800);
         return out({error:"Stripe verification failed",detail:lastError},400);
