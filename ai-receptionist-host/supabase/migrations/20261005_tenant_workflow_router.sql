@@ -341,3 +341,129 @@ end;
 $$;
 revoke all on function public.remove_integration_credential(uuid,uuid) from public,anon,authenticated;
 grant execute on function public.remove_integration_credential(uuid,uuid) to service_role;
+
+
+-- Customer payment lifecycle: create tenant Stripe checkout, deliver link, then accept only verified paid webhooks.
+alter table public.customer_payments
+  drop constraint if exists customer_payments_amount_positive;
+alter table public.customer_payments
+  add constraint customer_payments_amount_positive
+  check (amount_cents is null or amount_cents > 0);
+
+create or replace function public.enqueue_payment_lifecycle_actions()
+returns trigger
+language plpgsql
+security invoker
+set search_path=public
+as $$
+declare
+  enabled boolean := false;
+begin
+  select coalesce(automation_enabled,false) into enabled
+  from public.business_profiles
+  where organization_id=new.organization_id;
+
+  if not enabled then return new; end if;
+
+  if new.status='pending'
+     and new.amount_cents is not null
+     and new.amount_cents>0
+     and new.payment_url is null
+     and (
+       tg_op='INSERT'
+       or old.status is distinct from new.status
+       or old.amount_cents is distinct from new.amount_cents
+     ) then
+    insert into public.workflow_actions(
+      organization_id,lead_id,action_type,channel,status,priority,idempotency_key,payload
+    )
+    values(
+      new.organization_id,new.lead_id,'payment_request','payment','pending','high',
+      'payment:'||new.id::text||':request',
+      jsonb_build_object(
+        'payment_id',new.id,'appointment_id',new.appointment_id,
+        'amount_cents',new.amount_cents,'currency',new.currency
+      )
+    )
+    on conflict(idempotency_key) do nothing;
+  end if;
+
+  if new.payment_url is not null
+     and (tg_op='INSERT' or old.payment_url is distinct from new.payment_url) then
+    insert into public.workflow_actions(
+      organization_id,lead_id,action_type,channel,status,priority,idempotency_key,payload
+    )
+    values(
+      new.organization_id,new.lead_id,'payment_link_send','auto','pending','high',
+      'payment:'||new.id::text||':link_send',
+      jsonb_build_object(
+        'payment_id',new.id,'appointment_id',new.appointment_id,
+        'payment_url',new.payment_url,'amount_cents',new.amount_cents,'currency',new.currency
+      )
+    )
+    on conflict(idempotency_key) do nothing;
+  end if;
+
+  if new.status='paid'
+     and (tg_op='INSERT' or old.status is distinct from new.status) then
+    insert into public.workflow_actions(
+      organization_id,lead_id,action_type,channel,status,priority,idempotency_key,payload
+    )
+    values(
+      new.organization_id,new.lead_id,'payment_received','internal','pending','high',
+      'payment:'||new.id::text||':received',
+      jsonb_build_object(
+        'payment_id',new.id,'appointment_id',new.appointment_id,
+        'amount_cents',new.amount_cents,'currency',new.currency
+      )
+    )
+    on conflict(idempotency_key) do nothing;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_payment_lifecycle_actions on public.customer_payments;
+create trigger trg_payment_lifecycle_actions
+after insert or update of status,amount_cents,payment_url on public.customer_payments
+for each row execute function public.enqueue_payment_lifecycle_actions();
+
+create or replace function public.mark_customer_payment_paid(
+  p_organization_id uuid,
+  p_payment_id uuid,
+  p_provider_payment_id text,
+  p_paid_at timestamptz
+)
+returns public.customer_payments
+language plpgsql
+security invoker
+set search_path=public
+as $$
+declare
+  v public.customer_payments;
+begin
+  select * into v
+  from public.customer_payments
+  where id=p_payment_id and organization_id=p_organization_id
+  for update;
+
+  if not found then raise exception 'payment not found'; end if;
+  if v.status='paid' then return v; end if;
+
+  update public.customer_payments
+  set status='paid',
+      provider='stripe',
+      provider_payment_id=coalesce(p_provider_payment_id,provider_payment_id),
+      paid_at=coalesce(p_paid_at,now()),
+      updated_at=now()
+  where id=p_payment_id and organization_id=p_organization_id
+  returning * into v;
+
+  return v;
+end;
+$$;
+revoke all on function public.mark_customer_payment_paid(uuid,uuid,text,timestamptz)
+  from public,anon,authenticated;
+grant execute on function public.mark_customer_payment_paid(uuid,uuid,text,timestamptz)
+  to service_role;
