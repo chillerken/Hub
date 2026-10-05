@@ -1003,3 +1003,55 @@ revoke all on function public.consume_billing_checkout_ref(text,text)
   from public,anon,authenticated;
 grant execute on function public.consume_billing_checkout_ref(text,text)
   to service_role;
+
+
+-- Least-privilege hardening for tenant operational tables.
+create or replace function public.is_org_admin(org_id uuid)
+returns boolean
+language sql
+stable
+set search_path=''
+as $$
+  select exists(
+    select 1 from public.memberships m
+    where m.organization_id=org_id
+      and m.user_id=(select auth.uid())
+      and m.active=true
+      and m.role in ('owner','admin')
+  );
+$$;
+revoke all on function public.is_org_admin(uuid) from public,anon;
+grant execute on function public.is_org_admin(uuid) to authenticated;
+
+revoke all on public.appointments from anon;
+revoke all on public.customer_payments from anon;
+revoke all on public.tenant_integrations from anon;
+revoke all on public.workflow_actions from anon;
+revoke all on public.workflow_action_attempts from anon;
+
+revoke insert,update,delete,truncate,references,trigger on public.appointments from authenticated;
+revoke insert,update,delete,truncate,references,trigger on public.customer_payments from authenticated;
+revoke insert,update,delete,truncate,references,trigger on public.tenant_integrations from authenticated;
+revoke insert,update,delete,truncate,references,trigger on public.workflow_actions from authenticated;
+revoke insert,update,delete,truncate,references,trigger on public.workflow_action_attempts from authenticated;
+
+grant select on public.appointments to authenticated;
+grant select on public.customer_payments to authenticated;
+grant select on public.tenant_integrations to authenticated;
+grant select on public.workflow_actions to authenticated;
+grant select on public.workflow_action_attempts to authenticated;
+
+drop policy if exists appointments_update on public.appointments;
+drop policy if exists customer_payments_update on public.customer_payments;
+drop policy if exists tenant_integrations_insert on public.tenant_integrations;
+drop policy if exists tenant_integrations_update on public.tenant_integrations;
+drop policy if exists tenant_integrations_delete on public.tenant_integrations;
+drop policy if exists workflow_actions_update on public.workflow_actions;
+
+drop policy if exists profile_update on public.business_profiles;
+create policy profile_update
+on public.business_profiles
+for update
+to authenticated
+using (public.is_org_admin(organization_id))
+with check (public.is_org_admin(organization_id));
