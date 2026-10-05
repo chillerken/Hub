@@ -1055,3 +1055,23 @@ for update
 to authenticated
 using (public.is_org_admin(organization_id))
 with check (public.is_org_admin(organization_id));
+
+
+-- Normalize default integration capabilities for pre-existing tenants.
+update public.tenant_integrations
+set capabilities = case channel
+  when 'email' then array[
+    'notify_owner','lead_follow_up','appointment_confirmation',
+    'payment_link_send','review_request','retention_follow_up'
+  ]::text[]
+  when 'whatsapp' then array[
+    'lead_follow_up','appointment_confirmation',
+    'payment_link_send','review_request','retention_follow_up'
+  ]::text[]
+  when 'calendar' then array['calendar_request','calendar_cancel']::text[]
+  when 'payment' then array['payment_request','payment_received']::text[]
+  else capabilities
+end,
+updated_at=now()
+where is_default=true
+  and channel in ('email','whatsapp','calendar','payment');
