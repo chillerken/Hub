@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#070d12">
+<meta name="description" content="Gratis LuxAI Website Scan voor SEO, performance, conversie, techniek en security hygiene.">
+<title>Gratis Website Scan | LuxAI</title>
+<style>
+:root{--bg:#070d12;--panel:#0d151d;--panel2:#081017;--line:#20394d;--line2:#345067;--text:#fff;--muted:#aebbc5;--muted2:#8193a0;--gold:#ffd34f;--green:#72e09b;--orange:#ffbf69;--red:#ff8585;--blue:#79c7ff;--shadow:0 18px 60px rgba(0,0,0,.26)}
+*{box-sizing:border-box}html{scroll-behavior:smooth}html,body{margin:0;background:radial-gradient(circle at 85% -10%,#172f43 0,transparent 34%),var(--bg);color:var(--text);font-family:Inter,Arial,Helvetica,sans-serif}body{min-height:100vh}button,input{font:inherit}
+.wrap{max-width:1080px;margin:auto;padding:20px 16px 72px}.top{display:flex;justify-content:space-between;align-items:center;gap:12px}.brand{font-weight:950;letter-spacing:.06em;font-size:15px}.brand b{color:var(--gold)}.back{color:#fff;text-decoration:none;border:1px solid #35536b;padding:10px 13px;border-radius:12px;background:#0d1720;font-weight:750}
+.modebar{display:flex;gap:8px;margin-top:20px;overflow:auto}.mode{white-space:nowrap;text-decoration:none;color:#b9c7d0;border:1px solid #294255;background:#0b151d;border-radius:999px;padding:10px 14px;font-weight:850;font-size:13px}.mode.on{background:var(--gold);border-color:var(--gold);color:#0b0b0b}
+.hero{padding:30px 0 22px;max-width:900px}.kicker,.eyebrow{display:inline-flex;align-items:center;gap:7px;background:rgba(255,211,79,.12);color:var(--gold);border:1px solid rgba(255,211,79,.34);font-weight:900;border-radius:999px;padding:7px 12px;font-size:12px;letter-spacing:.04em}.hero h1{font-size:clamp(38px,7vw,66px);line-height:1.02;margin:18px 0 14px;letter-spacing:-.045em}.hero p{font-size:clamp(17px,2.5vw,21px);line-height:1.55;color:#c7d0d7;max-width:850px}
+.grid{display:grid;grid-template-columns:.85fr 1.15fr;gap:18px;align-items:start}.card{background:linear-gradient(180deg,rgba(16,27,37,.98),rgba(10,18,25,.98));border:1px solid var(--line);border-radius:20px;padding:22px;box-shadow:var(--shadow)}.card h2{margin:0 0 14px;font-size:22px}.list{display:grid;gap:11px;color:#e3e8eb}.list div:before{content:'✓';color:var(--gold);font-weight:950;margin-right:9px}.scope{margin-top:16px;border:1px solid #263f51;background:#09121a;border-radius:14px;padding:14px}.scope strong{display:block}.scope span{display:block;color:var(--muted);font-size:12px;line-height:1.5;margin-top:5px}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:12px}.full{grid-column:1/-1}label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}input{width:100%;border:1px solid var(--line2);background:var(--panel2);color:#fff;border-radius:11px;padding:13px;font-size:16px;outline:none}input:focus{border-color:#6c98b6;box-shadow:0 0 0 3px rgba(121,199,255,.1)}.check{display:flex;gap:9px;align-items:flex-start;background:var(--panel2);border:1px solid #243d50;border-radius:10px;padding:10px;margin:0}.check input{width:auto;margin-top:2px;accent-color:var(--gold)}
+.submit,.secondary,.quiet{width:100%;border-radius:12px;font-size:15px;font-weight:900;padding:14px;cursor:pointer}.submit{border:0;background:var(--gold);color:#0c0c0c}.secondary{border:1px solid #45657e;background:#101c26;color:#fff}.quiet{border:1px solid #2a4052;background:transparent;color:#dce7ee}.submit:disabled,.secondary:disabled,.quiet:disabled{opacity:.55;cursor:default}.note{font-size:12px;color:var(--muted2);line-height:1.55}.error{display:none;color:#ffaaaa;margin-top:10px}.error.show{display:block}.hp{position:absolute!important;left:-9999px!important;opacity:0!important}
+.result{display:none;margin-top:18px}.result.show{display:block}.report-head{display:grid;grid-template-columns:190px 1fr;gap:20px;align-items:center}.score-ring{width:168px;height:168px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--gold) 0deg,var(--gold) var(--score-angle,0deg),#1a2b37 var(--score-angle,0deg) 360deg);padding:10px;margin:auto}.score-inner{width:100%;height:100%;border-radius:50%;background:#09121a;display:grid;place-items:center;text-align:center;border:1px solid #243b4d}.score{font-size:43px;font-weight:950;line-height:1}.score small{font-size:15px;color:#8da0ad}.score-label{font-size:11px;color:var(--muted);margin-top:6px;text-transform:uppercase;letter-spacing:.08em}.status{font-size:clamp(24px,4vw,36px);font-weight:950;line-height:1.05;letter-spacing:-.025em;margin:10px 0}.summary{color:#cbd5dc;line-height:1.65;font-size:15px}.url{margin-top:10px;font-size:12px;color:#90a6b5;word-break:break-all}
+.scores{display:grid;grid-template-columns:repeat(5,1fr);gap:9px;margin-top:18px}.scorecard{border:1px solid #263f51;background:#09121a;border-radius:14px;padding:13px}.scorecard strong{display:block;font-size:23px}.scorecard span{display:block;color:var(--muted);font-size:11px;margin-top:3px}.bar{height:5px;background:#1a2b37;border-radius:999px;margin-top:10px;overflow:hidden}.fill{height:100%;background:var(--gold);border-radius:999px}
+.section{margin-top:18px}.section-title{display:flex;justify-content:space-between;gap:10px;align-items:end;margin-bottom:10px}.section-title h2{margin:0;font-size:21px}.section-title p{margin:0;color:var(--muted);font-size:12px}.opps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.opp{border:1px solid #263f51;background:#09121a;border-radius:15px;padding:15px}.sev{display:inline-flex;border-radius:999px;padding:5px 8px;font-size:10px;font-weight:950;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}.sev.critical{background:rgba(255,133,133,.12);color:var(--red);border:1px solid rgba(255,133,133,.35)}.sev.high{background:rgba(255,191,105,.12);color:var(--orange);border:1px solid rgba(255,191,105,.35)}.sev.medium{background:rgba(121,199,255,.12);color:var(--blue);border:1px solid rgba(121,199,255,.35)}.sev.low{background:rgba(114,224,155,.1);color:var(--green);border:1px solid rgba(114,224,155,.3)}.opp h3{font-size:16px;line-height:1.25;margin:0}.opp p{font-size:13px;line-height:1.55;color:#bdc9d1;margin:8px 0 0}.fix{font-size:12px!important;color:#e3e8eb!important;border-top:1px solid #233746;padding-top:9px!important;margin-top:10px!important}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.metric{border:1px solid #243a4a;background:#09121a;border-radius:13px;padding:12px}.metric strong{display:block;font-size:17px}.metric span{display:block;font-size:10px;color:var(--muted);margin-top:4px}
+.recs{display:grid;gap:9px;padding:0;margin:0;list-style:none}.rec{border:1px solid #253c4d;background:#09121a;border-radius:13px;padding:13px}.rec-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.cat{font-size:10px;color:#a9bbc7;text-transform:uppercase;letter-spacing:.06em}.rec strong{display:block;font-size:14px}.rec p{color:#bdc8cf;font-size:12px;line-height:1.55;margin:6px 0 0}.rec .fixline{color:#e5edf2}
+.disclaimer{margin-top:16px;border:1px solid #2d4352;background:#08121a;border-radius:13px;padding:13px;color:#9db0bd;font-size:11px;line-height:1.55}.actions{display:grid;grid-template-columns:1.25fr 1fr;gap:10px;margin-top:16px}.tools{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.interest{display:none;margin-top:12px;padding:12px 14px;border-radius:12px;background:#10281a;border:1px solid #2e7144;color:#dff7e6;font-weight:700;line-height:1.4}.interest.show{display:block}
+@media(max-width:900px){.grid{grid-template-columns:1fr}.scores{grid-template-columns:repeat(2,1fr)}.metrics{grid-template-columns:repeat(2,1fr)}.opps{grid-template-columns:1fr}.report-head{grid-template-columns:1fr}.score-ring{width:145px;height:145px}}
+@media(max-width:600px){.form,.actions,.tools{grid-template-columns:1fr}.hero h1{font-size:42px}.card{padding:18px}.scores,.metrics{grid-template-columns:1fr 1fr}}
+@media(max-width:420px){.wrap{padding:16px 12px 56px}.scores,.metrics{grid-template-columns:1fr}.top{align-items:flex-start}.brand{font-size:13px}.back{padding:8px 10px;font-size:12px}}
+@media print{body{background:#fff;color:#111}.wrap{max-width:100%;padding:0}.top,.modebar,.hero,.grid>.card:first-child,#scanForm,.back,.tools,.actions,.interest,.note{display:none!important}.grid{display:block}.grid>.card{border:0;box-shadow:none;padding:0;background:#fff;color:#111}.result{display:block!important}.score-inner,.scorecard,.opp,.metric,.rec,.disclaimer{background:#fff;color:#111;border-color:#bbb}.summary,.opp p,.rec p,.section-title p,.scorecard span,.metric span,.url,.disclaimer{color:#444}.score-ring{background:#fff;border:8px solid #d6b52f}.section{break-inside:avoid}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top"><div class="brand">LUX<b>AI</b> BUSINESS AUTOMATION</div><a class="back" href="https://www.luxwash.online/">← LuxWash</a></div>
+  <nav class="modebar"><a class="mode" href="../">AI Bedrijfsscan</a><a class="mode on" href="./">Website Scan</a></nav>
+
+  <section class="hero">
+    <span class="kicker">LIVE WEBSITE AUDIT</span>
+    <h1>Zie wat je website technisch en commercieel laat liggen.</h1>
+    <p>LuxAI controleert de echte homepage, responseheaders, robots.txt en sitemap.xml en scoort SEO, performance, conversie, techniek en security hygiene.</p>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Wat wordt echt gemeten?</h2>
+      <div class="list">
+        <div>SEO-tags, headings, canonical, schema en indexeerbaarheid</div>
+        <div>Serverresponstijd, HTML-grootte, scripts en compressie</div>
+        <div>CTA’s, formulieren, contactpaden en trust-signalen</div>
+        <div>HTTPS, viewport, taal, robots.txt en sitemap.xml</div>
+        <div>Securityheaders zoals CSP, HSTS en frame protection</div>
+      </div>
+      <div class="scope"><strong>Scanbereik</strong><span>Homepage + robots.txt + sitemap.xml. Dit is een snelle technische/commerciële audit, geen volledige crawl van elke pagina.</span></div>
+      <div class="scope"><strong>Geen nep-Lighthousescore</strong><span>Performance gebruikt gemeten server/HTML-signalen. Core Web Vitals vereisen een browser/Lighthousemeting en worden hier niet verzonnen.</span></div>
+    </section>
+
+    <section class="card">
+      <h2 id="formTitle">Start je gratis Website Scan</h2>
+      <form id="scanForm" class="form">
+        <div class="full"><label>Website *</label><input name="website" required placeholder="https://voorbeeld.be" inputmode="url"></div>
+        <div><label>Naam</label><input name="contact_name" autocomplete="name"></div>
+        <div><label>Bedrijfsnaam</label><input name="company_name" autocomplete="organization"></div>
+        <div class="full"><label>E-mail *</label><input name="email" type="email" required autocomplete="email"></div>
+        <div class="full"><label>Telefoon</label><input name="phone" type="tel" autocomplete="tel"></div>
+        <input class="hp" name="company_url_confirm" tabindex="-1" autocomplete="off">
+        <div class="full"><label class="check"><input type="checkbox" name="consent" required><span>Ik ga akkoord dat mijn gegevens en scanresultaat worden verwerkt voor deze Website Scan en eventuele gevraagde opvolging.</span></label></div>
+        <div class="full"><button id="submit" class="submit" type="submit">Scan mijn website</button><div id="error" class="error"></div></div>
+      </form>
+
+      <div id="result" class="result">
+        <div class="report-head">
+          <div class="score-ring" id="scoreRing"><div class="score-inner"><div><div id="score" class="score">—</div><div class="score-label">website score</div></div></div></div>
+          <div><span class="eyebrow">LIVE AUDITRESULTAAT</span><div id="status" class="status">Website-analyse</div><div id="summary" class="summary"></div><div id="reportUrl" class="url"></div></div>
+        </div>
+
+        <div id="scores" class="scores"></div>
+
+        <section class="section"><div class="section-title"><div><h2>Topprioriteiten</h2><p>Eerst de problemen met de hoogste ernst.</p></div></div><div id="topOpps" class="opps"></div></section>
+
+        <section class="section"><div class="section-title"><div><h2>Meetwaarden</h2><p>Signalen gemeten tijdens deze scan.</p></div></div><div id="metrics" class="metrics"></div></section>
+
+        <section class="section"><div class="section-title"><div><h2>Volledig verbeterplan</h2><p>Wat er misgaat, waarom het telt en wat je moet aanpassen.</p></div></div><ol id="recs" class="recs"></ol></section>
+
+        <div class="disclaimer"><strong>Belangrijk:</strong> de securityscore meet zichtbare web-security hygiene en responseheaders; dit is geen penetratietest. De performancescore is een technische proxy op basis van gemeten TTFB/fetchtijd, HTML-grootte, scripts, lazy-loading en compressie; dit is geen Google Lighthouse- of Core Web Vitals-score.</div>
+
+        <div class="actions"><button id="implementReq" class="submit" type="button">Laat deze problemen voor mij oplossen</button><button id="contactReq" class="secondary" type="button">Vraag gratis verbeterplan aan</button></div>
+        <div class="tools"><button id="printBtn" class="quiet" type="button">PDF / print</button><button id="shareBtn" class="quiet" type="button">Kopieer rapportlink</button><button id="newBtn" class="quiet" type="button">Nieuwe scan</button></div>
+        <div id="interestMsg" class="interest"></div>
+        <p class="note">Je rapportlink blijft beschikbaar zolang het scanrecord actief is.</p>
+      </div>
+      <p class="note">De scanner volgt maximaal enkele redirects en blokkeert lokale/private netwerkadressen.</p>
+    </section>
+  </div>
+</main>
+
+<script>
+const API='https://nahwlhptgdkwhjcfkhkt.supabase.co/functions/v1';
+const form=document.getElementById('scanForm');
+const result=document.getElementById('result');
+const err=document.getElementById('error');
+const btn=document.getElementById('submit');
+const implementReq=document.getElementById('implementReq');
+const contactReq=document.getElementById('contactReq');
+const interestMsg=document.getElementById('interestMsg');
+let activeToken='';
+
+function n(v){const x=Number(v);return Number.isFinite(x)?x:0}
+function escText(v){return String(v??'')}
+function band(score){return score>=80?'Sterk fundament':score>=60?'Goede basis met verbeterpunten':score>=40?'Duidelijke verbeterkansen':'Kritieke basisproblemen'}
+function labelCategory(k){return ({seo:'SEO',performance:'Performance',conversion:'Conversie',technical:'Techniek',security:'Security'})[k]||k}
+function sevLabel(v){return v==='critical'?'Critical':v==='high'?'High':v==='medium'?'Medium':'Low'}
+
+function renderScores(scores){
+  const box=document.getElementById('scores');box.replaceChildren();
+  ['seo','performance','conversion','technical','security'].forEach(k=>{
+    const score=Math.max(0,Math.min(100,n(scores?.[k])));
+    const d=document.createElement('div');d.className='scorecard';
+    const strong=document.createElement('strong');strong.textContent=Math.round(score)+'/100';
+    const span=document.createElement('span');span.textContent=labelCategory(k);
+    const bar=document.createElement('div');bar.className='bar';
+    const fill=document.createElement('div');fill.className='fill';fill.style.width=score+'%';
+    bar.append(fill);d.append(strong,span,bar);box.append(d);
+  });
+}
+function renderTop(recs){
+  const box=document.getElementById('topOpps');box.replaceChildren();
+  recs.slice(0,3).forEach(r=>{
+    const d=document.createElement('article');d.className='opp';
+    const sev=document.createElement('span');sev.className='sev '+(r.severity||'medium');sev.textContent=sevLabel(r.severity);
+    const h=document.createElement('h3');h.textContent=escText(r.title);
+    const p=document.createElement('p');p.textContent=escText(r.reason);
+    const f=document.createElement('p');f.className='fix';f.textContent='Fix: '+escText(r.fix);
+    d.append(sev,h,p,f);box.append(d);
+  });
+}
+function renderMetrics(m){
+  const box=document.getElementById('metrics');box.replaceChildren();
+  const items=[
+    ['TTFB',n(m.ttfb_ms)+' ms'],
+    ['Totale fetch',n(m.total_fetch_ms)+' ms'],
+    ['HTML',n(m.html_kb).toFixed(1)+' KB'],
+    ['HTTP status',String(m.status_code??'—')],
+    ['H1',String(m.h1_count??'—')],
+    ['Scripts',String(m.external_script_count??'—')],
+    ['Afbeeldingen',String(m.image_count??'—')],
+    ['Alt coverage',String(m.image_alt_coverage_pct??'—')+'%'],
+    ['Lazy coverage',String(m.image_lazy_coverage_pct??'—')+'%'],
+    ['Formulieren',String(m.forms??'—')],
+    ['CTA/buttons',String(m.buttons??'—')],
+    ['Robots.txt',m.robots_txt?'OK':'Niet bevestigd'],
+    ['Sitemap',m.sitemap_xml?'OK':'Niet bevestigd'],
+    ['Compressie',String(m.compression??'—')],
+    ['Schema',String(m.schema_count??'—')],
+    ['Mixed content',String(m.mixed_content_refs??'—')]
+  ];
+  items.forEach(([label,value])=>{
+    const d=document.createElement('div');d.className='metric';
+    const s=document.createElement('strong');s.textContent=value;
+    const sp=document.createElement('span');sp.textContent=label;
+    d.append(s,sp);box.append(d);
+  });
+}
+function renderRecs(recs){
+  const box=document.getElementById('recs');box.replaceChildren();
+  recs.forEach((r,i)=>{
+    const li=document.createElement('li');li.className='rec';
+    const top=document.createElement('div');top.className='rec-top';
+    const sev=document.createElement('span');sev.className='sev '+(r.severity||'medium');sev.textContent=sevLabel(r.severity);
+    const cat=document.createElement('span');cat.className='cat';cat.textContent=labelCategory(r.category||'');
+    const title=document.createElement('strong');title.textContent=(i+1)+'. '+escText(r.title);
+    const reason=document.createElement('p');reason.textContent=escText(r.reason);
+    const fix=document.createElement('p');fix.className='fixline';fix.textContent='Aanpak: '+escText(r.fix);
+    top.append(sev,cat);li.append(top,title,reason,fix);box.append(li);
+  });
+}
+function showPayload(payload,tokenOverride){
+  const scan=payload.scan||null;
+  const report=scan?.report||payload.report||{};
+  if(tokenOverride)activeToken=tokenOverride;
+  const score=Math.max(0,Math.min(100,n(report.overall_score??scan?.score)));
+  const scores=report.scores||{};
+  const m=report.metrics||{};
+  const recs=Array.isArray(report.recommendations)?report.recommendations:(Array.isArray(scan?.recommendations)?scan.recommendations:[]);
+  document.getElementById('score').innerHTML=Math.round(score)+'<small>/100</small>';
+  document.getElementById('scoreRing').style.setProperty('--score-angle',(score*3.6)+'deg');
+  document.getElementById('status').textContent=band(score);
+  const weakest=Object.entries(scores).sort((a,b)=>Number(a[1])-Number(b[1]))[0];
+  document.getElementById('summary').textContent='Deze live audit scoort '+Math.round(score)+'/100. '+(weakest?'Het zwakste gemeten domein is '+labelCategory(weakest[0])+' ('+Math.round(Number(weakest[1]))+'/100). ':'')+'De hoogste prioriteiten hieronder zijn rechtstreeks afgeleid uit de gemeten pagina, headers, robots.txt en sitemap.';
+  document.getElementById('reportUrl').textContent=report.final_url||scan?.website||'';
+  renderScores(scores);renderTop(recs);renderMetrics(m);renderRecs(recs);
+  form.style.display='none';result.classList.add('show');document.getElementById('formTitle').textContent='Jouw Website Scan';
+  setTimeout(()=>result.scrollIntoView({behavior:'smooth',block:'start'}),60);
+}
+async function loadSaved(token){
+  activeToken=token;
+  try{
+    const r=await fetch(API+'/website-scan-result?token='+encodeURIComponent(token),{cache:'no-store'});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'load_failed');
+    showPayload(d,token);
+  }catch{
+    err.textContent='Deze Website Scan-link is ongeldig of niet meer beschikbaar.';err.classList.add('show');
+  }
+}
+async function sendInterest(action){
+  if(!activeToken)return;
+  implementReq.disabled=true;contactReq.disabled=true;interestMsg.classList.remove('show');
+  try{
+    const r=await fetch(API+'/website-scan-interest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:activeToken,action})});
+    const d=await r.json();
+    if(!r.ok||!d.ok)throw new Error();
+    interestMsg.textContent=d.message||'Bedankt. Je aanvraag is ontvangen.';interestMsg.classList.add('show');
+    if(action==='implementation_request')implementReq.textContent='Uitvoering aangevraagd ✓';
+    if(action==='contact_request')contactReq.textContent='Contact aangevraagd ✓';
+  }catch{
+    interestMsg.textContent='Je aanvraag kon niet worden verstuurd. Probeer opnieuw.';interestMsg.classList.add('show');
+  }finally{implementReq.disabled=false;contactReq.disabled=false}
+}
+implementReq.addEventListener('click',()=>sendInterest('implementation_request'));
+contactReq.addEventListener('click',()=>sendInterest('contact_request'));
+document.getElementById('printBtn').addEventListener('click',()=>window.print());
+document.getElementById('shareBtn').addEventListener('click',async()=>{
+  const b=document.getElementById('shareBtn');
+  try{await navigator.clipboard.writeText(location.href);b.textContent='Rapportlink gekopieerd ✓'}catch{b.textContent='Kopiëren niet toegestaan'}
+  setTimeout(()=>b.textContent='Kopieer rapportlink',1800);
+});
+document.getElementById('newBtn').addEventListener('click',()=>{history.replaceState({},'',location.pathname);location.reload()});
+
+const token=new URLSearchParams(location.search).get('scan');
+if(token)loadSaved(token);
+
+form.addEventListener('submit',async e=>{
+  e.preventDefault();err.classList.remove('show');btn.disabled=true;btn.textContent='Website wordt live geanalyseerd…';
+  const fd=new FormData(form);
+  const payload={
+    website:String(fd.get('website')||''),
+    contact_name:String(fd.get('contact_name')||''),
+    company_name:String(fd.get('company_name')||''),
+    email:String(fd.get('email')||''),
+    phone:String(fd.get('phone')||''),
+    consent:fd.get('consent')==='on',
+    company_url_confirm:String(fd.get('company_url_confirm')||''),
+    source:'luxai_website_scan'
+  };
+  try{
+    const r=await fetch(API+'/website-scan-intake',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const d=await r.json();
+    if(!r.ok||!d.ok){
+      const messages={invalid_or_blocked_url:'Gebruik een publieke http(s)-website.',fetch_failed:'De website kon niet worden opgehaald.',timeout:'De website reageerde te traag.',page_too_large:'De homepage is te groot voor deze snelle scan.',not_html:'De URL geeft geen HTML-pagina terug.',rate_limited:'Te veel scans in korte tijd. Probeer later opnieuw.'};
+      throw new Error(messages[d.error]||'De Website Scan kon niet worden uitgevoerd.');
+    }
+    activeToken=d.scan_token;history.replaceState({},'',location.pathname+'?scan='+encodeURIComponent(d.scan_token));showPayload(d,d.scan_token);
+  }catch(ex){
+    err.textContent=ex?.message||'De Website Scan kon nu niet worden uitgevoerd.';err.classList.add('show');
+  }finally{btn.disabled=false;btn.textContent='Scan mijn website'}
+});
+</script>
+</body>
+</html>
