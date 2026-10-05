@@ -116,6 +116,15 @@ Deno.serve(async(req:Request)=>{
       .eq("organization_id",st.organization_id);
     if(updateErr) throw updateErr;
 
+    await db.from("audit_events").insert({
+      organization_id:st.organization_id,
+      actor_user_id:st.user_id,
+      event_type:"integration.google_calendar_connected",
+      entity_type:"tenant_integration",
+      entity_id:st.integration_id,
+      payload:{scope:"https://www.googleapis.com/auth/calendar.events",calendar_id:"primary"}
+    });
+
     return Response.redirect(safeRedirect(redirectAfter,{calendar:"connected"}),302);
   }catch(e){
     console.error(e);
