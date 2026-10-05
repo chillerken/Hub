@@ -105,11 +105,14 @@ Deno.serve(async(req:Request)=>{
   if(!signedOrganizationId||!paymentId) return json({error:"Required payment metadata missing"},400);
   if(signedOrganizationId!==organizationId) return json({error:"Organization reference mismatch"},400);
 
-  if(!["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event?.type)){
+  const supportedTypes=[
+    "checkout.session.completed",
+    "checkout.session.async_payment_succeeded",
+    "checkout.session.async_payment_failed",
+    "checkout.session.expired"
+  ];
+  if(!supportedTypes.includes(event?.type)){
     return json({received:true,ignored:true});
-  }
-  if(obj?.payment_status!=="paid"){
-    return json({received:true,ignored:true,reason:"payment_not_paid"});
   }
 
   const {data:payment,error:paymentErr}=await db.from("customer_payments")
@@ -132,9 +135,49 @@ Deno.serve(async(req:Request)=>{
     return json({error:"Currency mismatch"},400);
   }
 
+  const providerPaymentId=clean(obj?.payment_intent||obj?.id,500);
+
+  if(["checkout.session.async_payment_failed","checkout.session.expired"].includes(event?.type)){
+    if(payment.status==="paid") return json({received:true,ignored:true,reason:"already_paid"});
+    const nextStatus=event.type==="checkout.session.expired"?"expired":"failed";
+    if(payment.status===nextStatus) return json({received:true,already_processed:true});
+
+    const {data:failedPayment,error:failedErr}=await db.from("customer_payments")
+      .update({
+        status:nextStatus,
+        provider:"stripe",
+        provider_payment_id:providerPaymentId||payment.provider_payment_id||null,
+        updated_at:new Date().toISOString()
+      })
+      .eq("id",paymentId)
+      .eq("organization_id",organizationId)
+      .neq("status","paid")
+      .select("id,status")
+      .single();
+    if(failedErr) return json({error:"Payment failure status update failed"},500);
+
+    await db.from("audit_events").insert({
+      organization_id:organizationId,
+      actor_user_id:null,
+      event_type:nextStatus==="expired"?"payment.expired":"payment.failed",
+      entity_type:"customer_payment",
+      entity_id:paymentId,
+      payload:{
+        provider:"stripe",
+        provider_payment_id:providerPaymentId||null,
+        amount_cents:payment.amount_cents,
+        currency:payment.currency
+      }
+    });
+
+    return json({received:true,payment_id:failedPayment?.id,status:failedPayment?.status});
+  }
+
+  if(obj?.payment_status!=="paid"){
+    return json({received:true,ignored:true,reason:"payment_not_paid"});
+  }
   if(payment.status==="paid") return json({received:true,already_processed:true});
 
-  const providerPaymentId=clean(obj?.payment_intent||obj?.id,500);
   const paidAt=event?.created ? new Date(Number(event.created)*1000).toISOString() : new Date().toISOString();
   const {data:updated,error:updateErr}=await db.rpc("mark_customer_payment_paid",{
     p_organization_id:organizationId,
