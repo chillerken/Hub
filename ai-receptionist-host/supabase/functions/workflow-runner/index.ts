@@ -56,8 +56,10 @@ function actionMessage(action:any, lead:any, profile:any, appointment:any) {
       };
     case "appointment_confirmation":
       return {
-        subject:`Afspraak bevestigd – ${business}`,
-        text:`Beste ${name},\n\nUw afspraak bij ${business}${appointmentDate ? ` op ${appointmentDate}` : ""} is bevestigd.${appointment?.location ? `\nLocatie: ${appointment.location}` : ""}\n\nMet vriendelijke groet,\n${business}`
+        subject:action?.payload?.rescheduled ? `Afspraak bijgewerkt – ${business}` : `Afspraak bevestigd – ${business}`,
+        text:action?.payload?.rescheduled
+          ? `Beste ${name},\n\nUw afspraak bij ${business} is bijgewerkt${appointmentDate ? ` naar ${appointmentDate}` : ""}.${appointment?.location ? `\nLocatie: ${appointment.location}` : ""}\n\nMet vriendelijke groet,\n${business}`
+          : `Beste ${name},\n\nUw afspraak bij ${business}${appointmentDate ? ` op ${appointmentDate}` : ""} is bevestigd.${appointment?.location ? `\nLocatie: ${appointment.location}` : ""}\n\nMet vriendelijke groet,\n${business}`
       };
     case "review_request":
       return {
@@ -429,6 +431,51 @@ async function syncGoogleCalendar(db:any,action:any,integration:any,lead:any,pro
   return {outcome:"failed",provider:"google_calendar",http_status:resp.status,error_code:"provider_rejected",error_message:clean(body?.error?.message||resp.statusText,1000)};
 }
 
+async function cancelGoogleCalendar(db:any,action:any,integration:any,appointment:any) {
+  const eventId=clean(appointment?.provider_booking_id||action?.payload?.provider_booking_id,1024);
+  if(!eventId) return {outcome:"completed",provider:"google_calendar",response_meta:{already_absent:true}};
+
+  const token=await googleAccessToken(db,action,integration);
+  if(!token?.access_token){
+    const retry=token?.retry===true;
+    return {
+      outcome:retry?"retry":"blocked",
+      provider:"google_calendar",
+      error_code:token?.error||"oauth_unavailable",
+      error_message:token?.message||"Google Calendar authorization unavailable",
+      retry_after_seconds:retry?retrySeconds(action.attempts):undefined
+    };
+  }
+
+  const calendarId=clean(integration?.config?.calendar_id||"primary",500);
+  const endpoint=`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?sendUpdates=none`;
+  let resp:Response;
+  try{
+    resp=await fetch(endpoint,{method:"DELETE",headers:{"Authorization":`Bearer ${token.access_token}`}});
+  }catch(e){
+    return {outcome:"retry",provider:"google_calendar",error_code:"network_error",error_message:String(e),retry_after_seconds:retrySeconds(action.attempts)};
+  }
+
+  if(resp.ok||resp.status===404||resp.status===410){
+    await db.from("tenant_integrations")
+      .update({last_verified_at:new Date().toISOString(),last_error:null,updated_at:new Date().toISOString()})
+      .eq("id",integration.id).eq("organization_id",action.organization_id);
+    return {outcome:"completed",provider:"google_calendar",provider_reference:eventId,http_status:resp.status,response_meta:{deleted:true}};
+  }
+
+  let body:any={}; try{body=await resp.json();}catch{}
+  if(resp.status===401||resp.status===403){
+    await db.from("tenant_integrations")
+      .update({status:"error",last_error:clean(body?.error?.message||"Google Calendar authorization failed",1000),updated_at:new Date().toISOString()})
+      .eq("id",integration.id).eq("organization_id",action.organization_id);
+    return {outcome:"blocked",provider:"google_calendar",http_status:resp.status,error_code:"calendar_authorization_failed",error_message:clean(body?.error?.message||resp.statusText,1000)};
+  }
+  if(resp.status===429||resp.status>=500){
+    return {outcome:"retry",provider:"google_calendar",http_status:resp.status,error_code:"provider_retryable",error_message:clean(body?.error?.message||resp.statusText,1000),retry_after_seconds:retrySeconds(action.attempts)};
+  }
+  return {outcome:"failed",provider:"google_calendar",http_status:resp.status,error_code:"provider_rejected",error_message:clean(body?.error?.message||resp.statusText,1000)};
+}
+
 async function sendMetaWhatsApp(db:any,action:any,integration:any,lead:any,profile:any,appointment:any) {
   if(!lead?.phone) return {outcome:"blocked",provider:"meta_whatsapp",error_code:"recipient_missing",error_message:"No WhatsApp phone number"};
   if(!lead?.contact_consent_at) return {outcome:"failed",provider:"meta_whatsapp",error_code:"contact_consent_required",error_message:"Customer contact consent missing"};
@@ -548,7 +595,7 @@ Deno.serve(async (req:Request)=>{
 
       let channel=action.channel;
       if(action.action_type==="notify_owner") channel="email";
-      else if(action.action_type==="calendar_request") channel="calendar";
+      else if(action.action_type==="calendar_request"||action.action_type==="calendar_cancel") channel="calendar";
       else if(action.action_type==="payment_request") channel="payment";
       else if(channel==="auto") {
         const {data:available}=await db.from("tenant_integrations").select("channel,status")
@@ -586,6 +633,8 @@ Deno.serve(async (req:Request)=>{
         outcome=await createStripeCheckout(db,action,integration,lead,profile,payment);
       } else if(integration.provider==="google_calendar" && channel==="calendar" && action.action_type==="calendar_request") {
         outcome=await syncGoogleCalendar(db,action,integration,lead,profile,appointment);
+      } else if(integration.provider==="google_calendar" && channel==="calendar" && action.action_type==="calendar_cancel") {
+        outcome=await cancelGoogleCalendar(db,action,integration,appointment);
       } else if(integration.provider==="webhook") {
         outcome=await sendWebhook(db,action,integration,lead,profile,appointment,payment);
       } else if(integration.provider==="meta_whatsapp" && channel==="whatsapp") {
