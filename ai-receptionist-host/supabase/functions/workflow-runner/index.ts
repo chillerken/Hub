@@ -384,12 +384,20 @@ Deno.serve(async (req:Request)=>{
       else if(action.action_type==="calendar_request") channel="calendar";
       else if(action.action_type==="payment_request") channel="payment";
       else if(channel==="auto") {
+        const {data:available}=await db.from("tenant_integrations").select("channel,status")
+          .eq("organization_id",action.organization_id)
+          .eq("is_default",true)
+          .in("channel",["email","whatsapp"]);
+        const activeEmail=!!available?.find((x:any)=>x.channel==="email"&&x.status==="active");
+        const activeWhatsapp=!!available?.find((x:any)=>x.channel==="whatsapp"&&x.status==="active");
         const preferred=profile?.preferred_followup_channel;
-        if(preferred==="email"&&lead?.email) channel="email";
-        else if(preferred==="whatsapp"&&lead?.phone) channel="whatsapp";
+        if(preferred==="email"&&lead?.email&&activeEmail) channel="email";
+        else if(preferred==="whatsapp"&&lead?.phone&&activeWhatsapp) channel="whatsapp";
+        else if(lead?.email&&activeEmail) channel="email";
+        else if(lead?.phone&&activeWhatsapp) channel="whatsapp";
         else if(lead?.email) channel="email";
         else if(lead?.phone) channel="whatsapp";
-        else channel="email";
+        else channel=preferred==="whatsapp"?"whatsapp":"email";
       }
 
       const {data:integration}=await db.from("tenant_integrations").select("*")
