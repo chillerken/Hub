@@ -32,7 +32,7 @@ Deno.serve(async req=>{
     else if(ie)throw ie;
    }
   }
-  if(e.type==="checkout.session.completed"&&o.mode==="subscription"){
+  if(e.type==="checkout.session.completed"&&o.mode==="subscription"&&String(o.metadata?.app||"")==="mijn_ai_business"){
    const plan=String(o.metadata?.plan||""),orgRef=String(o.client_reference_id||o.metadata?.organization_id||""),customer=String(o.customer||""),sub=String(o.subscription||"");
    if(["starter","pro","business"].includes(plan)){
     if(orgRef){
