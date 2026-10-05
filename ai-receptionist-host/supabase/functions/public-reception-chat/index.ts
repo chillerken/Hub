@@ -75,6 +75,9 @@ Deno.serve(async req=>{
     const suppliedEmail=String(b.email||"").trim().slice(0,250)||null;
     const suppliedPhone=normalizePhone(String(b.phone||""),String(p.locale||""))||null;
     const suppliedName=String(b.name||"").trim().slice(0,120)||null;
+    const contactConsent=b.contact_consent===true||String(b.contact_consent||"").toLowerCase()==="true";
+    const marketingConsent=b.marketing_consent===true||String(b.marketing_consent||"").toLowerCase()==="true";
+    const consentNow=new Date().toISOString();
 
     let leadId=b.lead_id||null;
     let convId=b.conversation_id||null;
@@ -90,7 +93,9 @@ Deno.serve(async req=>{
         status:"qualifying",
         score:20,
         summary:message,
-        dedupe_key:"widget:"+crypto.randomUUID()
+        dedupe_key:"widget:"+crypto.randomUUID(),
+        contact_consent_at:contactConsent?consentNow:null,
+        marketing_consent_at:marketingConsent?consentNow:null
       }).select("*").single();
       if(error)throw error;
       lead=l; leadId=l.id;
@@ -125,6 +130,8 @@ Deno.serve(async req=>{
     if(extractedEmail&&!lead.email)updates.email=extractedEmail;
     if(extractedPhone&&!lead.phone)updates.phone=extractedPhone;
     if(extractedName&&(!lead.name||lead.name==="Websitebezoeker"))updates.name=extractedName;
+    if(contactConsent&&!lead.contact_consent_at)updates.contact_consent_at=consentNow;
+    if(marketingConsent&&!lead.marketing_consent_at)updates.marketing_consent_at=consentNow;
 
     const effectiveEmail=lead.email||updates.email||null;
     const effectivePhone=lead.phone||updates.phone||null;
@@ -270,6 +277,7 @@ Deno.serve(async req=>{
       business_name:p.business_name,
       lead_state:leadState,
       contact:{name:effectiveName,email:effectiveEmail,phone:effectivePhone},
+      consent:{contact:!!(lead.contact_consent_at||updates.contact_consent_at),marketing:!!(lead.marketing_consent_at||updates.marketing_consent_at)},
       score
     });
   }catch(e){
