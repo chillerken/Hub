@@ -89,6 +89,14 @@ Deno.serve(async(req:Request)=>{
         .select("id,channel,provider,status,config,last_verified_at,last_error")
         .single();
       if(updErr) throw updErr;
+      await serviceDb.from("audit_events").insert({
+        organization_id:membership.organization_id,
+        actor_user_id:user.id,
+        event_type:"integration.disconnected",
+        entity_type:"tenant_integration",
+        entity_id:integration.id,
+        payload:{channel:integration.channel,provider:integration.provider,warning:disconnectWarning}
+      });
       return out({ok:true,integration:updated,warning:disconnectWarning});
     }
 
@@ -298,6 +306,20 @@ Deno.serve(async(req:Request)=>{
       .select("id,channel,provider,status,config,capabilities,last_verified_at,last_error")
       .single();
     if(updErr) throw updErr;
+
+    await serviceDb.from("audit_events").insert({
+      organization_id:membership.organization_id,
+      actor_user_id:user.id,
+      event_type:activate?"integration.activated":"integration.configured",
+      entity_type:"tenant_integration",
+      entity_id:integration.id,
+      payload:{
+        channel:integration.channel,
+        provider:integration.provider,
+        status:updated.status,
+        last_verified_at:updated.last_verified_at||null
+      }
+    });
 
     return out({ok:true,integration:updated});
   }catch(e){
