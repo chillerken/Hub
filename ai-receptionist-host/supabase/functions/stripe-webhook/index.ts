@@ -1,5 +1,18 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
 const hex=(b:ArrayBuffer)=>Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join("");
+function planFromSubscription(o:any){
+ const direct=String(o?.metadata?.plan||"").toLowerCase();
+ if(["starter","pro","business"].includes(direct))return direct;
+ for(const item of (o?.items?.data||[])){
+  const lookup=String(item?.price?.lookup_key||"").toLowerCase();
+  if(lookup==="reception_ai_starter_monthly")return "starter";
+  if(lookup==="reception_ai_pro_monthly")return "pro";
+  if(lookup==="reception_ai_business_monthly")return "business";
+  const p=String(item?.price?.metadata?.plan||"").toLowerCase();
+  if(["starter","pro","business"].includes(p))return p;
+ }
+ return "";
+}
 async function valid(payload:string,header:string,secret:string){
  const vals:Record<string,string[]>={};
  for(const x of header.split(",")){const i=x.indexOf("=");if(i>0){const k=x.slice(0,i).trim(),v=x.slice(i+1).trim();(vals[k]??=[]).push(v)}}
@@ -33,23 +46,33 @@ Deno.serve(async req=>{
    }
   }
   if(e.type==="checkout.session.completed"&&o.mode==="subscription"&&String(o.metadata?.app||"")==="mijn_ai_business"){
-   const plan=String(o.metadata?.plan||""),orgRef=String(o.client_reference_id||o.metadata?.organization_id||""),customer=String(o.customer||""),sub=String(o.subscription||"");
+   const plan=String(o.metadata?.plan||"").toLowerCase(),orgRef=String(o.client_reference_id||o.metadata?.organization_id||""),customer=String(o.customer||""),sub=String(o.subscription||"");
+   const paid=["paid","no_payment_required"].includes(String(o.payment_status||"").toLowerCase());
+   const checkoutStatus=paid?"active":"incomplete";
    if(["starter","pro","business"].includes(plan)){
     if(orgRef){
      const {data:org}=await db.from("organizations").select("id").eq("id",orgRef).single();
-     if(org){await db.from("organizations").update({plan,subscription_status:"active",stripe_customer_id:customer,stripe_subscription_id:sub}).eq("id",orgRef);console.log("BILLING activated tenant",orgRef,plan)}
+     if(org){
+      await db.from("organizations").update({plan,subscription_status:checkoutStatus,stripe_customer_id:customer,stripe_subscription_id:sub}).eq("id",orgRef);
+      console.log(paid?"BILLING activated tenant":"BILLING checkout pending payment",orgRef,plan,String(o.payment_status||"unknown"));
+     }
     }
     const email=String(o.customer_details?.email||o.customer_email||"").toLowerCase();
     if(email){
      let uid:string|null=null;
      for(let page=1;page<10&&!uid;page++){const {data}=await db.auth.admin.listUsers({page,perPage:100});uid=data?.users?.find((u:any)=>u.email?.toLowerCase()===email)?.id||null;if(!data?.users?.length||data.users.length<100)break}
-     if(uid){const {data:m}=await db.from("memberships").select("organization_id").eq("user_id",uid).eq("active",true).limit(1).single();if(m)await db.from("organizations").update({plan,subscription_status:"active",stripe_customer_id:customer,stripe_subscription_id:sub}).eq("id",m.organization_id)}
+     if(uid){
+      const {data:m}=await db.from("memberships").select("organization_id").eq("user_id",uid).eq("active",true).limit(1).single();
+      if(m)await db.from("organizations").update({plan,subscription_status:checkoutStatus,stripe_customer_id:customer,stripe_subscription_id:sub}).eq("id",m.organization_id);
+     }
     }
    }
   }
-  if(["customer.subscription.created","customer.subscription.updated","customer.subscription.deleted"].includes(e.type)){
-   const status=String(o.status||"cancelled"),customer=String(o.customer||"");const patch:any={subscription_status:status,stripe_subscription_id:String(o.id||"")}; if(o.metadata?.plan&&["starter","pro","business"].includes(String(o.metadata.plan)))patch.plan=String(o.metadata.plan);
-   
+  if(["customer.subscription.created","customer.subscription.updated","customer.subscription.deleted","customer.subscription.paused","customer.subscription.resumed"].includes(e.type)){
+   const status=String(o.status||(e.type==="customer.subscription.deleted"?"canceled":"incomplete")),customer=String(o.customer||"");
+   const patch:any={subscription_status:status,stripe_subscription_id:String(o.id||"")};
+   const derivedPlan=planFromSubscription(o);
+   if(derivedPlan)patch.plan=derivedPlan;
    await db.from("organizations").update(patch).eq("stripe_customer_id",customer);
   }
   if(e.type==="invoice.payment_failed")await db.from("organizations").update({subscription_status:"past_due"}).eq("stripe_customer_id",String(o.customer||""));
