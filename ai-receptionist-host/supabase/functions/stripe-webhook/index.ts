@@ -1,5 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
 const hex=(b:ArrayBuffer)=>Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join("");
+async function sha256Text(value:string){
+ return hex(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value)));
+}
 function planFromSubscription(o:any){
  const direct=String(o?.metadata?.plan||"").toLowerCase();
  if(["starter","pro","business"].includes(direct))return direct;
@@ -46,26 +49,43 @@ Deno.serve(async req=>{
    }
   }
   if(e.type==="checkout.session.completed"&&o.mode==="subscription"&&String(o.metadata?.app||"")==="mijn_ai_business"){
-   const plan=String(o.metadata?.plan||"").toLowerCase(),orgRef=String(o.client_reference_id||o.metadata?.organization_id||""),customer=String(o.customer||""),sub=String(o.subscription||"");
+   const plan=String(o.metadata?.plan||"").toLowerCase(),ref=String(o.client_reference_id||""),customer=String(o.customer||""),sub=String(o.subscription||"");
    const paid=["paid","no_payment_required"].includes(String(o.payment_status||"").toLowerCase());
    const checkoutStatus=paid?"active":"incomplete";
-   if(["starter","pro","business"].includes(plan)){
-    if(orgRef){
-     const {data:org}=await db.from("organizations").select("id").eq("id",orgRef).single();
-     if(org){
-      await db.from("organizations").update({plan,subscription_status:checkoutStatus,stripe_customer_id:customer,stripe_subscription_id:sub}).eq("id",orgRef);
-      console.log(paid?"BILLING activated tenant":"BILLING checkout pending payment",orgRef,plan,String(o.payment_status||"unknown"));
-     }
+   let resolvedOrg:string|null=null;
+
+   if(["starter","pro","business"].includes(plan)&&ref){
+    const refHash=await sha256Text(ref);
+    const {data:refs,error:refErr}=await db.rpc("consume_billing_checkout_ref",{p_token_hash:refHash,p_plan:plan});
+    if(refErr)throw refErr;
+    const row=Array.isArray(refs)?refs[0]:refs;
+    if(row?.organization_id)resolvedOrg=String(row.organization_id);
+   }
+
+   const email=String(o.customer_details?.email||o.customer_email||"").toLowerCase();
+   if(!resolvedOrg && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ref) && email){
+    let uid:string|null=null;
+    for(let page=1;page<10&&!uid;page++){
+     const {data}=await db.auth.admin.listUsers({page,perPage:100});
+     uid=data?.users?.find((u:any)=>u.email?.toLowerCase()===email)?.id||null;
+     if(!data?.users?.length||data.users.length<100)break;
     }
-    const email=String(o.customer_details?.email||o.customer_email||"").toLowerCase();
-    if(email){
-     let uid:string|null=null;
-     for(let page=1;page<10&&!uid;page++){const {data}=await db.auth.admin.listUsers({page,perPage:100});uid=data?.users?.find((u:any)=>u.email?.toLowerCase()===email)?.id||null;if(!data?.users?.length||data.users.length<100)break}
-     if(uid){
-      const {data:m}=await db.from("memberships").select("organization_id").eq("user_id",uid).eq("active",true).limit(1).single();
-      if(m)await db.from("organizations").update({plan,subscription_status:checkoutStatus,stripe_customer_id:customer,stripe_subscription_id:sub}).eq("id",m.organization_id);
-     }
+    if(uid){
+     const {data:m}=await db.from("memberships").select("organization_id,role").eq("user_id",uid).eq("organization_id",ref).eq("active",true).in("role",["owner","admin"]).maybeSingle();
+     if(m?.organization_id)resolvedOrg=String(m.organization_id);
     }
+   }
+
+   if(["starter","pro","business"].includes(plan)&&resolvedOrg){
+    await db.from("organizations").update({
+      plan,
+      subscription_status:checkoutStatus,
+      stripe_customer_id:customer,
+      stripe_subscription_id:sub
+    }).eq("id",resolvedOrg);
+    console.log(paid?"BILLING activated tenant":"BILLING checkout pending payment",resolvedOrg,plan,String(o.payment_status||"unknown"));
+   }else if(["starter","pro","business"].includes(plan)){
+    console.warn("BILLING checkout not linked to an authorized tenant",String(e.id||""),plan);
    }
   }
   if(["customer.subscription.created","customer.subscription.updated","customer.subscription.deleted","customer.subscription.paused","customer.subscription.resumed"].includes(e.type)){
