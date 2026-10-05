@@ -582,7 +582,7 @@ create table if not exists private.oauth_states (
   created_at timestamptz not null default now()
 );
 create index if not exists oauth_states_expires_idx on private.oauth_states(expires_at);
-create index if not exists oauth_states_org_idx on private.oauth_states(organization_id);
+create index if not exists oauth_states_org_idx on private.oauth_states(organization_id);\ncreate index if not exists oauth_states_integration_idx on private.oauth_states(integration_id);
 revoke all on private.oauth_states from public,anon,authenticated;
 
 create or replace function public.get_platform_secret(p_name text)
