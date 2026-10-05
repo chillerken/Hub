@@ -262,6 +262,173 @@ async function createStripeCheckout(db:any,action:any,integration:any,lead:any,p
   return {outcome:"failed",provider:"stripe",http_status:resp.status,error_code:clean(body?.error?.code||"provider_rejected",200),error_message:clean(body?.error?.message||resp.statusText,1000)};
 }
 
+async function platformSecret(db:any,name:string){
+  const {data,error}=await db.rpc("get_platform_secret",{p_name:name});
+  if(error) return null;
+  return data||null;
+}
+
+async function googleAccessToken(db:any,action:any,integration:any) {
+  const raw=await credential(db,integration,action.organization_id);
+  if(!raw) return {error:"credential_missing",message:"Google Calendar OAuth credential missing"};
+  let cred:any={};
+  try{cred=JSON.parse(raw)}catch{return {error:"credential_invalid",message:"Google Calendar OAuth credential is invalid"}}
+
+  if(cred.access_token && Number(cred.expires_at||0)>Date.now()+120000){
+    return {access_token:String(cred.access_token)};
+  }
+
+  const refreshToken=clean(cred.refresh_token,6000);
+  if(!refreshToken) return {error:"refresh_token_missing",message:"Google Calendar refresh token missing"};
+
+  const [clientId,clientSecret]=await Promise.all([
+    platformSecret(db,"reception_ai_google_client_id"),
+    platformSecret(db,"reception_ai_google_client_secret")
+  ]);
+  if(!clientId||!clientSecret) return {error:"platform_oauth_missing",message:"Google OAuth platform credentials are not configured"};
+
+  let resp:Response;
+  try{
+    const form=new URLSearchParams({
+      client_id:String(clientId),
+      client_secret:String(clientSecret),
+      refresh_token:refreshToken,
+      grant_type:"refresh_token"
+    });
+    resp=await fetch("https://oauth2.googleapis.com/token",{
+      method:"POST",
+      headers:{"Content-Type":"application/x-www-form-urlencoded"},
+      body:form
+    });
+  }catch(e){
+    return {error:"network_error",message:String(e),retry:true};
+  }
+
+  const body=await resp.json().catch(()=>({}));
+  if(!resp.ok){
+    const code=clean(body?.error||"oauth_refresh_failed",200);
+    const msg=clean(body?.error_description||resp.statusText,1000);
+    if(code==="invalid_grant"){
+      await db.from("tenant_integrations")
+        .update({status:"error",last_error:"Google Calendar authorization expired or was revoked",updated_at:new Date().toISOString()})
+        .eq("id",integration.id).eq("organization_id",action.organization_id);
+      return {error:"oauth_reconnect_required",message:"Google Calendar authorization expired or was revoked"};
+    }
+    return {error:code,message:msg,retry:resp.status>=500||resp.status===429};
+  }
+
+  const next={
+    ...cred,
+    access_token:clean(body.access_token,6000),
+    expires_at:Date.now()+Math.max(0,Number(body.expires_in||3600)-60)*1000,
+    token_type:clean(body.token_type||"Bearer",100),
+    scope:clean(body.scope||cred.scope||"",3000)
+  };
+  const {error:storeErr}=await db.rpc("set_integration_credential",{
+    p_integration_id:integration.id,
+    p_organization_id:action.organization_id,
+    p_secret:JSON.stringify(next)
+  });
+  if(storeErr) return {error:"credential_store_failed",message:storeErr.message,retry:true};
+  return {access_token:next.access_token};
+}
+
+async function syncGoogleCalendar(db:any,action:any,integration:any,lead:any,profile:any,appointment:any) {
+  if(!appointment?.id) return {outcome:"failed",provider:"google_calendar",error_code:"appointment_missing",error_message:"Appointment not found"};
+  if(!appointment.start_at||!appointment.end_at) return {outcome:"blocked",provider:"google_calendar",error_code:"scheduling_required",error_message:"A precise start and end time must be resolved before creating a calendar event"};
+
+  const token=await googleAccessToken(db,action,integration);
+  if(!token?.access_token){
+    const retry=token?.retry===true;
+    return {
+      outcome:retry?"retry":"blocked",
+      provider:"google_calendar",
+      error_code:token?.error||"oauth_unavailable",
+      error_message:token?.message||"Google Calendar authorization unavailable",
+      retry_after_seconds:retry?retrySeconds(action.attempts):undefined
+    };
+  }
+
+  const cfg=integration.config||{};
+  const calendarId=clean(cfg.calendar_id||"primary",500);
+  const eventId=clean(appointment.provider_booking_id||String(appointment.id).replace(/-/g,""),1024);
+  const timezone=clean(appointment.timezone||"Europe/Brussels",100);
+  const summary=clean(`${profile?.business_name||"Afspraak"} – ${lead?.name||"klant"}`,300);
+  const description=[
+    appointment.requested_text?String(appointment.requested_text):null,
+    lead?.email?`E-mail: ${lead.email}`:null,
+    lead?.phone?`Telefoon: ${lead.phone}`:null,
+    `Reception AI appointment: ${appointment.id}`
+  ].filter(Boolean).join("\n");
+
+  const event:any={
+    id:eventId,
+    summary,
+    description:clean(description,8000),
+    start:{dateTime:new Date(appointment.start_at).toISOString(),timeZone:timezone},
+    end:{dateTime:new Date(appointment.end_at).toISOString(),timeZone:timezone},
+    extendedProperties:{private:{
+      organization_id:String(action.organization_id),
+      appointment_id:String(appointment.id),
+      lead_id:String(action.lead_id||"")
+    }}
+  };
+  if(appointment.location) event.location=clean(appointment.location,1000);
+
+  const base=`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
+  const headers={"Authorization":`Bearer ${token.access_token}`,"Content-Type":"application/json"};
+  let resp:Response;
+  let body:any={};
+
+  try{
+    if(appointment.provider_booking_id){
+      resp=await fetch(`${base}/${encodeURIComponent(eventId)}?sendUpdates=none`,{
+        method:"PUT",headers,body:JSON.stringify(event)
+      });
+    }else{
+      resp=await fetch(`${base}?sendUpdates=none`,{
+        method:"POST",headers,body:JSON.stringify(event)
+      });
+      if(resp.status===409){
+        resp=await fetch(`${base}/${encodeURIComponent(eventId)}?sendUpdates=none`,{
+          method:"PUT",headers,body:JSON.stringify(event)
+        });
+      }
+    }
+    body=await resp.json().catch(()=>({}));
+  }catch(e){
+    return {outcome:"retry",provider:"google_calendar",error_code:"network_error",error_message:String(e),retry_after_seconds:retrySeconds(action.attempts)};
+  }
+
+  if(resp.ok && body?.id){
+    const {error:updateErr}=await db.from("appointments")
+      .update({
+        provider:"google_calendar",
+        provider_booking_id:String(body.id),
+        updated_at:new Date().toISOString()
+      })
+      .eq("id",appointment.id).eq("organization_id",action.organization_id);
+    if(updateErr) return {outcome:"retry",provider:"google_calendar",provider_reference:String(body.id),http_status:resp.status,error_code:"appointment_sync_write_failed",error_message:updateErr.message,retry_after_seconds:60};
+
+    await db.from("tenant_integrations")
+      .update({last_verified_at:new Date().toISOString(),last_error:null,updated_at:new Date().toISOString()})
+      .eq("id",integration.id).eq("organization_id",action.organization_id);
+
+    return {outcome:"completed",provider:"google_calendar",provider_reference:String(body.id),http_status:resp.status,response_meta:{calendar_id:calendarId,html_link:body.htmlLink||null}};
+  }
+
+  if(resp.status===401||resp.status===403){
+    await db.from("tenant_integrations")
+      .update({status:"error",last_error:clean(body?.error?.message||"Google Calendar authorization failed",1000),updated_at:new Date().toISOString()})
+      .eq("id",integration.id).eq("organization_id",action.organization_id);
+    return {outcome:"blocked",provider:"google_calendar",http_status:resp.status,error_code:"calendar_authorization_failed",error_message:clean(body?.error?.message||resp.statusText,1000)};
+  }
+  if(resp.status===429||resp.status>=500){
+    return {outcome:"retry",provider:"google_calendar",http_status:resp.status,error_code:"provider_retryable",error_message:clean(body?.error?.message||resp.statusText,1000),retry_after_seconds:retrySeconds(action.attempts)};
+  }
+  return {outcome:"failed",provider:"google_calendar",http_status:resp.status,error_code:"provider_rejected",error_message:clean(body?.error?.message||resp.statusText,1000)};
+}
+
 async function sendMetaWhatsApp(db:any,action:any,integration:any,lead:any,profile:any,appointment:any) {
   if(!lead?.phone) return {outcome:"blocked",provider:"meta_whatsapp",error_code:"recipient_missing",error_message:"No WhatsApp phone number"};
   if(!lead?.contact_consent_at) return {outcome:"failed",provider:"meta_whatsapp",error_code:"contact_consent_required",error_message:"Customer contact consent missing"};
@@ -417,6 +584,8 @@ Deno.serve(async (req:Request)=>{
         outcome=await sendResend(db,action,integration,lead,profile,appointment);
       } else if(integration.provider==="stripe" && channel==="payment" && action.action_type==="payment_request") {
         outcome=await createStripeCheckout(db,action,integration,lead,profile,payment);
+      } else if(integration.provider==="google_calendar" && channel==="calendar" && action.action_type==="calendar_request") {
+        outcome=await syncGoogleCalendar(db,action,integration,lead,profile,appointment);
       } else if(integration.provider==="webhook") {
         outcome=await sendWebhook(db,action,integration,lead,profile,appointment,payment);
       } else if(integration.provider==="meta_whatsapp" && channel==="whatsapp") {
