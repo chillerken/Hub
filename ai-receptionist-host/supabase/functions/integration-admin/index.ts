@@ -97,17 +97,34 @@ Deno.serve(async(req:Request)=>{
         });
         if(!existing) return out({error:"WhatsApp access token required before activation"},400);
       }
+    } else if(integration.provider==="stripe"){
+      if(integration.channel!=="payment") return out({error:"Stripe is only valid for payment"},400);
+      if(!/^https:\/\//i.test(clean(nextConfig.success_url,1000))||!/^https:\/\//i.test(clean(nextConfig.cancel_url,1000))) return out({error:"HTTPS success_url and cancel_url are required"},400);
     } else if(integration.provider==="webhook"){
       if(!/^https:\/\//i.test(clean(nextConfig.endpoint,1000))) return out({error:"HTTPS webhook endpoint required"},400);
-    } else if(activate && ["google_calendar","stripe"].includes(integration.provider)){
-      return out({error:`${integration.provider} runtime adapter is not enabled yet`},409);
+    } else if(activate && integration.provider==="google_calendar"){
+      return out({error:"google_calendar runtime adapter is not enabled yet"},409);
     }
 
-    if(secret){
+    let credentialToStore=secret;
+    if(integration.provider==="stripe"){
+      let existing:any={};
+      const {data:existingRaw}=await serviceDb.rpc("get_integration_credential",{
+        p_integration_id:integration.id,p_organization_id:membership.organization_id
+      });
+      if(existingRaw){try{existing=JSON.parse(existingRaw)}catch{}}
+      const webhookSecret=clean(body.webhook_secret,2000)||clean(existing?.webhook_secret,2000);
+      const secretKey=secret||clean(existing?.secret_key,2000);
+      if(activate && (!secretKey || (!secretKey.startsWith("sk_")&&!secretKey.startsWith("rk_")))) return out({error:"Stripe secret/restricted key required before activation"},400);
+      if(activate && !webhookSecret.startsWith("whsec_")) return out({error:"Stripe webhook signing secret required before activation"},400);
+      credentialToStore=(secret||body.webhook_secret)?JSON.stringify({secret_key:secretKey,webhook_secret:webhookSecret}):"";
+    }
+
+    if(credentialToStore){
       const {error:secretErr}=await serviceDb.rpc("set_integration_credential",{
         p_integration_id:integration.id,
         p_organization_id:membership.organization_id,
-        p_secret:secret
+        p_secret:credentialToStore
       });
       if(secretErr) throw secretErr;
     }
@@ -134,6 +151,25 @@ Deno.serve(async(req:Request)=>{
       }catch(e){
         lastError=clean(e instanceof Error?e.message:e,800);
         return out({error:"WhatsApp verification failed",detail:lastError},400);
+      }
+    }
+
+    if(activate && integration.provider==="stripe"){
+      const {data:rawStripe}=await serviceDb.rpc("get_integration_credential",{
+        p_integration_id:integration.id,p_organization_id:membership.organization_id
+      });
+      let stripeKey="";
+      try{stripeKey=clean(JSON.parse(rawStripe||"{}")?.secret_key,2000)}catch{}
+      try{
+        const vr=await fetch("https://api.stripe.com/v1/account",{headers:{Authorization:`Bearer ${stripeKey}`}});
+        const vj=await vr.json().catch(()=>({}));
+        if(!vr.ok) return out({error:"Stripe credential verification failed",detail:clean(vj?.error?.message||vr.statusText,800)},400);
+        verifiedAt=new Date().toISOString();
+        nextConfig.stripe_account_id=vj?.id||nextConfig.stripe_account_id||null;
+        nextConfig.stripe_country=vj?.country||nextConfig.stripe_country||null;
+      }catch(e){
+        lastError=clean(e instanceof Error?e.message:e,800);
+        return out({error:"Stripe verification failed",detail:lastError},400);
       }
     }
 
