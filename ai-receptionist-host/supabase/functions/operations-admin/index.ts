@@ -116,6 +116,11 @@ Deno.serve(async(req:Request)=>{
         .eq("id",appointmentId).eq("organization_id",org)
         .select("*").single();
       if(error) throw error;
+      await db.from("audit_events").insert({
+        organization_id:org,actor_user_id:u.user.id,event_type:"appointment.scheduled",
+        entity_type:"appointment",entity_id:appointmentId,
+        payload:{start_at:updated.start_at,end_at:updated.end_at,timezone:updated.timezone,location:updated.location,status:updated.status}
+      });
       return out({ok:true,appointment:updated});
     }
 
@@ -131,6 +136,11 @@ Deno.serve(async(req:Request)=>{
         .eq("id",appointmentId).eq("organization_id",org)
         .select("*").single();
       if(error) throw error;
+      await db.from("audit_events").insert({
+        organization_id:org,actor_user_id:u.user.id,event_type:"appointment.confirmed",
+        entity_type:"appointment",entity_id:appointmentId,
+        payload:{start_at:updated.start_at,end_at:updated.end_at}
+      });
       return out({ok:true,appointment:updated});
     }
 
@@ -145,6 +155,11 @@ Deno.serve(async(req:Request)=>{
         .eq("id",appointmentId).eq("organization_id",org)
         .select("*").single();
       if(error) throw error;
+      await db.from("audit_events").insert({
+        organization_id:org,actor_user_id:u.user.id,event_type:"appointment.completed",
+        entity_type:"appointment",entity_id:appointmentId,
+        payload:{completed_at:updated.completed_at}
+      });
       return out({ok:true,appointment:updated});
     }
 
@@ -159,6 +174,11 @@ Deno.serve(async(req:Request)=>{
         .eq("id",appointmentId).eq("organization_id",org)
         .select("*").single();
       if(error) throw error;
+      await db.from("audit_events").insert({
+        organization_id:org,actor_user_id:u.user.id,event_type:"appointment.cancelled",
+        entity_type:"appointment",entity_id:appointmentId,
+        payload:{prior_status:current.status}
+      });
       return out({ok:true,appointment:updated});
     }
 
@@ -200,6 +220,11 @@ Deno.serve(async(req:Request)=>{
           .eq("id",existing.id).eq("organization_id",org)
           .select("*").single();
         if(error) throw error;
+        await db.from("audit_events").insert({
+          organization_id:org,actor_user_id:u.user.id,event_type:"payment.request_updated",
+          entity_type:"customer_payment",entity_id:updated.id,
+          payload:{appointment_id:appointmentId,lead_id:leadId,amount_cents:amount,currency}
+        });
         return out({ok:true,payment:updated,reused:true});
       }
 
@@ -210,6 +235,11 @@ Deno.serve(async(req:Request)=>{
         })
         .select("*").single();
       if(error) throw error;
+      await db.from("audit_events").insert({
+        organization_id:org,actor_user_id:u.user.id,event_type:"payment.request_created",
+        entity_type:"customer_payment",entity_id:created.id,
+        payload:{appointment_id:appointmentId,lead_id:leadId,amount_cents:amount,currency}
+      });
       return out({ok:true,payment:created,reused:false});
     }
 
