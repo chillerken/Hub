@@ -61,7 +61,8 @@ Deno.serve(async(req:Request)=>{
     const emailReady=email?.status==="active";
     const whatsappReady=whatsapp?.status==="active";
     const calendarReady=calendar?.status==="active";
-    const paymentReady=payment?.status==="active";
+    const paymentConnected=payment?.status==="active";
+    const paymentReady=paymentConnected&&payment?.config?.stripe_mode==="live";
     const emailCaps=Array.isArray(email?.capabilities)?email.capabilities:[];
     const waCaps=Array.isArray(whatsapp?.capabilities)?whatsapp.capabilities:[];
 
@@ -110,7 +111,8 @@ Deno.serve(async(req:Request)=>{
     if(!lifecycle.review_request) blockers.push({code:"review_delivery_unavailable",area:"review"});
     if(!lifecycle.retention_follow_up) blockers.push({code:"retention_delivery_unavailable",area:"retention"});
     if(!calendarReady) blockers.push({code:"calendar_integration_missing",area:"calendar"});
-    if(!paymentReady) blockers.push({code:"payment_integration_missing",area:"payment"});
+    if(!paymentConnected) blockers.push({code:"payment_integration_missing",area:"payment"});
+    else if(payment?.config?.stripe_mode!=="live") blockers.push({code:"stripe_test_mode",area:"payment"});
     if(!billingReady) blockers.push({code:"saas_billing_inactive",area:"billing"});
     if((failed||0)>0) blockers.push({code:"workflow_failed",area:"workflow",count:failed});
     if((blocked||0)>0) blockers.push({code:"workflow_blocked",area:"workflow",count:blocked});
@@ -126,6 +128,8 @@ Deno.serve(async(req:Request)=>{
         whatsapp:whatsappReady,
         calendar:calendarReady,
         payment:paymentReady,
+        payment_connected:paymentConnected,
+        stripe_mode:payment?.config?.stripe_mode||null,
         lifecycle,
         lifecycle_ready:lifecycleReady,
         saas_billing:billingReady,
