@@ -309,6 +309,11 @@ Deno.serve(async(req:Request)=>{
         nextConfig.webhook_endpoint_url=webhookUrl;
         nextConfig.stripe_account_id=vj?.id||nextConfig.stripe_account_id||null;
         nextConfig.stripe_country=vj?.country||nextConfig.stripe_country||null;
+        nextConfig.stripe_mode=stripeKey.startsWith("sk_live_")||stripeKey.startsWith("rk_live_")
+          ?"live"
+          :stripeKey.startsWith("sk_test_")||stripeKey.startsWith("rk_test_")
+            ?"test"
+            :"unknown";
         verifiedAt=new Date().toISOString();
       }catch(e){
         lastError=clean(e instanceof Error?e.message:e,800);
