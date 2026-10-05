@@ -150,6 +150,24 @@ Deno.serve(async(req:Request)=>{
         .eq("id",appointmentId).eq("organization_id",org).single();
       if(ce||!current) return out({error:"Appointment not found"},404);
       if(current.status!=="confirmed") return out({error:"Only a confirmed appointment can be marked completed"},409);
+
+      const {data:unpaid}=await db.from("customer_payments")
+        .select("id,status,amount_cents,currency")
+        .eq("organization_id",org)
+        .eq("appointment_id",appointmentId)
+        .neq("status","paid")
+        .order("created_at",{ascending:false})
+        .limit(1)
+        .maybeSingle();
+      if(unpaid){
+        return out({
+          error:"Appointment has an unpaid payment request",
+          code:"payment_required_before_completion",
+          payment_id:unpaid.id,
+          payment_status:unpaid.status
+        },409);
+      }
+
       const {data:updated,error}=await db.from("appointments")
         .update({status:"completed",completed_at:new Date().toISOString(),updated_at:new Date().toISOString()})
         .eq("id",appointmentId).eq("organization_id",org)
@@ -195,6 +213,9 @@ Deno.serve(async(req:Request)=>{
           .eq("id",appointmentId).eq("organization_id",org).single();
         if(ae||!appt) return out({error:"Appointment not found"},404);
         if(appt.status==="cancelled") return out({error:"Cannot create payment for cancelled appointment"},409);
+        if(!["confirmed","completed"].includes(appt.status)){
+          return out({error:"Confirm the appointment before creating a payment request",code:"appointment_confirmation_required"},409);
+        }
         leadId=appt.lead_id;
       }
       if(!leadId) return out({error:"lead_id or appointment_id required"},400);
