@@ -240,9 +240,30 @@ Deno.serve(async(req:Request)=>{
         const vj=await vr.json().catch(()=>({}));
         if(!vr.ok) return out({error:"Stripe credential verification failed",detail:clean(vj?.error?.message||vr.statusText,800)},400);
 
-        const webhookUrl="https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/customer-payment-webhook";
+        const webhookUrl=`https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/customer-payment-webhook?integration_id=${encodeURIComponent(integration.id)}`;
         let webhookSecret=clean(stored?.webhook_secret,2000);
         let webhookEndpointId=clean(nextConfig.webhook_endpoint_id||stored?.webhook_endpoint_id,500);
+
+        if(webhookSecret && webhookEndpointId && nextConfig.webhook_managed===true && nextConfig.webhook_endpoint_url!==webhookUrl){
+          const form=new URLSearchParams();
+          form.append("url",webhookUrl);
+          form.append("enabled_events[]","checkout.session.completed");
+          form.append("enabled_events[]","checkout.session.async_payment_succeeded");
+          const wr=await fetch(`https://api.stripe.com/v1/webhook_endpoints/${encodeURIComponent(webhookEndpointId)}`,{
+            method:"POST",
+            headers:{Authorization:`Bearer ${stripeKey}`,"Content-Type":"application/x-www-form-urlencoded"},
+            body:form
+          });
+          const wj=await wr.json().catch(()=>({}));
+          if(!wr.ok){
+            return out({
+              error:"Stripe webhook exists but could not be migrated to the tenant-specific endpoint",
+              detail:clean(wj?.error?.message||wr.statusText,800),
+              code:"stripe_webhook_migration_failed",
+              webhook_url:webhookUrl
+            },400);
+          }
+        }
 
         if(!webhookSecret){
           const form=new URLSearchParams();
