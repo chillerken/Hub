@@ -38,6 +38,58 @@ Deno.serve(async(req:Request)=>{
     const action=clean(b.action,50);
     const org=mem.organization_id;
 
+    if(action==="retry_workflow_action"){
+      const actionId=clean(b.workflow_action_id,80);
+      if(!actionId) return out({error:"workflow_action_id required"},400);
+
+      const {data:current,error:we}=await db.from("workflow_actions")
+        .select("id,organization_id,lead_id,action_type,channel,status,provider,last_error,attempts,max_attempts")
+        .eq("id",actionId).eq("organization_id",org).single();
+      if(we||!current) return out({error:"Workflow action not found"},404);
+      if(!["blocked","failed"].includes(current.status)) return out({error:"Only blocked or failed actions can be retried"},409);
+
+      const deliveryUnknown=String(current.last_error||"").toLowerCase().includes("delivery status is unknown")
+        || String(current.last_error||"").toLowerCase().includes("delivery_unknown");
+      if(deliveryUnknown && b.confirm_delivery_unknown!==true){
+        return out({
+          error:"Delivery status is unknown. Retrying can cause a duplicate customer message.",
+          code:"delivery_unknown_confirmation_required"
+        },409);
+      }
+
+      const {data:updated,error:ue2}=await db.from("workflow_actions")
+        .update({
+          status:"pending",
+          attempts:0,
+          scheduled_at:new Date().toISOString(),
+          last_error:null,
+          locked_at:null,
+          locked_by:null,
+          completed_at:null,
+          updated_at:new Date().toISOString()
+        })
+        .eq("id",actionId).eq("organization_id",org)
+        .select("*").single();
+      if(ue2) throw ue2;
+
+      await db.from("audit_events").insert({
+        organization_id:org,
+        actor_user_id:u.user.id,
+        event_type:"workflow.retry_requested",
+        entity_type:"workflow_action",
+        entity_id:actionId,
+        payload:{
+          action_type:current.action_type,
+          channel:current.channel,
+          prior_status:current.status,
+          prior_attempts:current.attempts,
+          delivery_unknown:deliveryUnknown
+        }
+      });
+
+      return out({ok:true,workflow_action:updated});
+    }
+
     if(action==="schedule_appointment"){
       const appointmentId=clean(b.appointment_id,80);
       const start=new Date(String(b.start_at||""));
