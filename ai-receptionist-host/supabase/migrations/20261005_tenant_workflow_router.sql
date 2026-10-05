@@ -566,3 +566,281 @@ for each row execute function public.enqueue_appointment_lifecycle_actions();
 
 create index if not exists integration_credentials_org_idx
   on private.integration_credentials(organization_id);
+
+
+-- Google Calendar tenant OAuth. Platform client credentials live in Vault; tenant refresh tokens
+-- stay in private.integration_credentials and are never readable by browser roles.
+create table if not exists private.oauth_states (
+  state_hash text primary key,
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  user_id uuid not null,
+  integration_id uuid not null references public.tenant_integrations(id) on delete cascade,
+  provider text not null check (provider in ('google_calendar')),
+  redirect_after text not null,
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists oauth_states_expires_idx on private.oauth_states(expires_at);
+create index if not exists oauth_states_org_idx on private.oauth_states(organization_id);
+revoke all on private.oauth_states from public,anon,authenticated;
+
+create or replace function public.get_platform_secret(p_name text)
+returns text
+language sql
+security definer
+set search_path=''
+as $$
+  select decrypted_secret
+  from vault.decrypted_secrets
+  where name=p_name
+    and p_name in (
+      'reception_ai_google_client_id',
+      'reception_ai_google_client_secret',
+      'reception_ai_app_url'
+    )
+  limit 1;
+$$;
+revoke all on function public.get_platform_secret(text) from public,anon,authenticated;
+grant execute on function public.get_platform_secret(text) to service_role;
+
+create or replace function public.create_oauth_state(
+  p_state_hash text,
+  p_organization_id uuid,
+  p_user_id uuid,
+  p_integration_id uuid,
+  p_provider text,
+  p_redirect_after text,
+  p_expires_at timestamptz
+)
+returns void
+language plpgsql
+security invoker
+set search_path=''
+as $$
+begin
+  if p_provider <> 'google_calendar' then raise exception 'unsupported oauth provider'; end if;
+  if p_expires_at <= now() or p_expires_at > now()+interval '20 minutes' then raise exception 'invalid oauth state expiry'; end if;
+  if not exists (
+    select 1 from public.tenant_integrations
+    where id=p_integration_id
+      and organization_id=p_organization_id
+      and channel='calendar'
+      and provider='google_calendar'
+  ) then
+    raise exception 'calendar integration not found';
+  end if;
+
+  delete from private.oauth_states
+  where expires_at < now()-interval '1 hour'
+     or used_at < now()-interval '1 hour';
+
+  insert into private.oauth_states(
+    state_hash,organization_id,user_id,integration_id,provider,redirect_after,expires_at
+  )
+  values(
+    p_state_hash,p_organization_id,p_user_id,p_integration_id,p_provider,p_redirect_after,p_expires_at
+  );
+end;
+$$;
+revoke all on function public.create_oauth_state(text,uuid,uuid,uuid,text,text,timestamptz)
+  from public,anon,authenticated;
+grant execute on function public.create_oauth_state(text,uuid,uuid,uuid,text,text,timestamptz)
+  to service_role;
+
+create or replace function public.consume_oauth_state(p_state_hash text)
+returns table(
+  organization_id uuid,
+  user_id uuid,
+  integration_id uuid,
+  provider text,
+  redirect_after text
+)
+language plpgsql
+security definer
+set search_path=''
+as $$
+begin
+  return query
+  update private.oauth_states s
+  set used_at=now()
+  where s.state_hash=p_state_hash
+    and s.used_at is null
+    and s.expires_at>now()
+  returning s.organization_id,s.user_id,s.integration_id,s.provider,s.redirect_after;
+end;
+$$;
+revoke all on function public.consume_oauth_state(text) from public,anon,authenticated;
+grant execute on function public.consume_oauth_state(text) to service_role;
+
+-- Runtime provisioning must create these Vault secrets outside source control:
+-- reception_ai_google_client_id
+-- reception_ai_google_client_secret
+-- reception_ai_app_url
+
+
+-- Latest lifecycle behavior: Calendar reconnects requeue authorization failures; reschedules
+-- update the same calendar action and cancellations enqueue a delete action.
+create or replace function public.requeue_integration_actions()
+returns trigger
+language plpgsql
+security invoker
+set search_path=public
+as $$
+begin
+  if new.status='active' and (tg_op='INSERT' or old.status is distinct from new.status) then
+    update public.workflow_actions
+    set status='pending',scheduled_at=now(),last_error=null,updated_at=now()
+    where organization_id=new.organization_id
+      and status='blocked'
+      and (
+        channel=new.channel
+        or (channel='auto' and new.channel in ('email','whatsapp'))
+      )
+      and (
+        last_error ilike '%integration%'
+        or last_error ilike '%provider%'
+        or last_error ilike '%credential%'
+        or last_error ilike '%authorization%'
+        or last_error ilike '%oauth%'
+      );
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists trg_requeue_integration_actions on public.tenant_integrations;
+create trigger trg_requeue_integration_actions
+after insert or update of status on public.tenant_integrations
+for each row execute function public.requeue_integration_actions();
+
+create or replace function public.enqueue_appointment_lifecycle_actions()
+returns trigger
+language plpgsql
+security invoker
+set search_path=public
+as $$
+declare
+  enabled boolean := false;
+  timing_changed boolean := false;
+begin
+  select coalesce(automation_enabled,false) into enabled
+  from public.business_profiles
+  where organization_id=new.organization_id;
+
+  if not enabled then return new; end if;
+
+  timing_changed := (
+    tg_op='INSERT'
+    or old.start_at is distinct from new.start_at
+    or old.end_at is distinct from new.end_at
+    or old.location is distinct from new.location
+  );
+
+  if new.status='requested' and (tg_op='INSERT' or old.status is distinct from new.status) then
+    insert into public.workflow_actions(
+      organization_id,lead_id,action_type,channel,status,priority,idempotency_key,payload
+    )
+    values(
+      new.organization_id,new.lead_id,'calendar_request','calendar','pending','high',
+      'appointment:'||new.id::text||':calendar_request',
+      jsonb_build_object('appointment_id',new.id,'requested_text',new.requested_text)
+    )
+    on conflict(idempotency_key) do nothing;
+  end if;
+
+  if new.start_at is not null and new.end_at is not null and timing_changed then
+    insert into public.workflow_actions(
+      organization_id,lead_id,action_type,channel,status,priority,idempotency_key,payload
+    )
+    values(
+      new.organization_id,new.lead_id,'calendar_request','calendar','pending','high',
+      'appointment:'||new.id::text||':calendar_request',
+      jsonb_build_object(
+        'appointment_id',new.id,'requested_text',new.requested_text,
+        'start_at',new.start_at,'end_at',new.end_at,'location',new.location
+      )
+    )
+    on conflict(idempotency_key) do update
+      set status=case when public.workflow_actions.status='processing' then public.workflow_actions.status else 'pending' end,
+          attempts=case when public.workflow_actions.status='processing' then public.workflow_actions.attempts else 0 end,
+          scheduled_at=case when public.workflow_actions.status='processing' then public.workflow_actions.scheduled_at else now() end,
+          last_error=case when public.workflow_actions.status='processing' then public.workflow_actions.last_error else null end,
+          completed_at=case when public.workflow_actions.status='processing' then public.workflow_actions.completed_at else null end,
+          payload=excluded.payload,
+          updated_at=now();
+
+    if new.status='confirmed' and tg_op='UPDATE' then
+      insert into public.workflow_actions(
+        organization_id,lead_id,action_type,channel,status,priority,idempotency_key,payload
+      )
+      values(
+        new.organization_id,new.lead_id,'appointment_confirmation','auto','pending','high',
+        'appointment:'||new.id::text||':confirmation',
+        jsonb_build_object(
+          'appointment_id',new.id,'start_at',new.start_at,'end_at',new.end_at,
+          'location',new.location,'rescheduled',true
+        )
+      )
+      on conflict(idempotency_key) do update
+        set status=case when public.workflow_actions.status='processing' then public.workflow_actions.status else 'pending' end,
+            attempts=case when public.workflow_actions.status='processing' then public.workflow_actions.attempts else 0 end,
+            scheduled_at=case when public.workflow_actions.status='processing' then public.workflow_actions.scheduled_at else now() end,
+            last_error=case when public.workflow_actions.status='processing' then public.workflow_actions.last_error else null end,
+            completed_at=case when public.workflow_actions.status='processing' then public.workflow_actions.completed_at else null end,
+            payload=excluded.payload,
+            updated_at=now();
+    end if;
+  end if;
+
+  if new.status='confirmed' and (tg_op='INSERT' or old.status is distinct from new.status) then
+    insert into public.workflow_actions(
+      organization_id,lead_id,action_type,channel,status,priority,idempotency_key,payload
+    )
+    values(
+      new.organization_id,new.lead_id,'appointment_confirmation','auto','pending','high',
+      'appointment:'||new.id::text||':confirmation',
+      jsonb_build_object(
+        'appointment_id',new.id,'start_at',new.start_at,'end_at',new.end_at,
+        'location',new.location,'rescheduled',false
+      )
+    )
+    on conflict(idempotency_key) do update
+      set status=case when public.workflow_actions.status='processing' then public.workflow_actions.status else 'pending' end,
+          attempts=case when public.workflow_actions.status='processing' then public.workflow_actions.attempts else 0 end,
+          scheduled_at=case when public.workflow_actions.status='processing' then public.workflow_actions.scheduled_at else now() end,
+          last_error=case when public.workflow_actions.status='processing' then public.workflow_actions.last_error else null end,
+          completed_at=case when public.workflow_actions.status='processing' then public.workflow_actions.completed_at else null end,
+          payload=excluded.payload,
+          updated_at=now();
+  end if;
+
+  if new.status='cancelled'
+     and (tg_op='INSERT' or old.status is distinct from new.status)
+     and new.provider='google_calendar'
+     and new.provider_booking_id is not null then
+    insert into public.workflow_actions(
+      organization_id,lead_id,action_type,channel,status,priority,idempotency_key,payload
+    )
+    values(
+      new.organization_id,new.lead_id,'calendar_cancel','calendar','pending','high',
+      'appointment:'||new.id::text||':calendar_cancel',
+      jsonb_build_object('appointment_id',new.id,'provider_booking_id',new.provider_booking_id)
+    )
+    on conflict(idempotency_key) do nothing;
+  end if;
+
+  if new.status='completed' and (tg_op='INSERT' or old.status is distinct from new.status) then
+    update public.leads
+    set status='won',updated_at=now()
+    where id=new.lead_id and organization_id=new.organization_id
+      and status not in ('won','lost');
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_appointment_lifecycle_actions on public.appointments;
+create trigger trg_appointment_lifecycle_actions
+after insert or update of status,start_at,end_at,location on public.appointments
+for each row execute function public.enqueue_appointment_lifecycle_actions();
