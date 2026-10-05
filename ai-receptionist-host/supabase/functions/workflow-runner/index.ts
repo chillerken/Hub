@@ -495,7 +495,12 @@ async function sendMetaWhatsApp(db:any,action:any,integration:any,lead:any,profi
     lead_name:clean(lead.name||"klant",120),
     business_name:clean(profile?.business_name||"",120),
     appointment_date:appointment?.start_at?fmtDate(appointment.start_at,profile?.locale||"nl-BE",appointment?.timezone||"Europe/Brussels"):"",
-    review_url:clean(cfg.review_url||"",500)
+    appointment_location:clean(appointment?.location||"",500),
+    review_url:clean(cfg.review_url||"",500),
+    payment_url:clean(action?.payload?.payment_url||"",1000),
+    payment_amount:action?.payload?.amount_cents
+      ? new Intl.NumberFormat(profile?.locale||"nl-BE",{style:"currency",currency:action?.payload?.currency||"EUR"}).format(Number(action.payload.amount_cents)/100)
+      : ""
   };
   const variableKeys=Array.isArray(template.variables)?template.variables:[];
   const parameters=variableKeys.map((k:string)=>({type:"text",text:clean(values[k]||"",1000)}));
@@ -599,17 +604,38 @@ Deno.serve(async (req:Request)=>{
       else if(action.action_type==="calendar_request"||action.action_type==="calendar_cancel") channel="calendar";
       else if(action.action_type==="payment_request") channel="payment";
       else if(channel==="auto") {
-        const {data:available}=await db.from("tenant_integrations").select("channel,status")
+        const {data:available}=await db.from("tenant_integrations").select("*")
           .eq("organization_id",action.organization_id)
           .eq("is_default",true)
           .in("channel",["email","whatsapp"]);
-        const activeEmail=!!available?.find((x:any)=>x.channel==="email"&&x.status==="active");
-        const activeWhatsapp=!!available?.find((x:any)=>x.channel==="whatsapp"&&x.status==="active");
+        const emailInt=available?.find((x:any)=>x.channel==="email");
+        const waInt=available?.find((x:any)=>x.channel==="whatsapp");
+        const emailCaps=Array.isArray(emailInt?.capabilities)?emailInt.capabilities:[];
+        const waCaps=Array.isArray(waInt?.capabilities)?waInt.capabilities:[];
+        const emailCapable=!!(
+          emailInt?.status==="active" &&
+          lead?.email &&
+          emailCaps.includes(action.action_type) &&
+          (action.action_type!=="review_request"||clean(emailInt?.config?.review_url,500))
+        );
+        const waTemplate=waInt?.config?.templates?.[action.action_type];
+        const waVars=Array.isArray(waTemplate?.variables)?waTemplate.variables:[];
+        const whatsappCapable=!!(
+          waInt?.status==="active" &&
+          lead?.phone &&
+          waCaps.includes(action.action_type) &&
+          waTemplate?.name &&
+          waTemplate?.language &&
+          clean(waInt?.config?.phone_number_id,100) &&
+          /^v\d+\.\d+$/.test(clean(waInt?.config?.api_version,20)) &&
+          (action.action_type!=="review_request"||clean(waInt?.config?.review_url,500)) &&
+          (action.action_type!=="payment_link_send"||waVars.includes("payment_url"))
+        );
         const preferred=profile?.preferred_followup_channel;
-        if(preferred==="email"&&lead?.email&&activeEmail) channel="email";
-        else if(preferred==="whatsapp"&&lead?.phone&&activeWhatsapp) channel="whatsapp";
-        else if(lead?.email&&activeEmail) channel="email";
-        else if(lead?.phone&&activeWhatsapp) channel="whatsapp";
+        if(preferred==="email"&&emailCapable) channel="email";
+        else if(preferred==="whatsapp"&&whatsappCapable) channel="whatsapp";
+        else if(emailCapable) channel="email";
+        else if(whatsappCapable) channel="whatsapp";
         else if(lead?.email) channel="email";
         else if(lead?.phone) channel="whatsapp";
         else channel=preferred==="whatsapp"?"whatsapp":"email";
