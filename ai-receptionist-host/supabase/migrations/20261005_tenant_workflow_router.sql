@@ -844,3 +844,78 @@ drop trigger if exists trg_appointment_lifecycle_actions on public.appointments;
 create trigger trg_appointment_lifecycle_actions
 after insert or update of status,start_at,end_at,location on public.appointments
 for each row execute function public.enqueue_appointment_lifecycle_actions();
+
+
+-- Automatic provider provisioning for every new organization.
+create or replace function private.seed_default_integrations()
+returns trigger
+language plpgsql
+security definer
+set search_path=''
+as $$
+begin
+  insert into public.tenant_integrations(
+    organization_id,channel,provider,status,is_default,config,capabilities
+  )
+  values
+    (new.id,'email','resend','needs_setup',true,'{}'::jsonb,
+      array['notify_owner','lead_follow_up','appointment_confirmation','payment_link_send','review_request','retention_follow_up']),
+    (new.id,'whatsapp','meta_whatsapp','needs_setup',true,'{}'::jsonb,
+      array['lead_follow_up','appointment_confirmation','payment_link_send','review_request','retention_follow_up']),
+    (new.id,'calendar','google_calendar','needs_setup',true,'{}'::jsonb,
+      array['calendar_request','calendar_cancel']),
+    (new.id,'payment','stripe','needs_setup',true,'{}'::jsonb,
+      array['payment_request','payment_received'])
+  on conflict do nothing;
+  return new;
+end;
+$$;
+revoke all on function private.seed_default_integrations() from public,anon,authenticated;
+
+drop trigger if exists trg_seed_default_integrations on public.organizations;
+create trigger trg_seed_default_integrations
+after insert on public.organizations
+for each row execute function private.seed_default_integrations();
+
+-- Signup now pre-fills the account email as the notification address.
+create or replace function private.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path=''
+as $$
+declare
+  v_org uuid;
+  v_name text;
+begin
+  v_name := left(coalesce(nullif(trim(new.raw_user_meta_data->>'business_name'),''),'Mijn bedrijf'),120);
+
+  insert into public.organizations(name,status)
+  values(v_name,'onboarding')
+  returning id into v_org;
+
+  insert into public.memberships(organization_id,user_id,role,active)
+  values(v_org,new.id,'owner',true);
+
+  insert into public.business_profiles(
+    organization_id,business_name,qualification_questions,notification_email
+  )
+  values(
+    v_org,
+    v_name,
+    '["Waarmee kunnen we u precies helpen?","Wanneer wilt u dit laten uitvoeren?","Hoe mogen we u het best bereiken?"]'::jsonb,
+    nullif(lower(trim(new.email)),'')
+  );
+
+  insert into public.audit_events(
+    organization_id,actor_user_id,event_type,entity_type,entity_id,payload
+  )
+  values(
+    v_org,new.id,'organization.created','organization',v_org,
+    jsonb_build_object('source','auth_signup')
+  );
+
+  return new;
+end;
+$$;
+revoke all on function private.handle_new_user() from public,anon,authenticated;
