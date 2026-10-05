@@ -48,10 +48,11 @@ Deno.serve(async req=>{
     else if(ie)throw ie;
    }
   }
-  if(e.type==="checkout.session.completed"&&o.mode==="subscription"&&String(o.metadata?.app||"")==="mijn_ai_business"){
+  if(["checkout.session.completed","checkout.session.async_payment_succeeded","checkout.session.async_payment_failed"].includes(e.type)&&o.mode==="subscription"&&String(o.metadata?.app||"")==="mijn_ai_business"){
    const plan=String(o.metadata?.plan||"").toLowerCase(),ref=String(o.client_reference_id||""),customer=String(o.customer||""),sub=String(o.subscription||"");
-   const paid=["paid","no_payment_required"].includes(String(o.payment_status||"").toLowerCase());
-   const checkoutStatus=paid?"active":"incomplete";
+   const paid=e.type==="checkout.session.async_payment_succeeded"||["paid","no_payment_required"].includes(String(o.payment_status||"").toLowerCase());
+   const explicitlyFailed=e.type==="checkout.session.async_payment_failed";
+   const checkoutStatus=paid?"active":explicitlyFailed?"past_due":"incomplete";
    let resolvedOrg:string|null=null;
 
    if(["starter","pro","business"].includes(plan)&&ref){
@@ -74,6 +75,15 @@ Deno.serve(async req=>{
      const {data:m}=await db.from("memberships").select("organization_id,role").eq("user_id",uid).eq("organization_id",ref).eq("active",true).in("role",["owner","admin"]).maybeSingle();
      if(m?.organization_id)resolvedOrg=String(m.organization_id);
     }
+   }
+
+   if(!resolvedOrg && sub){
+    const {data:bySub}=await db.from("organizations").select("id").eq("stripe_subscription_id",sub).maybeSingle();
+    if(bySub?.id)resolvedOrg=String(bySub.id);
+   }
+   if(!resolvedOrg && customer){
+    const {data:byCustomer}=await db.from("organizations").select("id").eq("stripe_customer_id",customer).maybeSingle();
+    if(byCustomer?.id)resolvedOrg=String(byCustomer.id);
    }
 
    if(["starter","pro","business"].includes(plan)&&resolvedOrg){
