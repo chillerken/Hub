@@ -563,3 +563,6 @@ drop trigger if exists trg_appointment_lifecycle_actions on public.appointments;
 create trigger trg_appointment_lifecycle_actions
 after insert or update of status,start_at,end_at,location on public.appointments
 for each row execute function public.enqueue_appointment_lifecycle_actions();
+
+create index if not exists integration_credentials_org_idx
+  on private.integration_credentials(organization_id);
