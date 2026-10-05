@@ -37,7 +37,7 @@ Deno.serve(async(req:Request)=>{
     const [{data:organization},{data:profile},{data:integrations},{count:blocked},{count:failed},{count:pending},{count:handoffs}]=await Promise.all([
       db.from("organizations").select("id,name,status,plan,subscription_status,trial_ends_at,stripe_customer_id,stripe_subscription_id").eq("id",org).single(),
       db.from("business_profiles").select("business_name,description,services,qualification_questions,notification_email,automation_enabled,widget_enabled,preferred_followup_channel").eq("organization_id",org).single(),
-      db.from("tenant_integrations").select("channel,provider,status,last_verified_at,last_error,config").eq("organization_id",org).eq("is_default",true),
+      db.from("tenant_integrations").select("channel,provider,status,last_verified_at,last_error,config,capabilities").eq("organization_id",org).eq("is_default",true),
       db.from("workflow_actions").select("id",{count:"exact",head:true}).eq("organization_id",org).eq("status","blocked"),
       db.from("workflow_actions").select("id",{count:"exact",head:true}).eq("organization_id",org).eq("status","failed"),
       db.from("workflow_actions").select("id",{count:"exact",head:true}).eq("organization_id",org).eq("status","pending"),
@@ -54,20 +54,61 @@ Deno.serve(async(req:Request)=>{
       profile?.automation_enabled===true &&
       profile?.widget_enabled===true
     );
-    const emailReady=by("email")?.status==="active";
-    const whatsappReady=by("whatsapp")?.status==="active";
-    const outboundReady=emailReady||whatsappReady;
-    const calendarReady=by("calendar")?.status==="active";
-    const paymentReady=by("payment")?.status==="active";
-    const coreReady=profileReady&&outboundReady;
-    const fullReady=coreReady&&calendarReady&&paymentReady;
+    const email=by("email");
+    const whatsapp=by("whatsapp");
+    const calendar=by("calendar");
+    const payment=by("payment");
+    const emailReady=email?.status==="active";
+    const whatsappReady=whatsapp?.status==="active";
+    const calendarReady=calendar?.status==="active";
+    const paymentReady=payment?.status==="active";
+    const emailCaps=Array.isArray(email?.capabilities)?email.capabilities:[];
+    const waCaps=Array.isArray(whatsapp?.capabilities)?whatsapp.capabilities:[];
+
+    const emailCan=(type:string)=>!!(
+      emailReady &&
+      emailCaps.includes(type) &&
+      (type!=="review_request"||String(email?.config?.review_url||"").trim())
+    );
+    const whatsappCan=(type:string)=>{
+      const template=whatsapp?.config?.templates?.[type];
+      const vars=Array.isArray(template?.variables)?template.variables:[];
+      return !!(
+        whatsappReady &&
+        waCaps.includes(type) &&
+        template?.name &&
+        template?.language &&
+        String(whatsapp?.config?.phone_number_id||"").trim() &&
+        /^v\d+\.\d+$/.test(String(whatsapp?.config?.api_version||"").trim()) &&
+        (type!=="review_request"||String(whatsapp?.config?.review_url||"").trim()) &&
+        (type!=="payment_link_send"||vars.includes("payment_url"))
+      );
+    };
+    const actionReady=(type:string)=>emailCan(type)||whatsappCan(type);
+    const lifecycle={
+      lead_follow_up:actionReady("lead_follow_up"),
+      appointment_confirmation:actionReady("appointment_confirmation"),
+      payment_link_send:actionReady("payment_link_send"),
+      review_request:actionReady("review_request"),
+      retention_follow_up:actionReady("retention_follow_up")
+    };
+    const lifecycleReady=Object.values(lifecycle).every(Boolean);
+    const ownerNotificationReady=emailReady&&emailCaps.includes("notify_owner");
+    const outboundReady=lifecycle.lead_follow_up;
+    const coreReady=profileReady&&ownerNotificationReady&&outboundReady;
+    const fullReady=coreReady&&calendarReady&&paymentReady&&lifecycleReady;
     const billingReady=organization?.plan==="trial"
       ? new Date(organization?.trial_ends_at||0).getTime()>Date.now()
       : ["active","trialing"].includes(String(organization?.subscription_status||""));
 
     const blockers:any[]=[];
     if(!profileReady) blockers.push({code:"profile_incomplete",area:"profile"});
-    if(!outboundReady) blockers.push({code:"outbound_integration_missing",area:"outbound"});
+    if(!ownerNotificationReady) blockers.push({code:"owner_notification_unavailable",area:"email"});
+    if(!outboundReady) blockers.push({code:"lead_followup_channel_unavailable",area:"outbound"});
+    if(!lifecycle.appointment_confirmation) blockers.push({code:"appointment_confirmation_unavailable",area:"outbound"});
+    if(!lifecycle.payment_link_send) blockers.push({code:"payment_link_delivery_unavailable",area:"outbound"});
+    if(!lifecycle.review_request) blockers.push({code:"review_delivery_unavailable",area:"review"});
+    if(!lifecycle.retention_follow_up) blockers.push({code:"retention_delivery_unavailable",area:"retention"});
     if(!calendarReady) blockers.push({code:"calendar_integration_missing",area:"calendar"});
     if(!paymentReady) blockers.push({code:"payment_integration_missing",area:"payment"});
     if(!billingReady) blockers.push({code:"saas_billing_inactive",area:"billing"});
@@ -80,10 +121,13 @@ Deno.serve(async(req:Request)=>{
         status:fullReady&&billingReady&&!(failed||0)?"ready":coreReady&&billingReady?"core_ready":"setup",
         profile:profileReady,
         outbound:outboundReady,
+        owner_notification:ownerNotificationReady,
         email:emailReady,
         whatsapp:whatsappReady,
         calendar:calendarReady,
         payment:paymentReady,
+        lifecycle,
+        lifecycle_ready:lifecycleReady,
         saas_billing:billingReady,
         full:fullReady&&billingReady&&!(failed||0)
       },
