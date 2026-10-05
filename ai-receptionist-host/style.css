@@ -16,3 +16,70 @@
 .marketingbtn{width:auto;margin-top:10px;padding:8px 11px;font-size:12px;background:#e7b85b;color:#111}.marketingresult{margin-top:12px;font-size:12px;line-height:1.55;color:#c7d3df}
 
 .jarvisstep{padding:14px 0;border-bottom:1px solid rgba(255,255,255,.08)}.jarvisstep:last-child{border-bottom:0}.jarvisstep p{margin:6px 0}.jarvisstep small{color:#8fa0b3}
+
+
+/* Reception AI sales v2 */
+.sales-v2{max-width:1180px}
+.salesnav{position:sticky;top:0;z-index:20;background:rgba(11,15,20,.9);backdrop-filter:blur(16px);border-bottom:1px solid rgba(255,255,255,.06);padding:16px 0}
+.navlinks{display:flex;gap:22px;align-items:center}
+.navlinks a{color:var(--muted);text-decoration:none;font-weight:700;font-size:14px}
+.navlinks a:hover{color:var(--text)}
+.navactions{display:flex;gap:10px;align-items:center}
+.hero-v2{padding:86px 0 56px;max-width:930px;margin:0 auto;text-align:center}
+.hero-v2 h1{font-size:clamp(42px,7vw,78px);line-height:.98;letter-spacing:-.05em;max-width:980px;margin:18px auto}
+.hero-copy{font-size:clamp(18px,2.1vw,23px);max-width:820px;margin:0 auto;color:var(--muted);line-height:1.55}
+.goldtext{color:var(--gold)}
+.proofbar{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 22px;margin-top:28px;color:#d7dde5;font-size:14px;font-weight:700}
+.problem-grid,.steps4{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:30px 0 74px}
+.statcard{min-height:210px}
+.stat{display:block;font-size:32px;color:var(--gold);font-weight:900;letter-spacing:-.04em;margin-bottom:18px}
+.sectionhead{max-width:760px;margin:0 auto 28px;text-align:center}
+.sectionhead h2{font-size:clamp(30px,4vw,48px);letter-spacing:-.035em;margin:10px 0}
+.demo-section{padding:34px 0 80px;scroll-margin-top:90px}
+.demo-grid{display:grid;grid-template-columns:.72fr 1.28fr;gap:18px;align-items:stretch}
+.demo-info{padding:24px}
+.demo-info select{width:100%;margin:8px 0 22px}
+.quicktitle{font-weight:900;margin:8px 0 10px}
+.demoprompt{display:block;width:100%;text-align:left;margin:8px 0;background:#111923;border:1px solid #263342;border-radius:12px;padding:12px 14px;color:var(--text);cursor:pointer}
+.demoprompt:hover{border-color:var(--gold)}
+.demotip{margin-top:22px;padding:15px;border-radius:14px;background:rgba(197,161,90,.09);border:1px solid rgba(197,161,90,.23);font-size:14px;line-height:1.5}
+.demo-chat-card{display:flex;flex-direction:column;min-height:520px;padding:0;overflow:hidden}
+.chathead{display:flex;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid #23303d;background:#0f151c}
+.online-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#4dd58a;margin-right:8px;box-shadow:0 0 0 4px rgba(77,213,138,.1)}
+.chathead small{color:var(--muted)}
+.demo-log{flex:1;max-height:420px;overflow:auto;padding:22px;background:linear-gradient(180deg,#0c1117,#101720)}
+.demo-compose{display:grid;grid-template-columns:1fr auto;gap:10px;padding:16px;border-top:1px solid #23303d}
+.demo-compose input{margin:0}
+.demo-status{padding:0 18px 16px;min-height:21px;font-size:13px}
+.steps4{grid-template-columns:repeat(4,1fr);margin-bottom:46px}
+.stepno{display:inline-flex;width:38px;height:38px;border-radius:12px;align-items:center;justify-content:center;background:rgba(197,161,90,.12);color:var(--gold);font-weight:900;margin-bottom:14px}
+.salesfeatures{grid-template-columns:repeat(4,1fr);margin-bottom:80px}
+.setup{font-size:13px;color:var(--muted);margin:18px 0}
+.plancta{display:block;text-align:center;margin-top:18px}
+.pilot-section{display:grid;grid-template-columns:.85fr 1.15fr;gap:34px;align-items:center;padding:84px 0;scroll-margin-top:90px}
+.pilot-copy h2{font-size:clamp(32px,4vw,52px);letter-spacing:-.035em;margin:12px 0}
+.cleanlist{list-style:none;padding:0;margin:24px 0;display:grid;gap:10px}
+.pilot-form{padding:26px}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.formgrid .full{grid-column:1/-1}
+.pilot-form textarea{min-height:110px;resize:vertical}
+.submitpilot{width:100%;margin:14px 0}
+.hpfield{position:absolute!important;left:-9999px!important;width:1px!important;height:1px!important;overflow:hidden!important}
+.faq-sales{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding:0 0 70px}
+.faq-sales summary{cursor:pointer;font-weight:900}
+.faq-sales p{margin-bottom:0}
+@media(max-width:900px){
+  .navlinks{display:none}
+  .problem-grid,.steps4,.salesfeatures,.faq-sales{grid-template-columns:1fr 1fr}
+  .demo-grid,.pilot-section{grid-template-columns:1fr}
+}
+@media(max-width:640px){
+  .salesnav{padding:12px 0}
+  .navactions .ghostbtn{display:none}
+  .hero-v2{padding:54px 0 38px}
+  .hero-v2 h1{font-size:44px}
+  .problem-grid,.steps4,.salesfeatures,.faq-sales{grid-template-columns:1fr}
+  .formgrid{grid-template-columns:1fr}
+  .demo-chat-card{min-height:470px}
+  .proofbar{justify-content:flex-start}
+}
