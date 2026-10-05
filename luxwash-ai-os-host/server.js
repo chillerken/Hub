@@ -101,6 +101,26 @@ async function proxyApi(req, res, path) {
   });
 }
 
+async function proxyQuotePdf(req,res,id){
+  if(!SUPABASE_EDGE_BASE||!SUPABASE_PROXY_SESSION_SECRET_HEX)return sendJson(res,503,{error:'backend_not_configured'});
+  if(!/^[0-9a-f-]{36}$/i.test(String(id||'')))return sendJson(res,400,{error:'invalid_quote_id'});
+  const root=SUPABASE_EDGE_BASE.replace(/\/luxwash-ai-os\/?$/,'');
+  const upstream=await fetch(root+'/luxwash-quote-pdf?id='+encodeURIComponent(id),{
+    headers:{Cookie:supabaseCookie(),Accept:'application/pdf'},
+    signal:AbortSignal.timeout(20000)
+  });
+  if(!upstream.ok){
+    const t=await upstream.text().catch(()=>'');
+    return sendJson(res,upstream.status,{error:'quote_pdf_failed',detail:t.slice(0,500)});
+  }
+  const buf=Buffer.from(await upstream.arrayBuffer());
+  send(res,200,buf,{
+    'Content-Type':'application/pdf',
+    'Content-Disposition':upstream.headers.get('content-disposition')||'inline; filename="LuxWash-Offerte.pdf"',
+    'Cache-Control':'private, no-store'
+  });
+}
+
 async function claudeApi(req, res) {
   if (!ANTHROPIC_API_KEY) return sendJson(res, 503, { error: 'anthropic_not_configured' });
   const raw = await readBody(req, 256 * 1024);
@@ -238,6 +258,7 @@ const server = http.createServer(async (req, res) => {
       if (!isAuthed) return sendJson(res, 401, { error: 'unauthorized' });
       if (url.pathname === '/api/tts' && req.method === 'POST') return ttsApi(req, res);
       if (url.pathname === '/api/claude' && req.method === 'POST') return claudeApi(req, res);
+      if (url.pathname === '/api/quote-pdf' && req.method === 'GET') return proxyQuotePdf(req,res,url.searchParams.get('id'));
       return proxyApi(req, res, url.pathname);
     }
     if (!isAuthed) return sendHtml(res, LOGIN.replace('__ERROR__', ''));
