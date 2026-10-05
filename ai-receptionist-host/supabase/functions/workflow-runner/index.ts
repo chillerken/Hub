@@ -517,11 +517,12 @@ async function sendMetaWhatsApp(db:any,action:any,integration:any,lead:any,profi
       })
     });
   }catch(e){
-    return {outcome:"retry",provider:"meta_whatsapp",error_code:"network_error",error_message:String(e),retry_after_seconds:retrySeconds(action.attempts)};
+    return {outcome:"blocked",provider:"meta_whatsapp",error_code:"delivery_unknown",error_message:"WhatsApp transport failed after send attempt; delivery status is unknown. Manual retry is required to avoid a duplicate message. Detail: "+clean(String(e),700)};
   }
   let body:any={}; try{body=await resp.json();}catch{}
   if(resp.ok) return {outcome:"completed",provider:"meta_whatsapp",provider_reference:body?.messages?.[0]?.id||null,http_status:resp.status,response_meta:{accepted:true}};
-  if(resp.status===429||resp.status>=500) return {outcome:"retry",provider:"meta_whatsapp",http_status:resp.status,error_code:"provider_retryable",error_message:clean(body?.error?.message||resp.statusText,1000),retry_after_seconds:retrySeconds(action.attempts)};
+  if(resp.status===429) return {outcome:"retry",provider:"meta_whatsapp",http_status:resp.status,error_code:"rate_limited",error_message:clean(body?.error?.message||resp.statusText,1000),retry_after_seconds:retrySeconds(action.attempts)};
+  if(resp.status>=500) return {outcome:"blocked",provider:"meta_whatsapp",http_status:resp.status,error_code:"delivery_unknown",error_message:"WhatsApp returned a server error after send attempt; delivery status is unknown. Manual retry is required to avoid a duplicate message. Detail: "+clean(body?.error?.message||resp.statusText,700)};
   return {outcome:"failed",provider:"meta_whatsapp",http_status:resp.status,error_code:String(body?.error?.code||"provider_rejected"),error_message:clean(body?.error?.message||resp.statusText,1000)};
 }
 
