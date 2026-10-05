@@ -49,6 +49,11 @@ function actionMessage(action:any, lead:any, profile:any, appointment:any) {
         subject:`Uw aanvraag bij ${business}`,
         text:`Beste ${name},\n\nBedankt voor uw aanvraag bij ${business}. We hebben uw gegevens en vraag goed ontvangen. Uw aanvraag wordt verder opgevolgd. Een aanvraag is pas definitief zodra een afspraak of voorstel uitdrukkelijk bevestigd is.\n\nMet vriendelijke groet,\n${business}`
       };
+    case "payment_link_send":
+      return {
+        subject:`Betaalverzoek – ${business}`,
+        text:`Beste ${name},\n\nHier vindt u het betaalverzoek voor ${business}:\n${clean(action?.payload?.payment_url||"",1000)}\n\nBedrag: ${action?.payload?.amount_cents ? new Intl.NumberFormat(profile?.locale||"nl-BE",{style:"currency",currency:action?.payload?.currency||"EUR"}).format(action.payload.amount_cents/100) : "zie betaalpagina"}.\n\nMet vriendelijke groet,\n${business}`
+      };
     case "appointment_confirmation":
       return {
         subject:`Afspraak bevestigd – ${business}`,
@@ -194,6 +199,69 @@ async function sendWebhook(db:any,action:any,integration:any,lead:any,profile:an
   return {outcome:"failed",provider:"webhook",http_status:resp.status,error_code:"provider_rejected",error_message:clean(body?.message||resp.statusText,1000)};
 }
 
+async function createStripeCheckout(db:any,action:any,integration:any,lead:any,profile:any,payment:any) {
+  if(!payment) return {outcome:"failed",provider:"stripe",error_code:"payment_missing",error_message:"Payment record not found"};
+  if(payment.status==="paid") return {outcome:"completed",provider:"stripe",provider_reference:payment.provider_payment_id||null,response_meta:{already_paid:true}};
+  if(payment.payment_url && payment.provider_payment_id) return {outcome:"completed",provider:"stripe",provider_reference:payment.provider_payment_id,response_meta:{existing_checkout:true}};
+  if(!payment.amount_cents || payment.amount_cents<=0) return {outcome:"blocked",provider:"stripe",error_code:"amount_missing",error_message:"A positive payment amount is required"};
+
+  const raw=await credential(db,integration,action.organization_id);
+  if(!raw) return {outcome:"blocked",provider:"stripe",error_code:"credential_missing",error_message:"Stripe credential missing"};
+  let secretKey="";
+  try{
+    const parsed=JSON.parse(raw);
+    secretKey=clean(parsed?.secret_key,500);
+  }catch{
+    secretKey=clean(raw,500);
+  }
+  if(!secretKey.startsWith("sk_") && !secretKey.startsWith("rk_")) return {outcome:"blocked",provider:"stripe",error_code:"credential_invalid",error_message:"Stripe secret or restricted key missing"};
+
+  const cfg=integration.config||{};
+  const successUrl=clean(cfg.success_url,1000);
+  const cancelUrl=clean(cfg.cancel_url,1000);
+  if(!/^https:\/\//i.test(successUrl)||!/^https:\/\//i.test(cancelUrl)) return {outcome:"blocked",provider:"stripe",error_code:"redirect_url_missing",error_message:"HTTPS success_url and cancel_url are required"};
+
+  const params=new URLSearchParams();
+  params.set("mode","payment");
+  params.set("success_url",successUrl);
+  params.set("cancel_url",cancelUrl);
+  params.set("client_reference_id",String(payment.id));
+  if(isEmail(lead?.email)) params.set("customer_email",lead.email);
+  params.set("line_items[0][price_data][currency]",String(payment.currency||"EUR").toLowerCase());
+  params.set("line_items[0][price_data][product_data][name]",clean(cfg.product_name||(`Betaling ${profile?.business_name||"service"}`),120));
+  params.set("line_items[0][price_data][unit_amount]",String(payment.amount_cents));
+  params.set("line_items[0][quantity]","1");
+  params.set("metadata[organization_id]",String(action.organization_id));
+  params.set("metadata[lead_id]",String(action.lead_id||""));
+  params.set("metadata[customer_payment_id]",String(payment.id));
+
+  let resp:Response;
+  try{
+    resp=await fetch("https://api.stripe.com/v1/checkout/sessions",{
+      method:"POST",
+      headers:{
+        "Authorization":`Bearer ${secretKey}`,
+        "Content-Type":"application/x-www-form-urlencoded",
+        "Idempotency-Key":action.idempotency_key
+      },
+      body:params
+    });
+  }catch(e){
+    return {outcome:"retry",provider:"stripe",error_code:"network_error",error_message:String(e),retry_after_seconds:retrySeconds(action.attempts)};
+  }
+
+  let body:any={}; try{body=await resp.json();}catch{}
+  if(resp.ok && body?.id && body?.url){
+    const {error:updateError}=await db.from("customer_payments")
+      .update({provider:"stripe",provider_payment_id:body.id,payment_url:body.url,updated_at:new Date().toISOString()})
+      .eq("id",payment.id).eq("organization_id",action.organization_id);
+    if(updateError) return {outcome:"retry",provider:"stripe",provider_reference:body.id,http_status:resp.status,error_code:"payment_record_update_failed",error_message:updateError.message,retry_after_seconds:60};
+    return {outcome:"completed",provider:"stripe",provider_reference:body.id,http_status:resp.status,response_meta:{checkout_created:true}};
+  }
+  if(resp.status===429||resp.status>=500) return {outcome:"retry",provider:"stripe",http_status:resp.status,error_code:"provider_retryable",error_message:clean(body?.error?.message||resp.statusText,1000),retry_after_seconds:retrySeconds(action.attempts)};
+  return {outcome:"failed",provider:"stripe",http_status:resp.status,error_code:clean(body?.error?.code||"provider_rejected",200),error_message:clean(body?.error?.message||resp.statusText,1000)};
+}
+
 async function sendMetaWhatsApp(db:any,action:any,integration:any,lead:any,profile:any,appointment:any) {
   if(!lead?.phone) return {outcome:"blocked",provider:"meta_whatsapp",error_code:"recipient_missing",error_message:"No WhatsApp phone number"};
   if(!lead?.contact_consent_at) return {outcome:"failed",provider:"meta_whatsapp",error_code:"contact_consent_required",error_message:"Customer contact consent missing"};
@@ -314,7 +382,7 @@ Deno.serve(async (req:Request)=>{
       let channel=action.channel;
       if(action.action_type==="notify_owner") channel="email";
       else if(action.action_type==="calendar_request") channel="calendar";
-      else if(action.action_type.startsWith("payment_")) channel="payment";
+      else if(action.action_type==="payment_request") channel="payment";
       else if(channel==="auto") {
         const preferred=profile?.preferred_followup_channel;
         if(preferred==="email"&&lead?.email) channel="email";
@@ -339,6 +407,8 @@ Deno.serve(async (req:Request)=>{
       let outcome:any;
       if(integration.provider==="resend" && channel==="email") {
         outcome=await sendResend(db,action,integration,lead,profile,appointment);
+      } else if(integration.provider==="stripe" && channel==="payment" && action.action_type==="payment_request") {
+        outcome=await createStripeCheckout(db,action,integration,lead,profile,payment);
       } else if(integration.provider==="webhook") {
         outcome=await sendWebhook(db,action,integration,lead,profile,appointment,payment);
       } else if(integration.provider==="meta_whatsapp" && channel==="whatsapp") {
