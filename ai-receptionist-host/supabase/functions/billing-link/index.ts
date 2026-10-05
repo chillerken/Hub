@@ -61,6 +61,15 @@ Deno.serve(async(req:Request)=>{
     });
     if(re) throw re;
 
+    await db.from("audit_events").insert({
+      organization_id:mem.organization_id,
+      actor_user_id:u.user.id,
+      event_type:"billing.checkout_prepared",
+      entity_type:"organization",
+      entity_id:mem.organization_id,
+      payload:{plan,expires_at:expiresAt}
+    });
+
     return out({
       ok:true,
       plan,
