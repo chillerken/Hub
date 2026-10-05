@@ -467,3 +467,99 @@ revoke all on function public.mark_customer_payment_paid(uuid,uuid,text,timestam
   from public,anon,authenticated;
 grant execute on function public.mark_customer_payment_paid(uuid,uuid,text,timestamptz)
   to service_role;
+
+
+-- Owner/admin operational boundary: browser reads state; privileged transitions go through operations-admin.
+revoke update on public.appointments from authenticated;
+revoke update on public.customer_payments from authenticated;
+grant select on public.appointments to authenticated;
+grant select on public.customer_payments to authenticated;
+
+create or replace function public.enqueue_appointment_lifecycle_actions()
+returns trigger
+language plpgsql
+security invoker
+set search_path=public
+as $$
+declare
+  enabled boolean := false;
+begin
+  select coalesce(automation_enabled,false) into enabled
+  from public.business_profiles
+  where organization_id=new.organization_id;
+
+  if not enabled then return new; end if;
+
+  if new.status='requested' and (tg_op='INSERT' or old.status is distinct from new.status) then
+    insert into public.workflow_actions(
+      organization_id,lead_id,action_type,channel,status,priority,idempotency_key,payload
+    )
+    values(
+      new.organization_id,new.lead_id,'calendar_request','calendar','pending','high',
+      'appointment:'||new.id::text||':calendar_request',
+      jsonb_build_object('appointment_id',new.id,'requested_text',new.requested_text)
+    )
+    on conflict(idempotency_key) do nothing;
+  end if;
+
+  if new.start_at is not null
+     and new.end_at is not null
+     and (
+       tg_op='INSERT'
+       or old.start_at is distinct from new.start_at
+       or old.end_at is distinct from new.end_at
+     ) then
+    insert into public.workflow_actions(
+      organization_id,lead_id,action_type,channel,status,priority,idempotency_key,payload
+    )
+    values(
+      new.organization_id,new.lead_id,'calendar_request','calendar','pending','high',
+      'appointment:'||new.id::text||':calendar_request',
+      jsonb_build_object(
+        'appointment_id',new.id,'requested_text',new.requested_text,
+        'start_at',new.start_at,'end_at',new.end_at,'location',new.location
+      )
+    )
+    on conflict(idempotency_key) do nothing;
+
+    update public.workflow_actions
+    set status='pending',scheduled_at=now(),last_error=null,
+        payload=jsonb_build_object(
+          'appointment_id',new.id,'requested_text',new.requested_text,
+          'start_at',new.start_at,'end_at',new.end_at,'location',new.location
+        ),
+        updated_at=now()
+    where idempotency_key='appointment:'||new.id::text||':calendar_request'
+      and status='blocked'
+      and last_error ilike '%precise start and end%';
+  end if;
+
+  if new.status='confirmed' and (tg_op='INSERT' or old.status is distinct from new.status) then
+    insert into public.workflow_actions(
+      organization_id,lead_id,action_type,channel,status,priority,idempotency_key,payload
+    )
+    values(
+      new.organization_id,new.lead_id,'appointment_confirmation','auto','pending','high',
+      'appointment:'||new.id::text||':confirmation',
+      jsonb_build_object(
+        'appointment_id',new.id,'start_at',new.start_at,'end_at',new.end_at,'location',new.location
+      )
+    )
+    on conflict(idempotency_key) do nothing;
+  end if;
+
+  if new.status='completed' and (tg_op='INSERT' or old.status is distinct from new.status) then
+    update public.leads
+    set status='won',updated_at=now()
+    where id=new.lead_id and organization_id=new.organization_id
+      and status not in ('won','lost');
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_appointment_lifecycle_actions on public.appointments;
+create trigger trg_appointment_lifecycle_actions
+after insert or update of status,start_at,end_at,location on public.appointments
+for each row execute function public.enqueue_appointment_lifecycle_actions();
