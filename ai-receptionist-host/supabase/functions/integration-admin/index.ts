@@ -244,7 +244,16 @@ Deno.serve(async(req:Request)=>{
         let webhookSecret=clean(stored?.webhook_secret,2000);
         let webhookEndpointId=clean(nextConfig.webhook_endpoint_id||stored?.webhook_endpoint_id,500);
 
-        if(webhookSecret && webhookEndpointId && nextConfig.webhook_managed===true){
+        const webhookEventsVersion=2;
+        const webhookAlreadyProvisioned=Boolean(
+          webhookSecret &&
+          webhookEndpointId &&
+          nextConfig.webhook_managed===true &&
+          nextConfig.webhook_endpoint_url===webhookUrl &&
+          Number(nextConfig.webhook_events_version||0)>=webhookEventsVersion
+        );
+
+        if(webhookSecret && webhookEndpointId && nextConfig.webhook_managed===true && !webhookAlreadyProvisioned){
           const form=new URLSearchParams();
           form.append("url",webhookUrl);
           form.append("enabled_events[]","checkout.session.completed");
@@ -265,6 +274,8 @@ Deno.serve(async(req:Request)=>{
               webhook_url:webhookUrl
             },400);
           }
+          nextConfig.webhook_endpoint_url=webhookUrl;
+          nextConfig.webhook_events_version=webhookEventsVersion;
         }
 
         if(!webhookSecret){
@@ -293,6 +304,7 @@ Deno.serve(async(req:Request)=>{
           }
           webhookSecret=clean(wj?.secret,2000);
           webhookEndpointId=clean(wj?.id,500);
+          nextConfig.webhook_events_version=webhookEventsVersion;
           if(!webhookSecret.startsWith("whsec_")||!webhookEndpointId){
             return out({error:"Stripe webhook was created without a usable signing secret"},500);
           }
