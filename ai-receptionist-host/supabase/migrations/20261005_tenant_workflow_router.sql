@@ -919,3 +919,87 @@ begin
 end;
 $$;
 revoke all on function private.handle_new_user() from public,anon,authenticated;
+
+
+-- One-time authenticated billing references bind public Payment Links to the correct tenant.
+create table if not exists private.billing_checkout_refs (
+  token_hash text primary key,
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  user_id uuid not null,
+  plan text not null check (plan in ('starter','pro','business')),
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists billing_checkout_refs_org_idx
+  on private.billing_checkout_refs(organization_id,created_at desc);
+create index if not exists billing_checkout_refs_expiry_idx
+  on private.billing_checkout_refs(expires_at);
+revoke all on private.billing_checkout_refs from public,anon,authenticated;
+
+create or replace function public.create_billing_checkout_ref(
+  p_token_hash text,
+  p_organization_id uuid,
+  p_user_id uuid,
+  p_plan text,
+  p_expires_at timestamptz
+)
+returns void
+language plpgsql
+security invoker
+set search_path=''
+as $$
+begin
+  if p_plan not in ('starter','pro','business') then raise exception 'invalid plan'; end if;
+  if p_expires_at <= now() or p_expires_at > now()+interval '4 hours' then raise exception 'invalid billing reference expiry'; end if;
+  if not exists (
+    select 1 from public.memberships
+    where organization_id=p_organization_id
+      and user_id=p_user_id
+      and active=true
+      and role in ('owner','admin')
+  ) then
+    raise exception 'owner or admin membership required';
+  end if;
+
+  delete from private.billing_checkout_refs
+  where expires_at < now()-interval '1 day'
+     or used_at < now()-interval '1 day';
+
+  insert into private.billing_checkout_refs(
+    token_hash,organization_id,user_id,plan,expires_at
+  )
+  values(
+    p_token_hash,p_organization_id,p_user_id,p_plan,p_expires_at
+  );
+end;
+$$;
+revoke all on function public.create_billing_checkout_ref(text,uuid,uuid,text,timestamptz)
+  from public,anon,authenticated;
+grant execute on function public.create_billing_checkout_ref(text,uuid,uuid,text,timestamptz)
+  to service_role;
+
+create or replace function public.consume_billing_checkout_ref(
+  p_token_hash text,
+  p_plan text
+)
+returns table(organization_id uuid,user_id uuid,plan text)
+language plpgsql
+security definer
+set search_path=''
+as $$
+begin
+  return query
+  update private.billing_checkout_refs r
+  set used_at=now()
+  where r.token_hash=p_token_hash
+    and r.plan=p_plan
+    and r.used_at is null
+    and r.expires_at>now()
+  returning r.organization_id,r.user_id,r.plan;
+end;
+$$;
+revoke all on function public.consume_billing_checkout_ref(text,text)
+  from public,anon,authenticated;
+grant execute on function public.consume_billing_checkout_ref(text,text)
+  to service_role;
