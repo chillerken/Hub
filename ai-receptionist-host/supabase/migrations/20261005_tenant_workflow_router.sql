@@ -255,3 +255,89 @@ create extension if not exists pg_cron;
 -- 2. deploy functions/workflow-runner with verify_jwt=true;
 -- 3. schedule pg_cron -> pg_net POST /functions/v1/workflow-runner every minute;
 -- 4. store per-tenant provider credentials only in Vault + private.integration_credentials.
+
+
+-- Public clients may read integration state, but all writes go through integration-admin.
+revoke insert,update,delete on public.tenant_integrations from authenticated;
+grant select on public.tenant_integrations to authenticated;
+
+create or replace function public.set_integration_credential(
+  p_integration_id uuid,
+  p_organization_id uuid,
+  p_secret text
+)
+returns void
+language plpgsql
+security definer
+set search_path=''
+as $$
+declare
+  v_name text;
+  v_id uuid;
+begin
+  if p_secret is null or length(trim(p_secret))<8 then
+    raise exception 'credential too short';
+  end if;
+  if not exists (
+    select 1 from public.tenant_integrations
+    where id=p_integration_id and organization_id=p_organization_id
+  ) then
+    raise exception 'integration not found for organization';
+  end if;
+
+  select vault_secret_name into v_name
+  from private.integration_credentials
+  where integration_id=p_integration_id and organization_id=p_organization_id;
+
+  if v_name is null then
+    v_name:='reception_ai_int_'||replace(p_integration_id::text,'-','');
+    select vault.create_secret(
+      p_secret,v_name,'Tenant provider credential for integration '||p_integration_id::text
+    ) into v_id;
+    insert into private.integration_credentials(integration_id,organization_id,vault_secret_name)
+    values(p_integration_id,p_organization_id,v_name);
+  else
+    select id into v_id from vault.decrypted_secrets where name=v_name limit 1;
+    if v_id is null then
+      perform vault.create_secret(
+        p_secret,v_name,'Tenant provider credential for integration '||p_integration_id::text
+      );
+    else
+      perform vault.update_secret(
+        v_id,p_secret,v_name,'Tenant provider credential for integration '||p_integration_id::text
+      );
+    end if;
+    update private.integration_credentials
+    set updated_at=now()
+    where integration_id=p_integration_id and organization_id=p_organization_id;
+  end if;
+end;
+$$;
+revoke all on function public.set_integration_credential(uuid,uuid,text) from public,anon,authenticated;
+grant execute on function public.set_integration_credential(uuid,uuid,text) to service_role;
+
+create or replace function public.remove_integration_credential(
+  p_integration_id uuid,
+  p_organization_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path=''
+as $$
+declare
+  v_name text;
+begin
+  select vault_secret_name into v_name
+  from private.integration_credentials
+  where integration_id=p_integration_id and organization_id=p_organization_id;
+
+  if v_name is not null then
+    delete from vault.secrets where name=v_name;
+    delete from private.integration_credentials
+    where integration_id=p_integration_id and organization_id=p_organization_id;
+  end if;
+end;
+$$;
+revoke all on function public.remove_integration_credential(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.remove_integration_credential(uuid,uuid) to service_role;
