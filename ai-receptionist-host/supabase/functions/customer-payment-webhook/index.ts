@@ -39,27 +39,43 @@ Deno.serve(async(req:Request)=>{
   const header=req.headers.get("stripe-signature")||"";
   if(!header||!raw) return json({error:"Missing signature or body"},400);
 
-  let event:any;
-  try{ event=JSON.parse(raw); }catch{return json({error:"Invalid JSON"},400);}
-
-  const obj=event?.data?.object||{};
-  const organizationId=clean(obj?.metadata?.organization_id,80);
-  const paymentId=clean(obj?.metadata?.customer_payment_id,80);
-  if(!organizationId||!paymentId) return json({error:"Required payment metadata missing"},400);
-
   const url=Deno.env.get("SUPABASE_URL")!;
   const service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const db=createClient(url,service,{auth:{persistSession:false}});
 
-  const {data:integration,error:intErr}=await db.from("tenant_integrations")
-    .select("*")
-    .eq("organization_id",organizationId)
-    .eq("channel","payment")
-    .eq("provider","stripe")
-    .eq("is_default",true)
-    .single();
-  if(intErr||!integration||integration.status!=="active") return json({error:"Active Stripe integration not found"},401);
+  const requestUrl=new URL(req.url);
+  const integrationId=clean(requestUrl.searchParams.get("integration_id"),80);
 
+  let integration:any=null;
+  let legacyEvent:any=null;
+
+  if(integrationId){
+    const {data,error}=await db.from("tenant_integrations")
+      .select("*")
+      .eq("id",integrationId)
+      .eq("channel","payment")
+      .eq("provider","stripe")
+      .eq("is_default",true)
+      .single();
+    if(error||!data||data.status!=="active") return json({error:"Active Stripe integration not found"},401);
+    integration=data;
+  }else{
+    // Backward compatibility for older manually configured endpoints.
+    try{legacyEvent=JSON.parse(raw)}catch{return json({error:"Invalid JSON"},400)}
+    const legacyOrg=clean(legacyEvent?.data?.object?.metadata?.organization_id,80);
+    if(!legacyOrg) return json({error:"integration_id missing"},400);
+    const {data,error}=await db.from("tenant_integrations")
+      .select("*")
+      .eq("organization_id",legacyOrg)
+      .eq("channel","payment")
+      .eq("provider","stripe")
+      .eq("is_default",true)
+      .single();
+    if(error||!data||data.status!=="active") return json({error:"Active Stripe integration not found"},401);
+    integration=data;
+  }
+
+  const organizationId=String(integration.organization_id);
   const {data:rawCredential,error:credErr}=await db.rpc("get_integration_credential",{
     p_integration_id:integration.id,
     p_organization_id:organizationId
@@ -79,6 +95,15 @@ Deno.serve(async(req:Request)=>{
 
   const expected=await hmacHex(webhookSecret,`${sig.timestamp}.${raw}`);
   if(!sig.v1.some(x=>safeEqualHex(x,expected))) return json({error:"Invalid Stripe signature"},400);
+
+  let event:any;
+  try{event=legacyEvent||JSON.parse(raw)}catch{return json({error:"Invalid JSON"},400)}
+  const obj=event?.data?.object||{};
+  const signedOrganizationId=clean(obj?.metadata?.organization_id,80);
+  const paymentId=clean(obj?.metadata?.customer_payment_id,80);
+
+  if(!signedOrganizationId||!paymentId) return json({error:"Required payment metadata missing"},400);
+  if(signedOrganizationId!==organizationId) return json({error:"Organization reference mismatch"},400);
 
   if(!["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event?.type)){
     return json({received:true,ignored:true});
@@ -118,6 +143,20 @@ Deno.serve(async(req:Request)=>{
     p_paid_at:paidAt
   });
   if(updateErr) return json({error:"Payment update failed"},500);
+
+  await db.from("audit_events").insert({
+    organization_id:organizationId,
+    actor_user_id:null,
+    event_type:"payment.verified",
+    entity_type:"customer_payment",
+    entity_id:paymentId,
+    payload:{
+      provider:"stripe",
+      provider_payment_id:providerPaymentId,
+      amount_cents:payment.amount_cents,
+      currency:payment.currency
+    }
+  });
 
   return json({received:true,payment_id:updated?.id,status:updated?.status});
 });
