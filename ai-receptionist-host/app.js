@@ -11,7 +11,7 @@ function legalFooter(){return '<div class="legal">Door Reception AI te gebruiken
 function authView(){
   const showAuth=new URLSearchParams(location.search).get("auth")==="1";
   if(!showAuth){
-    app.innerHTML=\`<main class="shell landing sales-v2">
+    app.innerHTML=`<main class="shell landing sales-v2">
       <header class="top salesnav">
         <a class="brandlink" href="./"><div class="brand">Reception AI</div></a>
         <nav class="navlinks"><a href="#werking">Hoe het werkt</a><a href="#live-demo">Live demo</a><a href="#prijzen">Prijzen</a></nav>
@@ -138,8 +138,8 @@ function authView(){
         <details class="card"><summary>Kan dit op mijn bestaande website?</summary><p class="muted">Ja. De receptionist kan als widget of link aan een bestaande website worden toegevoegd.</p></details>
       </section>
 
-      \${legalFooter()}
-    </main>\`;
+      ${legalFooter()}
+    </main>`;
 
     const demoNames={garage:"Garage De Smet",vastgoed:"Immo Nova",diensten:"Studio Nova"};
     let demoHistory=[];
@@ -201,7 +201,7 @@ function authView(){
     return;
   }
 
-  app.innerHTML=\`<main class="shell"><header class="top"><a class="brandlink" href="./"><div class="brand">Reception AI</div></a><a class="ghostbtn small" href="./">← Website</a></header><section class="hero compact"><h1>Welkom bij Reception AI</h1><p>Log in of maak uw bedrijfsaccount aan. Uw organisatiegegevens blijven afgeschermd per tenant.</p></section><section class="main"><div class="card"><h2>Aanmelden</h2><form id="login"><label>E-mail</label><input id="lemail" type="email" required><label>Wachtwoord</label><input id="lpass" type="password" minlength="8" required><button>Inloggen</button></form><button class="linkbutton" id="forgot" type="button">Wachtwoord vergeten?</button><div id="lmsg" class="result muted"></div></div><div class="card"><h2>Nieuw bedrijf</h2><form id="signup"><label>Bedrijfsnaam</label><input id="business" maxlength="120" required><label>E-mail</label><input id="semail" type="email" required><label>Wachtwoord</label><input id="spass" type="password" minlength="8" required><button>Account maken</button></form><div id="smsg" class="result muted">Na registratie kan e-mailbevestiging vereist zijn.</div></div></section>\${legalFooter()}</main>\`;
+  app.innerHTML=`<main class="shell"><header class="top"><a class="brandlink" href="./"><div class="brand">Reception AI</div></a><a class="ghostbtn small" href="./">← Website</a></header><section class="hero compact"><h1>Welkom bij Reception AI</h1><p>Log in of maak uw bedrijfsaccount aan. Uw organisatiegegevens blijven afgeschermd per tenant.</p></section><section class="main"><div class="card"><h2>Aanmelden</h2><form id="login"><label>E-mail</label><input id="lemail" type="email" required><label>Wachtwoord</label><input id="lpass" type="password" minlength="8" required><button>Inloggen</button></form><button class="linkbutton" id="forgot" type="button">Wachtwoord vergeten?</button><div id="lmsg" class="result muted"></div></div><div class="card"><h2>Nieuw bedrijf</h2><form id="signup"><label>Bedrijfsnaam</label><input id="business" maxlength="120" required><label>E-mail</label><input id="semail" type="email" required><label>Wachtwoord</label><input id="spass" type="password" minlength="8" required><button>Account maken</button></form><div id="smsg" class="result muted">Na registratie kan e-mailbevestiging vereist zijn.</div></div></section>${legalFooter()}</main>`;
   document.querySelector("#login").onsubmit=login;
   document.querySelector("#signup").onsubmit=signup;
   document.querySelector("#forgot").onclick=async()=>{
