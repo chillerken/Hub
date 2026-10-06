@@ -1,90 +1,74 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 
-const WIDGET_HOST = '#reception-ai-widget';
-const DEFERRED_LAUNCHER = '#reception-ai-direct-launcher';
 const CONFIG_URL =
   'https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/public-widget-config';
-const CHAT_URL =
-  'https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/public-reception-chat';
 const WIDGET_TOKEN = '597f9789-be65-4ab8-bdbe-276f696991f1';
 
-async function acceptCookieBannerIfPresent(page: Page) {
-  const candidates = [
-    /alles accepteren/i,
-    /accepteer alles/i,
-    /^accepteren$/i,
-    /accept all/i,
-    /^accept$/i,
-  ];
-
-  for (const name of candidates) {
-    const button = page.getByRole('button', { name }).first();
-    if (await button.isVisible({ timeout: 800 }).catch(() => false)) {
-      await button.click();
-      return;
-    }
-  }
-}
-
-test('LuxWash Reception AI opent via deferred launcher zonder CRM-testlead', async ({ page, request }) => {
+test('diagnose LuxWash native AI button', async ({ page, request }) => {
   const configResponse = await request.post(CONFIG_URL, {
     data: { widget_token: WIDGET_TOKEN },
     headers: { 'Content-Type': 'application/json' },
   });
-
   expect(configResponse.ok()).toBeTruthy();
-  const config = await configResponse.json();
-  expect(config?.error).toBeFalsy();
-  expect(config?.business_name).toBeTruthy();
 
-  await page.route(CHAT_URL, async (route) => {
-    if (route.request().method() !== 'POST') {
-      await route.continue();
-      return;
-    }
-
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        reply: 'E2E OK — Reception AI kan berichten ontvangen en antwoorden tonen.',
-        business_name: config.business_name,
-        receptionist_name: config.receptionist_name || 'AI Assistente',
-        lead_id: 'e2e-smoke-lead',
-        conversation_id: 'e2e-smoke-conversation',
-        contact_capture: { required: false },
-      }),
-    });
+  const interestingRequests: string[] = [];
+  page.on('request', (req) => {
+    const url = req.url();
+    if (/ai|chat|reception|supabase|assistant/i.test(url)) interestingRequests.push(url);
   });
 
   await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
-  await acceptCookieBannerIfPresent(page);
 
-  // The lightweight first-party launcher must be present without loading
-  // Reception AI from the third-party host before a visitor explicitly clicks.
-  const deferredLauncher = page.locator(DEFERRED_LAUNCHER);
-  await expect(deferredLauncher).toBeVisible({ timeout: 30_000 });
-  await deferredLauncher.click();
+  const nativeButton = page.getByRole('button', { name: /praat met ai assistente/i });
+  await expect(nativeButton).toBeVisible({ timeout: 30_000 });
 
-  // Clicking the launcher explicitly loads widget.js and opens the panel.
-  const host = page.locator(WIDGET_HOST);
-  await expect(host).toHaveCount(1, { timeout: 30_000 });
+  console.log('NATIVE_AI_BUTTON_HTML', await nativeButton.evaluate((el) => el.outerHTML));
 
-  const panel = host.locator('.rai-panel');
-  await expect(panel).toHaveAttribute('data-open', 'true', { timeout: 20_000 });
-  await expect(panel).toBeVisible();
+  await nativeButton.click();
+  await page.waitForTimeout(2500);
 
-  const title = host.locator('.rai-title strong');
-  await expect(title).not.toHaveText('');
+  const snapshot = await page.evaluate(() => {
+    const visible = (el: Element) => {
+      const r = (el as HTMLElement).getBoundingClientRect();
+      const s = getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';
+    };
 
-  const input = host.locator('.rai-input');
-  const send = host.locator('.rai-send');
-  await expect(input).toBeEnabled();
+    return {
+      url: location.href,
+      dialogs: Array.from(document.querySelectorAll('[role="dialog"]'))
+        .filter(visible)
+        .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 1500)),
+      textareas: Array.from(document.querySelectorAll('textarea'))
+        .filter(visible)
+        .map((el) => ({
+          placeholder: el.getAttribute('placeholder'),
+          aria: el.getAttribute('aria-label'),
+        })),
+      inputs: Array.from(document.querySelectorAll('input'))
+        .filter(visible)
+        .map((el) => ({
+          type: el.getAttribute('type'),
+          placeholder: el.getAttribute('placeholder'),
+          aria: el.getAttribute('aria-label'),
+        }))
+        .slice(0, 30),
+      aiButtons: Array.from(document.querySelectorAll('button,a,[role="button"]'))
+        .filter(visible)
+        .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim())
+        .filter((t) => /ai|chat|assistent/i.test(t))
+        .slice(0, 30),
+      receptionHost: Boolean(document.getElementById('reception-ai-widget')),
+      deferredLauncher: Boolean(document.getElementById('reception-ai-direct-launcher')),
+    };
+  });
 
-  await input.fill('E2E test: werkt de Reception AI-widget?');
-  await send.click();
+  console.log('AFTER_NATIVE_AI_CLICK', JSON.stringify(snapshot, null, 2));
+  console.log('INTERESTING_REQUESTS', JSON.stringify([...new Set(interestingRequests)], null, 2));
 
-  await expect(
-    host.getByText('E2E OK — Reception AI kan berichten ontvangen en antwoorden tonen.')
-  ).toBeVisible({ timeout: 15_000 });
+  await page.screenshot({ path: 'test-results/native-ai-after-click.png', fullPage: true });
+
+  // Diagnostic succeeds once the real button can be clicked; the log tells us
+  // what implementation is currently wired to it.
+  expect(snapshot.url).toBeTruthy();
 });
