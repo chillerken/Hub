@@ -29,6 +29,7 @@ function legalFooter(){return '<div class="legal">Door Reception AI te gebruiken
   </main>`;
 
   let lead=null,conv=null;
+  const campaignCode=String(new URLSearchParams(location.search).get("rai_campaign")||"").trim().slice(0,80);
   const title=document.querySelector("#wtitle"),brand=document.querySelector("#wbrand"),greeting=document.querySelector("#wgreeting");
   supabase.functions.invoke("public-widget-config",{body:{widget_token:token}}).then(({data})=>{
     if(!data?.active)return;
@@ -55,7 +56,8 @@ function legalFooter(){return '<div class="legal">Door Reception AI te gebruiken
       contact_consent:document.querySelector("#wconsent").checked,
       marketing_consent:document.querySelector("#wmarketing").checked,
       lead_id:lead,
-      conversation_id:conv
+      conversation_id:conv,
+      campaign_code:campaignCode||null
     }});
     send.disabled=false;
     if(error||data?.error){status.textContent=data?.error||"Tijdelijk niet beschikbaar.";return}
