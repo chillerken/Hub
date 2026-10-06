@@ -29,6 +29,7 @@
 
   const CONFIG_URL = API_BASE + "/public-widget-config";
   const CHAT_URL = API_BASE + "/public-reception-chat";
+  const CONTACT_URL = API_BASE + "/public-contact-capture";
   const position = script.dataset.position === "left" ? "left" : "right";
   const bottomRaw = String(script.dataset.bottom || "").trim();
   const bottomOffset = /^(?:\d{1,4}(?:\.\d+)?)(?:px|rem|vh|dvh|%)$/i.test(bottomRaw)
@@ -184,6 +185,41 @@
       background: var(--rai-accent); color: white; cursor: pointer; font-size: 18px; font-weight: 900;
     }
     .rai-send:disabled, .rai-input:disabled { opacity: .55; cursor: not-allowed; }
+    .rai-capture {
+      display: none;
+      margin: 0 0 10px;
+      padding: 10px;
+      border: 1px solid color-mix(in srgb, var(--rai-accent) 24%, var(--rai-border));
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--rai-accent) 5%, white);
+    }
+    .rai-capture[data-show="true"] { display: block; }
+    .rai-capture strong { display: block; font-size: 12px; margin-bottom: 3px; }
+    .rai-capture-copy { margin: 0 0 8px; color: var(--rai-muted); font-size: 11px; }
+    .rai-capture-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .rai-capture-grid input {
+      min-width: 0;
+      width: 100%;
+      border: 1px solid var(--rai-border);
+      border-radius: 10px;
+      padding: 9px 10px;
+      font: 12px/1.2 inherit;
+      color: var(--rai-text);
+      background: white;
+    }
+    .rai-capture-grid .rai-capture-name { grid-column: 1 / -1; }
+    .rai-capture-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .rai-capture-save {
+      border: 0;
+      border-radius: 10px;
+      padding: 9px 11px;
+      background: var(--rai-accent);
+      color: white;
+      cursor: pointer;
+      font: 700 11px/1 inherit;
+    }
+    .rai-capture-save:disabled { opacity: .55; cursor: not-allowed; }
+    .rai-capture-status { color: var(--rai-muted); font-size: 10.5px; }
     .rai-consent {
       margin-top: 8px;
       display: flex;
@@ -240,6 +276,20 @@
         <div class="rai-typing" aria-live="polite">Even geduld…</div>
       </div>
       <footer class="rai-foot">
+        <div class="rai-capture">
+          <strong>Persoonlijke opvolging</strong>
+          <p class="rai-capture-copy">Vul uw contactgegevens in zodat deze aanvraag persoonlijk kan worden opgevolgd.</p>
+          <div class="rai-capture-grid">
+            <input class="rai-capture-name" type="text" maxlength="120" autocomplete="name" placeholder="Naam (optioneel)">
+            <input class="rai-capture-email" type="email" maxlength="250" autocomplete="email" placeholder="E-mail">
+            <input class="rai-capture-phone" type="tel" maxlength="40" autocomplete="tel" placeholder="Telefoon">
+          </div>
+          <label class="rai-consent"><input type="checkbox" class="rai-capture-consent"> <span>Ik geef toestemming om mij over deze aanvraag persoonlijk te contacteren.</span></label>
+          <div class="rai-capture-actions">
+            <button class="rai-capture-save" type="button">Gegevens opslaan</button>
+            <span class="rai-capture-status"></span>
+          </div>
+        </div>
         <div class="rai-compose">
           <textarea class="rai-input" rows="1" maxlength="2000" placeholder="Typ uw vraag…" aria-label="Uw bericht"></textarea>
           <button class="rai-send" type="button" aria-label="Bericht versturen">➤</button>
@@ -263,6 +313,14 @@
   const input = wrap.querySelector(".rai-input");
   const send = wrap.querySelector(".rai-send");
   const consent = wrap.querySelector(".rai-consent-box");
+  const capture = wrap.querySelector(".rai-capture");
+  const captureCopy = wrap.querySelector(".rai-capture-copy");
+  const captureName = wrap.querySelector(".rai-capture-name");
+  const captureEmail = wrap.querySelector(".rai-capture-email");
+  const capturePhone = wrap.querySelector(".rai-capture-phone");
+  const captureConsent = wrap.querySelector(".rai-capture-consent");
+  const captureSave = wrap.querySelector(".rai-capture-save");
+  const captureStatus = wrap.querySelector(".rai-capture-status");
   const privacy = wrap.querySelector(".rai-note a");
 
   if (privacy && privacyUrl) privacy.href = privacyUrl;
@@ -301,6 +359,52 @@
     el.className = "rai-error";
     el.textContent = message;
     log.prepend(el);
+  }
+
+  function showContactCapture(info, contact) {
+    if (!info?.required) {
+      capture.dataset.show = "false";
+      return;
+    }
+    capture.dataset.show = "true";
+    captureCopy.textContent = info.prompt || "Vul uw contactgegevens in zodat deze aanvraag persoonlijk kan worden opgevolgd.";
+    if (contact?.name && !captureName.value) captureName.value = contact.name;
+    if (contact?.email && !captureEmail.value) captureEmail.value = contact.email;
+    if (contact?.phone && !capturePhone.value) capturePhone.value = contact.phone;
+    if (consent?.checked) captureConsent.checked = true;
+    captureStatus.textContent = "";
+  }
+
+  async function saveContactCapture() {
+    if (!state.lead_id || !state.conversation_id || busy) return;
+    captureSave.disabled = true;
+    captureStatus.textContent = "Opslaan…";
+    try {
+      const response = await fetch(CONTACT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "omit",
+        body: JSON.stringify({
+          widget_token: token,
+          lead_id: state.lead_id,
+          conversation_id: state.conversation_id,
+          name: captureName.value.trim(),
+          email: captureEmail.value.trim(),
+          phone: capturePhone.value.trim(),
+          contact_consent: Boolean(captureConsent.checked)
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.error) throw new Error(data?.error || "Contactgegevens konden niet worden opgeslagen.");
+      if (consent) consent.checked = true;
+      capture.dataset.show = "false";
+      captureStatus.textContent = "";
+      if (data.next_prompt) addBubble("ai", data.next_prompt);
+    } catch (error) {
+      captureStatus.textContent = error?.message || "Opslaan mislukt.";
+    } finally {
+      captureSave.disabled = false;
+    }
   }
 
   async function loadConfig() {
@@ -385,6 +489,7 @@
       if (data.business_name) title.textContent = data.business_name;
       if (data.receptionist_name) subtitle.textContent = data.receptionist_name + " · AI-assistent";
       addBubble("ai", data.reply || "Bedankt. Uw bericht is ontvangen.");
+      showContactCapture(data.contact_capture, data.contact);
     } catch (error) {
       addBubble("ai", "Dat lukte even niet. Probeer het over enkele ogenblikken opnieuw.");
       console.error("[Reception AI]", error);
@@ -399,6 +504,7 @@
   launcher.addEventListener("click", () => setOpen(true));
   closeBtn.addEventListener("click", () => setOpen(false));
   send.addEventListener("click", sendMessage);
+  captureSave.addEventListener("click", saveContactCapture);
   input.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -418,6 +524,11 @@
       state = { lead_id: null, conversation_id: null };
       try { sessionStorage.removeItem(storageKey); } catch {}
       log.textContent = "";
+      capture.dataset.show = "false";
+      captureName.value = "";
+      captureEmail.value = "";
+      capturePhone.value = "";
+      captureConsent.checked = false;
       configLoaded = false;
       loadConfig();
     }
