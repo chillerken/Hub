@@ -20,6 +20,7 @@
     </div>
     <nav class="nav">
       <button class="navitem active" data-view="dashboard"><span>⌂</span>Dashboard</button>
+      <button class="navitem" data-view="clients"><span>▦</span>Klanten</button>
       <div class="navlabel">CREATOR</div>
       <button class="navitem" data-tool="assistant"><span>✦</span>AI Assistent</button>
       <button class="navitem" data-tool="content"><span>✎</span>Content Studio</button>
@@ -55,6 +56,7 @@
           <p>Gebruik AI voor content en advertenties, bouw verkoopmateriaal, ontwerp agents en workflows en open je bestaande AI-producten rechtstreeks vanuit dit dashboard.</p>
           <div class="heroactions">
             <button class="button gold" data-open-tool="assistant">Start met AI</button>
+            <button class="button ghost" data-view-clients>Beheer klanten</button>
             <button class="button ghost" data-open-tool="workflow">Bouw een workflow</button>
           </div>
         </div>
@@ -93,6 +95,33 @@
 
       <div class="sectionhead"><div><span class="eyebrow">OPGESLAGEN</span><h3>Recente Hub-assets</h3></div><p>Verschijnt na platform-login.</p></div>
       <div id="recentAssets" class="assetslist"><div class="assetempty">Log in op Reception AI om opgeslagen websites, offertes, workflows en receptionisten te zien.</div></div>
+    </section>
+
+    <section id="clientsView" class="view">
+      <div class="clientintro">
+        <div>
+          <span class="pill">PLATFORMBEHEER</span>
+          <h2>Klanten & AI-systemen</h2>
+          <p>Beheer per klant de AI-receptionist, Lead Agent, leads, afspraken, workflows, integraties en abonnementstatus vanuit één dossier.</p>
+        </div>
+        <div class="clienttoolbar">
+          <input id="clientSearch" type="search" placeholder="Zoek klant…">
+          <button id="refreshClientsBtn" class="button ghost">Vernieuwen</button>
+        </div>
+      </div>
+      <div id="clientKpis" class="clientkpis"></div>
+      <div class="clientlayout">
+        <section class="panel clientlistpanel">
+          <div class="paneltitle"><div><span class="eyebrow">KLANTEN</span><strong>Organisaties</strong></div><span id="clientCount" class="countbadge">0</span></div>
+          <div id="clientList" class="clientlist"><div class="assetempty">Log eerst in op het platform.</div></div>
+        </section>
+        <section id="clientDetail" class="panel clientdetail">
+          <div class="clientempty">
+            <strong>Selecteer een klant</strong>
+            <p>Daarna zie je hier het volledige operationele klantdossier.</p>
+          </div>
+        </section>
+      </div>
     </section>
 
     <section id="workspace" class="view">
