@@ -56,12 +56,17 @@ const tools={
   {id:'widget_allowed_domains',label:'Toegestane website(s) (optioneel)',type:'textarea',placeholder:'bedrijf.be\nwww.bedrijf.be',required:false},
   {id:'tone',label:'Tone of voice',type:'select',options:['Professioneel en vriendelijk','Vlaams en persoonlijk','Premium','Kort en zakelijk']}
  ],prompt:v=>`Je bent AI-agent architect. Ontwerp een complete AI-receptionist voor ${v.business}. Naam: ${v.receptionist_name}. Bedrijfskennis: ${v.services}. Kwalificatievragen: ${v.qualification_questions}. Gewenste acties: ${v.actions}. Toon: ${v.tone}. Lever: 1) systeemrol/prompt, 2) wat de agent wel/niet mag doen, 3) intake- en kwalificatielogica, 4) afspraak/lead-handofflogica, 5) fout- en onzekerheidsregels, 6) voorbeeldgesprek. Laat de agent nooit beschikbaarheid, prijzen of afspraken verzinnen.`},
- lead:{title:'Lead Agent Builder',badge:'LEAD ENGINE',description:'Ontwerp een agent die leads kwalificeert, personaliseert en systematisch opvolgt.',button:'Bouw lead agent',fields:[
+ lead:{title:'Lead Agent Builder',badge:'LEAD ENGINE',description:'Ontwerp, bewaar en activeer een Lead Agent die echte Reception AI-leads kwalificeert en opvolging plant.',button:'Bouw lead agent',fields:[
+  {id:'organization_id',label:'Organisatie',type:'orgselect'},
+  {id:'name',label:'Naam Lead Agent',type:'input',placeholder:'bv. Sales Pilot'},
   {id:'target',label:'Doelgroep',type:'input',placeholder:'Wie wil je bereiken?'},
   {id:'offer',label:'Aanbod',type:'textarea',placeholder:'Wat bied je aan en waarom is het relevant?'},
   {id:'criteria',label:'Kwalificatiecriteria',type:'textarea',placeholder:'Wanneer is een lead interessant?'},
-  {id:'channel',label:'Kanaal',type:'select',options:['E-mail','WhatsApp','LinkedIn','Telefoon + follow-up','Multichannel']}
- ],prompt:v=>`Je bent sales automation architect. Ontwerp een Lead Agent voor doelgroep: ${v.target}. Aanbod: ${v.offer}. Kwalificatiecriteria: ${v.criteria}. Primair kanaal: ${v.channel}. Lever: ideale leadcriteria, data die verzameld moet worden, kwalificatiescore, outreach-logica, 3 contactmomenten, voorbeeldberichten, reply-classificatie, CRM-statussen, handoff naar mens en stopregels. Geen spammy of misleidende tactieken.`},
+  {id:'min_score',label:'Minimum leadscore',type:'input',placeholder:'60'},
+  {id:'due_hours',label:'Opvolgen binnen (uren)',type:'input',placeholder:'24'},
+  {id:'channel',label:'Kanaal',type:'select',options:['Auto','E-mail','WhatsApp','LinkedIn','Telefoon + follow-up','Multichannel']},
+  {id:'execution',label:'Uitvoering',type:'select',options:['Alleen configuratie opslaan','Lead Agent activeren']}
+ ],prompt:v=>`Je bent sales automation architect. Ontwerp een production-ready Lead Agent genaamd "${v.name}" voor doelgroep: ${v.target}. Aanbod: ${v.offer}. Kwalificatiecriteria: ${v.criteria}. Minimumscore: ${v.min_score}. Opvolging binnen: ${v.due_hours} uur. Primair kanaal: ${v.channel}. Lever: scoremodel, kwalificatieregels, datavelden, contactstrategie, 3 opvolgmomenten, reply-classificatie, CRM-statussen, human handoff, stopregels en privacy/consentregels. Geen spammy, misleidende of ongewenste outreach.`},
  workflow:{title:'Workflow Builder',badge:'AUTOMATION',description:'Ontwerp een workflow en sla hem als echt, versieerbaar workflow-record op in de Hub-backend.',button:'Bouw workflow',fields:[
   {id:'organization_id',label:'Organisatie (optioneel)',type:'orgselect',required:false},
   {id:'name',label:'Naam workflow',type:'input',placeholder:'bv. Nieuwe lead → opvolging → afspraak'},
@@ -169,7 +174,37 @@ function renderRecentAssets(){
  if(!recentAssets)return;
  if(!platformReady){recentAssets.innerHTML='<div class="assetempty">Log in op Reception AI om opgeslagen Hub-assets te zien.</div>';return}
  if(!recentHubAssets.length){recentAssets.innerHTML='<div class="assetempty">Nog geen opgeslagen Hub-assets.</div>';return}
- recentAssets.innerHTML=recentHubAssets.slice(0,12).map(a=>`<div class="assetrow"><div><strong>${escHtml(a.title)}</strong><span>${escHtml(a.asset_type)} · ${escHtml(a.status)}</span></div><small>${new Date(a.created_at).toLocaleString('nl-BE')}</small></div>`).join('');
+ recentAssets.innerHTML=recentHubAssets.slice(0,16).map(a=>`<button class="assetrow" data-asset-id="${escHtml(a.id)}"><div><strong>${escHtml(a.title)}</strong><span>${escHtml(a.asset_type)} · ${escHtml(a.status)}</span></div><small>${new Date(a.created_at).toLocaleString('nl-BE')}</small></button>`).join('');
+ recentAssets.querySelectorAll('[data-asset-id]').forEach(b=>b.addEventListener('click',()=>openSavedAsset(b.dataset.assetId)));
+}
+function openSavedAsset(id){
+ const asset=recentHubAssets.find(x=>x.id===id);if(!asset)return;
+ const toolMap={website:'website',quote:'quote',workflow:'workflow',receptionist:'receptionist',lead_agent:'lead'};
+ const tool=toolMap[asset.asset_type];if(!tool)return;
+ openTool(tool);
+ const p=asset.payload||{};
+ const fieldMap=asset.asset_type==='lead_agent'
+  ?{name:'name',target_audience:'target',offer:'offer',qualification_criteria:'criteria',preferred_channel:'channel',min_score:'min_score',follow_up_due_hours:'due_hours',organization_id:'organization_id'}
+  :p;
+ Object.entries(fieldMap).forEach(([source,target])=>{
+   const el=toolFields.querySelector('[data-field="'+target+'"]');
+   const value=asset.asset_type==='lead_agent'?p[source]:p[source];
+   if(el&&value!=null){
+     if(el.tagName==='SELECT'){
+       const found=[...el.options].find(o=>o.value===String(value)||o.textContent.toLowerCase()===String(value).toLowerCase());
+       if(found)el.value=found.value;
+     }else el.value=Array.isArray(value)?value.join('\n'):String(value);
+   }
+ });
+ if(asset.organization_id){
+   const org=toolFields.querySelector('[data-field="organization_id"]');
+   if(org&&[...org.options].some(o=>o.value===asset.organization_id))org.value=asset.organization_id;
+ }
+ lastAsset=asset;
+ lastOutput=String(p.content||p.custom_instructions||p.instructions||'');
+ output.textContent=lastOutput||'Asset geladen. Pas de velden aan en genereer een nieuwe versie.';
+ if(lastOutput)renderAssetActions();
+ assetStatus.textContent='Geladen: '+asset.title+' · '+asset.status;
 }
 function stripFences(s){
  let x=String(s||'').trim();
@@ -207,6 +242,36 @@ async function deployReceptionist(){
  }catch(e){assetStatus.textContent='Niet aangemaakt: '+errorText(e)}
 }
 async function saveWebsite(){const v=values();assetStatus.textContent='Website opslaan…';try{await saveCurrentAsset('website',(v.business||'Website')+' – website','ready')}catch(e){assetStatus.textContent='Opslaan mislukt: '+errorText(e)}}
+async function saveLeadAgent(){
+ const v=values();
+ if(!v.organization_id){assetStatus.textContent='Kies eerst een organisatie.';return}
+ const minScore=Number(v.min_score||60),dueHours=Number(v.due_hours||24);
+ if(!Number.isFinite(minScore)||minScore<0||minScore>100){assetStatus.textContent='Minimumscore moet tussen 0 en 100 liggen.';return}
+ if(!Number.isFinite(dueHours)||dueHours<1||dueHours>720){assetStatus.textContent='Opvolgtermijn moet tussen 1 en 720 uur liggen.';return}
+ assetStatus.textContent='Lead Agent opslaan…';
+ try{
+  const active=v.execution==='Lead Agent activeren';
+  const data=await platformInvoke('creator-hub-action',{
+    action:'save_lead_agent',
+    organization_id:v.organization_id,
+    name:v.name,
+    target_audience:v.target,
+    offer:v.offer,
+    qualification_criteria:v.criteria,
+    preferred_channel:v.channel,
+    min_score:minScore,
+    follow_up_due_hours:dueHours,
+    instructions:lastOutput,
+    active
+  });
+  lastAsset=data.asset;
+  assetStatus.textContent=active
+   ?'✓ Lead Agent actief: score ≥ '+data.config.min_score+', opvolging binnen '+data.config.follow_up_due_hours+' uur.'
+   :'✓ Lead Agent-configuratie opgeslagen.';
+  await loadPlatformContext();
+ }catch(e){assetStatus.textContent='Lead Agent opslaan mislukt: '+errorText(e)}
+}
+
 async function saveWorkflow(){const v=values();assetStatus.textContent='Workflow opslaan…';try{const activate=v.execution==='Reception AI lifecycle activeren';const data=await platformInvoke('creator-hub-action',{action:'save_workflow',name:v.name||'Workflow',organization_id:v.organization_id||null,activate_lifecycle:activate,payload:{...v,content:lastOutput}});lastAsset=data.asset;assetStatus.textContent=data.lifecycle_active?'✓ Workflow opgeslagen en Reception AI productie-lifecycle geactiveerd.':'✓ Workflow als blueprint opgeslagen.';await loadPlatformContext()}catch(e){assetStatus.textContent='Opslaan mislukt: '+errorText(e)}}
 async function saveQuote(){const v=values();assetStatus.textContent='Offerte opslaan…';try{return await saveCurrentAsset('quote',(v.customer||'Klant')+' – offerte','ready')}catch(e){assetStatus.textContent='Opslaan mislukt: '+errorText(e);throw e}}
 async function sendQuote(){
@@ -219,6 +284,7 @@ function renderAssetActions(){
  if(currentTool==='website'){add('Preview website',previewWebsite);add('Download HTML',downloadWebsite);add('Bewaar website',saveWebsite,'button gold')}
  if(currentTool==='quote'){add('Bewaar offerte',saveQuote,'button gold');add('PDF / print',printQuote);add('E-mail offerte',sendQuote)}
  if(currentTool==='receptionist'){add('Maak live receptionist',deployReceptionist,'button gold')}
+ if(currentTool==='lead'){add('Lead Agent opslaan / activeren',saveLeadAgent,'button gold')}
  if(currentTool==='workflow'){add('Workflow opslaan / activeren',saveWorkflow,'button gold')}
 }
 
