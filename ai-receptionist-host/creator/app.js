@@ -3,9 +3,9 @@ const SUPABASE_URL="https://ndecxbsrxspkuxjsbndq.supabase.co";
 const SUPABASE_KEY="sb_publishable_rhEeG3_B95xt8PA_MlG86Q_oti2Rklc";
 const supabase=createClient(SUPABASE_URL,SUPABASE_KEY);
 const escHtml=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
-let platformClients=[],platformReady=false,lastAsset=null,recentHubAssets=[];
+let platformClients=[],platformReady=false,lastAsset=null,recentHubAssets=[],activeClientId=null,currentClientDashboard=null;
 const $=id=>document.getElementById(id);
-const dashboard=$('dashboard'),workspace=$('workspace'),pageTitle=$('pageTitle'),statusDot=$('statusDot'),statusTitle=$('statusTitle'),statusDetail=$('statusDetail'),connectBtn=$('connectBtn'),testBtn=$('testBtn'),platformBtn=$('platformBtn'),healthText=$('healthText'),puterHealth=$('puterHealth'),toolFields=$('toolFields'),toolTitle=$('toolTitle'),toolDescription=$('toolDescription'),toolBadge=$('toolBadge'),output=$('output'),imageOutput=$('imageOutput'),generateBtn=$('generateBtn'),clearBtn=$('clearBtn'),copyBtn=$('copyBtn'),outputLabel=$('outputLabel'),assetActions=$('assetActions'),assetStatus=$('assetStatus'),recentAssets=$('recentAssets');
+const dashboard=$('dashboard'),clientsView=$('clientsView'),workspace=$('workspace'),pageTitle=$('pageTitle'),statusDot=$('statusDot'),statusTitle=$('statusTitle'),statusDetail=$('statusDetail'),connectBtn=$('connectBtn'),testBtn=$('testBtn'),platformBtn=$('platformBtn'),healthText=$('healthText'),puterHealth=$('puterHealth'),toolFields=$('toolFields'),toolTitle=$('toolTitle'),toolDescription=$('toolDescription'),toolBadge=$('toolBadge'),output=$('output'),imageOutput=$('imageOutput'),generateBtn=$('generateBtn'),clearBtn=$('clearBtn'),copyBtn=$('copyBtn'),outputLabel=$('outputLabel'),assetActions=$('assetActions'),assetStatus=$('assetStatus'),recentAssets=$('recentAssets'),clientSearch=$('clientSearch'),refreshClientsBtn=$('refreshClientsBtn'),clientKpis=$('clientKpis'),clientList=$('clientList'),clientCount=$('clientCount'),clientDetail=$('clientDetail');
 let currentTool='assistant',busy=false,lastOutput='';
 
 const tools={
@@ -99,8 +99,18 @@ async function timeout(p,ms=60000){let t;const q=new Promise((_,r)=>t=setTimeout
 function textFromResponse(r){if(!r)return'';if(typeof r==='string')return r;if(r.message&&typeof r.message.content==='string')return r.message.content;if(r.message&&Array.isArray(r.message.content))return r.message.content.map(x=>x&&(x.text||x.content||'')).filter(Boolean).join('\n');if(typeof r.text==='string')return r.text;try{return JSON.stringify(r,null,2)}catch{return String(r)}}
 
 function showDashboard(){
- currentTool='';dashboard.classList.add('active');workspace.classList.remove('active');pageTitle.textContent='Dashboard';
+ currentTool='';dashboard.classList.add('active');clientsView.classList.remove('active');workspace.classList.remove('active');pageTitle.textContent='Dashboard';
  document.querySelectorAll('.navitem').forEach(x=>x.classList.toggle('active',x.dataset.view==='dashboard'))
+}
+async function showClients(){
+ currentTool='';dashboard.classList.remove('active');workspace.classList.remove('active');clientsView.classList.add('active');pageTitle.textContent='Klanten';
+ document.querySelectorAll('.navitem').forEach(x=>x.classList.toggle('active',x.dataset.view==='clients'));
+ if(!platformReady)await loadPlatformContext();
+ renderClientKpis();renderClientList();
+ if(platformReady&&platformClients.length){
+  const id=activeClientId&&platformClients.some(c=>c.organization_id===activeClientId)?activeClientId:platformClients[0].organization_id;
+  if(id)await loadClientDashboard(id);
+ }
 }
 function orgOptions(){
  return '<option value="">'+(platformReady?'Nieuwe / geen organisatie':'Platform-login vereist voor opslag')+'</option>'+platformClients.map(c=>`<option value="${escHtml(c.organization_id)}">${escHtml(c.business_name||c.organization_name||'Organisatie')}</option>`).join('');
@@ -116,7 +126,7 @@ function refreshOrgSelects(){
  toolFields.querySelectorAll('select[data-field="organization_id"]').forEach(el=>{const current=el.value;el.innerHTML=orgOptions();if([...el.options].some(o=>o.value===current))el.value=current})
 }
 function openTool(id){
- const t=tools[id];if(!t)return;currentTool=id;dashboard.classList.remove('active');workspace.classList.add('active');pageTitle.textContent=t.title;toolTitle.textContent=t.title;toolDescription.textContent=t.description;toolBadge.textContent=t.badge;generateBtn.textContent=t.button||'Genereer';toolFields.innerHTML=t.fields.map(fieldHTML).join('');output.innerHTML='<span class="placeholder">Je resultaat verschijnt hier.</span>';output.classList.remove('error');imageOutput.replaceChildren();assetActions.replaceChildren();assetStatus.textContent='';lastOutput='';lastAsset=null;copyBtn.style.display=t.image?'none':'inline-flex';
+ const t=tools[id];if(!t)return;currentTool=id;dashboard.classList.remove('active');clientsView.classList.remove('active');workspace.classList.add('active');pageTitle.textContent=t.title;toolTitle.textContent=t.title;toolDescription.textContent=t.description;toolBadge.textContent=t.badge;generateBtn.textContent=t.button||'Genereer';toolFields.innerHTML=t.fields.map(fieldHTML).join('');output.innerHTML='<span class="placeholder">Je resultaat verschijnt hier.</span>';output.classList.remove('error');imageOutput.replaceChildren();assetActions.replaceChildren();assetStatus.textContent='';lastOutput='';lastAsset=null;copyBtn.style.display=t.image?'none':'inline-flex';
  document.querySelectorAll('.navitem').forEach(x=>x.classList.toggle('active',x.dataset.tool===id))
 }
 function values(){const v={};toolFields.querySelectorAll('[data-field]').forEach(el=>v[el.dataset.field]=el.value.trim());return v}
@@ -166,10 +176,141 @@ async function loadPlatformContext(){
     platformInvoke('creator-hub-action',{action:'list_assets'})
   ]);
   platformReady=true;platformClients=clients.clients||[];recentHubAssets=assets.assets||[];
-  platformBtn.textContent='Platform ✓';renderRecentAssets();refreshOrgSelects();
- }catch(e){platformReady=false;platformClients=[];recentHubAssets=[];platformBtn.textContent='Platform login';if(assetStatus)assetStatus.textContent=errorText(e);renderRecentAssets();refreshOrgSelects()}
+  platformBtn.textContent='Platform ✓';renderRecentAssets();refreshOrgSelects();renderClientKpis();renderClientList();
+ }catch(e){platformReady=false;platformClients=[];recentHubAssets=[];platformBtn.textContent='Platform login';if(assetStatus)assetStatus.textContent=errorText(e);renderRecentAssets();refreshOrgSelects();renderClientKpis();renderClientList()}
  finally{platformBtn.disabled=false}
 }
+
+function fmtDate(v,withTime=false){
+ if(!v)return '—';const d=new Date(v);if(Number.isNaN(d.getTime()))return '—';
+ return withTime?d.toLocaleString('nl-BE',{dateStyle:'short',timeStyle:'short'}):d.toLocaleDateString('nl-BE');
+}
+function fmtMoney(cents,currency='EUR'){return new Intl.NumberFormat('nl-BE',{style:'currency',currency:currency||'EUR'}).format(Number(cents||0)/100)}
+function statusClass(v){
+ const s=String(v||'').toLowerCase();
+ if(['active','live','paid','completed','confirmed','won','connected'].includes(s))return'ok';
+ if(['suspended','failed','error','blocked','cancelled','lost','disabled'].includes(s))return'bad';
+ return'warn';
+}
+function renderClientKpis(){
+ if(!clientKpis)return;
+ if(!platformReady){
+  clientKpis.innerHTML='<div class="clientkpi"><span>Status</span><strong>Login</strong></div>';return;
+ }
+ const total=platformClients.length;
+ const active=platformClients.filter(c=>c.organization_status==='active').length;
+ const automated=platformClients.filter(c=>c.automation_enabled).length;
+ const leads=platformClients.reduce((n,c)=>n+Number(c.leads_count||0),0);
+ const appts=platformClients.reduce((n,c)=>n+Number(c.appointments_active||0),0);
+ clientKpis.innerHTML=[
+  ['Klanten',total],['Actief',active],['Automatisering',automated],['Leads',leads],['Actieve afspraken',appts]
+ ].map(([l,v])=>'<div class="clientkpi"><span>'+escHtml(l)+'</span><strong>'+escHtml(v)+'</strong></div>').join('');
+}
+function renderClientList(){
+ if(!clientList||!clientCount)return;
+ if(!platformReady){
+  clientCount.textContent='0';clientList.innerHTML='<div class="assetempty">Log eerst in via Platform login.</div>';return;
+ }
+ const q=String(clientSearch?.value||'').trim().toLowerCase();
+ const rows=platformClients.filter(c=>!q||String(c.business_name||c.organization_name||'').toLowerCase().includes(q));
+ clientCount.textContent=String(rows.length);
+ if(!rows.length){clientList.innerHTML='<div class="assetempty">Geen klanten gevonden.</div>';return}
+ clientList.innerHTML=rows.map(c=>'<button class="clientitem '+(c.organization_id===activeClientId?'active':'')+'" data-client-id="'+escHtml(c.organization_id)+'"><div><strong>'+escHtml(c.business_name||c.organization_name)+'</strong><small>'+escHtml(c.plan||'')+' · '+escHtml(c.subscription_status||'')+' · '+Number(c.leads_count||0)+' leads</small></div><em>'+escHtml(c.organization_status||'')+'</em></button>').join('');
+ clientList.querySelectorAll('[data-client-id]').forEach(b=>b.addEventListener('click',()=>loadClientDashboard(b.dataset.clientId)));
+}
+async function loadClientDashboard(orgId){
+ if(!platformReady||!orgId)return;
+ activeClientId=orgId;renderClientList();
+ clientDetail.innerHTML='<div class="clientempty"><div><strong>Klantdossier laden…</strong><p>AI-systemen, leads, afspraken en workflows worden opgehaald.</p></div></div>';
+ try{
+  const data=await platformInvoke('creator-hub-action',{action:'client_dashboard',organization_id:orgId});
+  currentClientDashboard=data.client;renderClientDashboard(data.client);
+ }catch(e){
+  clientDetail.innerHTML='<div class="clientempty"><div><strong>Dossier kon niet laden</strong><p>'+escHtml(errorText(e))+'</p></div></div>';
+ }
+}
+function rowHtml(main,sub,mid,right){
+ return '<div class="datarow"><div><strong>'+escHtml(main||'—')+'</strong><small>'+escHtml(sub||'')+'</small></div><div class="mid">'+escHtml(mid||'')+'</div><div class="right">'+escHtml(right||'')+'</div></div>';
+}
+function sectionHtml(title,note,body){
+ return '<div class="dossiersection"><div class="sectionhead"><div><span class="eyebrow">DOSSIER</span><h3>'+escHtml(title)+'</h3></div><p>'+escHtml(note||'')+'</p></div>'+body+'</div>';
+}
+function renderClientDashboard(c){
+ const o=c.organization||{},p=c.profile||{},la=c.lead_agent,m=c.metrics||{};
+ const widgetUrl=p.widget_token?'/?widget='+encodeURIComponent(p.widget_token):'/';
+ const leads=(c.leads||[]).slice(0,10);
+ const appts=(c.appointments||[]).slice(0,10);
+ const flows=(c.workflows||[]).slice(0,12);
+ const payments=(c.payments||[]).slice(0,8);
+ const assets=(c.assets||[]).slice(0,10);
+ const ints=c.integrations||[];
+
+ const aiBody='<div class="integrationgrid">'+[
+  '<div class="integrationcard"><div class="integrationtop"><strong>AI Receptionist</strong><span class="statuschip '+statusClass(p.widget_enabled?'active':'disabled')+'">'+(p.widget_enabled?'live':'uit')+'</span></div><p>'+escHtml(p.receptionist_name||'AI Assistent')+' · '+(p.automation_enabled?'automatisering actief':'automatisering uit')+'</p></div>',
+  '<div class="integrationcard"><div class="integrationtop"><strong>Lead Agent</strong><span class="statuschip '+statusClass(la?.active?'active':'disabled')+'">'+(la?.active?'actief':'niet actief')+'</span></div><p>'+(la?escHtml(la.name)+' · score ≥ '+escHtml(la.min_score)+' · '+escHtml(la.preferred_channel):'Nog geen Lead Agent-configuratie')+'</p></div>'
+ ].join('')+'</div>';
+
+ const leadBody='<div class="datagrid">'+(leads.length?leads.map(x=>rowHtml(x.name||x.email||x.phone||'Lead',x.summary||x.source,x.status,'score '+x.score+' · '+fmtDate(x.created_at,true))).join(''):'<div class="assetempty">Nog geen leads.</div>')+'</div>';
+ const apptBody='<div class="datagrid">'+(appts.length?appts.map(x=>rowHtml(x.requested_text||'Afspraak',x.location||'',x.status,(x.start_at?fmtDate(x.start_at,true):'nog niet gepland'))).join(''):'<div class="assetempty">Nog geen afspraken.</div>')+'</div>';
+ const flowBody='<div class="datagrid">'+(flows.length?flows.map(x=>rowHtml(x.action_type,x.last_error||('kanaal: '+x.channel),x.status,(x.attempts||0)+'/'+(x.max_attempts||0)+' · '+fmtDate(x.scheduled_at,true))).join(''):'<div class="assetempty">Nog geen workflowacties.</div>')+'</div>';
+ const intBody='<div class="integrationgrid">'+(ints.length?ints.map(x=>'<div class="integrationcard"><div class="integrationtop"><strong>'+escHtml(x.channel)+' · '+escHtml(x.provider)+'</strong><span class="statuschip '+statusClass(x.status)+'">'+escHtml(x.status)+'</span></div><p>'+(x.last_error?escHtml(x.last_error):'Laatste verificatie: '+escHtml(fmtDate(x.last_verified_at,true)))+'</p></div>').join(''):'<div class="assetempty">Geen integraties geconfigureerd.</div>')+'</div>';
+ const paymentBody='<div class="datagrid">'+(payments.length?payments.map(x=>rowHtml(fmtMoney(x.amount_cents,x.currency),x.provider||'betaling',x.status,fmtDate(x.paid_at||x.created_at,true))).join(''):'<div class="assetempty">Nog geen betalingen.</div>')+'</div>';
+ const assetBody='<div class="datagrid">'+(assets.length?assets.map(x=>rowHtml(x.title,x.asset_type,x.status,fmtDate(x.updated_at,true))).join(''):'<div class="assetempty">Nog geen Hub-assets voor deze klant.</div>')+'</div>';
+
+ clientDetail.innerHTML=
+  '<div class="clienthead"><div><span class="eyebrow">KLANTDOSSIER</span><h3>'+escHtml(p.business_name||o.name||'Klant')+'</h3><p>'+escHtml(o.plan||'')+' · '+escHtml(o.subscription_status||'')+' · trial tot '+escHtml(fmtDate(o.trial_ends_at))+'</p></div>'+
+  '<div class="clientactions"><a class="button mini ghost" href="'+escHtml(widgetUrl)+'" target="_blank" rel="noopener">Open receptionist ↗</a><button class="button mini ghost" id="editReceptionBtn">Receptionist</button><button class="button mini ghost" id="editLeadBtn">Lead Agent</button></div></div>'+
+  '<div class="clientsettings">'+
+    '<button id="toggleWidgetBtn" class="button mini ghost runtimebtn '+(p.widget_enabled?'on':'off')+'">Widget: '+(p.widget_enabled?'aan':'uit')+'</button>'+
+    '<button id="toggleAutomationBtn" class="button mini ghost runtimebtn '+(p.automation_enabled?'on':'off')+'">Automatisering: '+(p.automation_enabled?'aan':'uit')+'</button>'+
+    '<select id="clientStatusSelect" class="inline-select"><option value="onboarding">onboarding</option><option value="active">active</option><option value="suspended">suspended</option></select>'+
+    '<button id="saveClientStatusBtn" class="button mini ghost">Status opslaan</button>'+
+  '</div>'+
+  '<div class="dossiergrid">'+
+    '<div class="dossiermetric"><span>Leads</span><strong>'+Number(m.leads_total||0)+'</strong></div>'+
+    '<div class="dossiermetric"><span>Gekwalificeerd</span><strong>'+Number(m.leads_qualified||0)+'</strong></div>'+
+    '<div class="dossiermetric"><span>Actieve afspraken</span><strong>'+Number(m.appointments_active||0)+'</strong></div>'+
+    '<div class="dossiermetric"><span>Workflowproblemen</span><strong>'+Number(m.workflows_problem||0)+'</strong></div>'+
+    '<div class="dossiermetric"><span>Integraties</span><strong>'+Number(m.integrations_active||0)+'/'+Number(m.integrations_total||0)+'</strong></div>'+
+    '<div class="dossiermetric"><span>Open taken</span><strong>'+Number(m.open_tasks||0)+'</strong></div>'+
+    '<div class="dossiermetric"><span>Ontvangen</span><strong class="money">'+escHtml(fmtMoney(m.payments_paid_cents,'EUR'))+'</strong></div>'+
+    '<div class="dossiermetric"><span>Openstaand</span><strong class="money">'+escHtml(fmtMoney(m.payments_pending_cents,'EUR'))+'</strong></div>'+
+  '</div>'+
+  sectionHtml('AI-systemen','Receptionist en Lead Agent',aiBody)+
+  sectionHtml('Leads','Laatste 10',leadBody)+
+  sectionHtml('Afspraken','Laatste 10',apptBody)+
+  sectionHtml('Workflow-acties','Laatste 12',flowBody)+
+  sectionHtml('Integraties','Operationele status',intBody)+
+  sectionHtml('Betalingen','Laatste 8',paymentBody)+
+  sectionHtml('Hub-assets','Websites, offertes, agents en workflows',assetBody);
+
+ const statusSel=$('clientStatusSelect');if(statusSel)statusSel.value=o.status||'onboarding';
+ $('toggleWidgetBtn')?.addEventListener('click',()=>setClientRuntime({widget_enabled:!p.widget_enabled}));
+ $('toggleAutomationBtn')?.addEventListener('click',()=>setClientRuntime({automation_enabled:!p.automation_enabled}));
+ $('saveClientStatusBtn')?.addEventListener('click',()=>setClientRuntime({organization_status:statusSel.value}));
+ $('editReceptionBtn')?.addEventListener('click',()=>openClientBuilder('receptionist'));
+ $('editLeadBtn')?.addEventListener('click',()=>openClientBuilder('lead'));
+}
+async function setClientRuntime(patch){
+ if(!activeClientId)return;
+ try{
+  await platformInvoke('creator-hub-action',{action:'set_client_runtime',organization_id:activeClientId,...patch});
+  await loadPlatformContext();await loadClientDashboard(activeClientId);
+ }catch(e){alert('Wijziging mislukt: '+errorText(e))}
+}
+function openClientBuilder(tool){
+ const c=currentClientDashboard;if(!c)return;openTool(tool);
+ const org=toolFields.querySelector('[data-field="organization_id"]');if(org&&[...org.options].some(o=>o.value===c.organization.id))org.value=c.organization.id;
+ if(tool==='receptionist'){
+  const p=c.profile||{};
+  const vals={business:p.business_name,receptionist_name:p.receptionist_name,widget_greeting:p.widget_greeting,services:Array.isArray(p.services)?p.services.join('\n'):'',qualification_questions:Array.isArray(p.qualification_questions)?p.qualification_questions.join('\n'):'',notification_email:p.notification_email,widget_allowed_domains:Array.isArray(p.widget_allowed_domains)?p.widget_allowed_domains.join('\n'):''};
+  Object.entries(vals).forEach(([k,v])=>{const el=toolFields.querySelector('[data-field="'+k+'"]');if(el)el.value=v||''});
+ }else if(tool==='lead'&&c.lead_agent){
+  const la=c.lead_agent,vals={name:la.name,target:la.target_audience,offer:la.offer,criteria:la.qualification_criteria,min_score:la.min_score,due_hours:la.follow_up_due_hours};
+  Object.entries(vals).forEach(([k,v])=>{const el=toolFields.querySelector('[data-field="'+k+'"]');if(el)el.value=v??''});
+ }
+}
+
 function renderRecentAssets(){
  if(!recentAssets)return;
  if(!platformReady){recentAssets.innerHTML='<div class="assetempty">Log in op Reception AI om opgeslagen Hub-assets te zien.</div>';return}
@@ -315,7 +456,10 @@ async function testAI(){
 }
 
 document.querySelectorAll('[data-open-tool]').forEach(x=>x.addEventListener('click',()=>openTool(x.dataset.openTool)));
-document.querySelectorAll('.navitem').forEach(x=>x.addEventListener('click',()=>x.dataset.view==='dashboard'?showDashboard():openTool(x.dataset.tool)));
+document.querySelectorAll('[data-view-clients]').forEach(x=>x.addEventListener('click',showClients));
+document.querySelectorAll('.navitem').forEach(x=>x.addEventListener('click',()=>x.dataset.view==='dashboard'?showDashboard():x.dataset.view==='clients'?showClients():openTool(x.dataset.tool)));
+clientSearch?.addEventListener('input',renderClientList);
+refreshClientsBtn?.addEventListener('click',async()=>{await loadPlatformContext();if(activeClientId)await loadClientDashboard(activeClientId)});
 connectBtn.addEventListener('click',connect);testBtn.addEventListener('click',testAI);generateBtn.addEventListener('click',generate);clearBtn.addEventListener('click',clearWorkspace);copyBtn.addEventListener('click',copyResult);
 platformBtn.addEventListener('click',()=>{if(platformReady)loadPlatformContext();else window.open('/?auth=1','_blank','noopener')});
 window.addEventListener('focus',()=>loadPlatformContext());
