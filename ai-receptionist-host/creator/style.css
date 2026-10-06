@@ -99,3 +99,77 @@ html,body{max-width:100%;overflow-x:hidden}
  .clientdetail{width:100%;box-sizing:border-box}
  .integrationcard{width:100%;box-sizing:border-box}
 }
+
+/* Device-based mobile mode: survives Android Chrome "Desktop site" / wide CSS viewports. */
+html.mobile-device{font-size:16px}
+html.mobile-device body{font-size:16px;overflow-x:hidden}
+html.mobile-device .shell{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important}
+html.mobile-device .sidebar{position:static!important;width:100%!important;height:auto!important;border-right:0!important;border-bottom:1px solid var(--line)!important;padding:12px!important;box-sizing:border-box}
+html.mobile-device .brand strong{font-size:14px}
+html.mobile-device .brand small{font-size:10px}
+html.mobile-device .connection{padding:12px;margin-bottom:10px}
+html.mobile-device .connection strong{font-size:13px}
+html.mobile-device .connection p{font-size:12px;line-height:1.5}
+html.mobile-device .nav{display:flex!important;overflow-x:auto!important;gap:6px!important;padding-bottom:5px!important;white-space:nowrap}
+html.mobile-device .navlabel{display:none!important}
+html.mobile-device .navitem{min-width:max-content!important;font-size:13px!important;padding:10px 12px!important}
+html.mobile-device .main{width:100%!important;max-width:100%!important;min-width:0!important}
+html.mobile-device .topbar{position:sticky!important;top:0;z-index:20;padding:12px 14px!important;gap:10px!important;align-items:flex-start!important;flex-direction:column!important}
+html.mobile-device .topbar h1{font-size:24px!important}
+html.mobile-device .topbar .eyebrow{font-size:10px!important}
+html.mobile-device .topactions{width:100%!important;display:flex!important;overflow-x:auto!important;gap:7px!important}
+html.mobile-device .topactions .button{font-size:12px!important;padding:9px 11px!important;white-space:nowrap}
+html.mobile-device .view{padding:16px 12px!important;width:100%!important;max-width:100%!important;box-sizing:border-box}
+html.mobile-device .clientintro{display:block!important;margin-bottom:14px}
+html.mobile-device .clientintro h2{font-size:30px!important;line-height:1.05!important}
+html.mobile-device .clientintro p{font-size:14px!important;line-height:1.55!important;margin-bottom:12px!important}
+html.mobile-device .clienttoolbar{width:100%!important}
+html.mobile-device .clienttoolbar input{font-size:14px!important;min-width:0!important;flex:1!important}
+html.mobile-device .button{font-size:13px!important}
+html.mobile-device .clientkpis{grid-template-columns:1fr 1fr!important;gap:8px!important}
+html.mobile-device .clientkpi{padding:12px!important}
+html.mobile-device .clientkpi span{font-size:10px!important}
+html.mobile-device .clientkpi strong{font-size:24px!important}
+html.mobile-device .clientlayout{display:block!important}
+html.mobile-device .clientlistpanel{margin-bottom:12px!important;min-height:auto!important}
+html.mobile-device .clientlist{max-height:300px!important}
+html.mobile-device .clientitem{padding:12px!important}
+html.mobile-device .clientitem strong{font-size:14px!important}
+html.mobile-device .clientitem small{font-size:11px!important;line-height:1.4!important}
+html.mobile-device .clientitem em{font-size:10px!important}
+html.mobile-device .clientdetail{width:100%!important;max-width:100%!important;padding:14px!important;min-height:420px!important;box-sizing:border-box}
+html.mobile-device .clienthead{display:block!important}
+html.mobile-device .clienthead h3{font-size:27px!important;line-height:1.1!important}
+html.mobile-device .clienthead p{font-size:12px!important;line-height:1.5!important}
+html.mobile-device .clientactions{justify-content:flex-start!important;margin-top:10px!important}
+html.mobile-device .clientactions .button{font-size:12px!important}
+html.mobile-device .clientsettings{gap:7px!important}
+html.mobile-device .clientsettings .button,
+html.mobile-device .clientsettings .inline-select{font-size:12px!important;padding:9px 10px!important}
+html.mobile-device .dossiergrid{grid-template-columns:1fr 1fr!important;gap:8px!important}
+html.mobile-device .dossiermetric{padding:12px!important}
+html.mobile-device .dossiermetric span{font-size:10px!important}
+html.mobile-device .dossiermetric strong{font-size:22px!important}
+html.mobile-device .dossiersection{margin-top:18px!important}
+html.mobile-device .dossiersection .sectionhead{display:block!important}
+html.mobile-device .dossiersection .sectionhead h3{font-size:20px!important;margin-top:3px!important}
+html.mobile-device .dossiersection .sectionhead p{font-size:11px!important;margin-top:5px!important}
+html.mobile-device .integrationgrid{grid-template-columns:1fr!important}
+html.mobile-device .integrationcard{padding:13px!important}
+html.mobile-device .integrationcard strong{font-size:14px!important}
+html.mobile-device .integrationcard p{font-size:12px!important;line-height:1.5!important}
+html.mobile-device .statuschip{font-size:10px!important;padding:5px 8px!important}
+html.mobile-device .datagrid{gap:8px!important}
+html.mobile-device .datarow{grid-template-columns:1fr!important;padding:12px!important;gap:7px!important}
+html.mobile-device .datarow strong{font-size:14px!important;line-height:1.35!important}
+html.mobile-device .datarow small{font-size:11px!important;line-height:1.45!important}
+html.mobile-device .datarow .mid,
+html.mobile-device .datarow .right{font-size:12px!important;text-align:left!important}
+html.mobile-device .inline-select,
+html.mobile-device .leadstatus{font-size:12px!important;max-width:100%!important}
+html.mobile-device .rowactions{justify-content:flex-start!important}
+html.mobile-device .appointmentrow .button{font-size:11px!important;padding:7px 9px!important}
+@media(max-width:480px){
+ html.mobile-device .clientkpis{grid-template-columns:1fr 1fr!important}
+ html.mobile-device .dossiergrid{grid-template-columns:1fr 1fr!important}
+}
