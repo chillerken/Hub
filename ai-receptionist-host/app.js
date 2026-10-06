@@ -169,7 +169,7 @@ function authView(){
         if(error||data?.error)throw new Error(data?.error||"Demo tijdelijk niet beschikbaar.");
         demoLog.insertAdjacentHTML("beforeend",'<div class="bubble ai">'+esc(data.reply)+'</div>');
         demoHistory.push({role:"assistant",content:data.reply});
-        demoStatus.textContent="Live AI-antwoord · testberichten worden niet als saleslead opgeslagen";
+        demoStatus.textContent=data.mode==="safe_fallback"?"Demo actief · veilige fallback gebruikt · geen saleslead opgeslagen":"Live AI-antwoord · testberichten worden niet als saleslead opgeslagen";
         demoLog.scrollTop=demoLog.scrollHeight;
       }catch(err){demoStatus.textContent=err?.message||"Demo tijdelijk niet beschikbaar."}
     };
