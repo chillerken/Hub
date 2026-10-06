@@ -1,6 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
 
 const WIDGET_HOST = '#reception-ai-widget';
+const CONFIG_URL =
+  'https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/public-widget-config';
+const CHAT_URL =
+  'https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/public-reception-chat';
+const WIDGET_TOKEN = '597f9789-be65-4ab8-bdbe-276f696991f1';
 
 async function acceptCookieBannerIfPresent(page: Page) {
   const candidates = [
@@ -20,7 +25,37 @@ async function acceptCookieBannerIfPresent(page: Page) {
   }
 }
 
-test('LuxWash Reception AI is zichtbaar en beantwoordt een echte prijs-vraag', async ({ page }) => {
+test('LuxWash Reception AI laadt, opent en kan antwoorden tonen zonder CRM-testlead', async ({ page, request }) => {
+  const configResponse = await request.post(CONFIG_URL, {
+    data: { widget_token: WIDGET_TOKEN },
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  expect(configResponse.ok()).toBeTruthy();
+  const config = await configResponse.json();
+  expect(config?.error).toBeFalsy();
+  expect(config?.business_name).toBeTruthy();
+
+  await page.route(CHAT_URL, async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        reply: 'E2E OK — Reception AI kan berichten ontvangen en antwoorden tonen.',
+        business_name: config.business_name,
+        receptionist_name: config.receptionist_name || 'AI Assistente',
+        lead_id: 'e2e-smoke-lead',
+        conversation_id: 'e2e-smoke-conversation',
+        contact_capture: { required: false },
+      }),
+    });
+  });
+
   await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await acceptCookieBannerIfPresent(page);
 
@@ -35,20 +70,17 @@ test('LuxWash Reception AI is zichtbaar en beantwoordt een echte prijs-vraag', a
   await expect(panel).toHaveAttribute('data-open', 'true');
   await expect(panel).toBeVisible();
 
+  const title = host.locator('.rai-title strong');
+  await expect(title).not.toHaveText('');
+
   const input = host.locator('.rai-input');
   const send = host.locator('.rai-send');
   await expect(input).toBeEnabled();
 
-  await input.fill('Wat kost een mobiele carwash voor een sedan?');
+  await input.fill('E2E test: werkt de Reception AI-widget?');
   await send.click();
 
-  const aiReplies = host.locator('.rai-row.ai .rai-bubble');
-  await expect.poll(
-    async () => aiReplies.count(),
-    { timeout: 45_000, message: 'Reception AI gaf geen antwoord binnen 45 seconden.' }
-  ).toBeGreaterThan(1);
-
-  const reply = aiReplies.last();
-  await expect(reply).not.toContainText(/dat lukte even niet|verbinding mislukt|tijdelijk niet beschikbaar/i);
-  await expect(reply).toContainText(/(?:€\s*)?49|49\s*euro/i);
+  await expect(
+    host.getByText('E2E OK — Reception AI kan berichten ontvangen en antwoorden tonen.')
+  ).toBeVisible({ timeout: 15_000 });
 });
