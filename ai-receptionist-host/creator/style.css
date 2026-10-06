@@ -52,3 +52,28 @@
 
 .leadstatus{max-width:125px}.datarow .right small{display:block;color:var(--muted);font-size:8px;margin-top:4px}
 @media(max-width:760px){.leadstatus{max-width:100%}}
+
+/* Phone/tablet layout: also handles mobile browsers requesting a wider desktop viewport. */
+@media(max-width:1024px){
+ .shell{grid-template-columns:1fr}
+ .sidebar{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);padding:12px}
+ .brand{padding-bottom:10px}
+ .connection{margin-bottom:10px}
+ .nav{display:flex;overflow-x:auto;gap:5px;padding-bottom:4px;scrollbar-width:thin}
+ .navlabel{display:none}
+ .navitem{min-width:max-content}
+ .main{width:100%;min-width:0}
+ .topbar{padding:14px 15px;position:sticky}
+ .view{padding:18px 13px}
+ .clientlayout{grid-template-columns:1fr}
+ .clientlistpanel{min-height:auto}
+ .clientdetail{min-height:420px}
+}
+@media(max-width:600px){
+ .topbar{align-items:flex-start;flex-direction:column}
+ .topactions{width:100%;overflow-x:auto}
+ .topactions .button{white-space:nowrap}
+ .clientkpis{grid-template-columns:1fr 1fr}
+ .clientintro h2{font-size:29px}
+ .dossiergrid{grid-template-columns:1fr 1fr}
+}
