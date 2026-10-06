@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#111416" />
+  <title>AI Creator Studio</title>
+  <style>
+    :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#f7f7f7;background:#0e1113}
+    *{box-sizing:border-box} body{margin:0;min-height:100vh;background:radial-gradient(circle at top,#20272a 0,#111416 42%,#0b0d0f 100%);color:#fff}
+    button,input,textarea,select{font:inherit}.app{min-height:100vh;display:grid;grid-template-columns:280px 1fr}
+    .side{padding:22px;border-right:1px solid #2b3236;background:rgba(13,16,18,.92);backdrop-filter:blur(16px)}
+    .brand{font-weight:800;font-size:22px;letter-spacing:.2px}.gold{color:#e2c681}.muted{color:#aab3b8;font-size:13px;line-height:1.5}
+    .status{margin:20px 0;padding:14px;border:1px solid #30383c;border-radius:14px;background:#171c1f}.row{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+    .dot{width:10px;height:10px;border-radius:50%;background:#8f9aa0;box-shadow:0 0 0 4px rgba(143,154,160,.12)}.dot.ok{background:#66d59a}.dot.err{background:#ff7777}.dot.wait{background:#e2c681}
+    .mode{width:100%;text-align:left;margin-top:8px;padding:12px 13px;border:1px solid transparent;border-radius:12px;background:transparent;color:#dfe4e7;cursor:pointer}
+    .mode:hover,.mode.active{background:#202629;border-color:#343d41;color:#fff}.main{display:flex;flex-direction:column;min-width:0}
+    .top{padding:18px 22px;border-bottom:1px solid #2b3236;display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(17,20,22,.78);backdrop-filter:blur(12px);position:sticky;top:0;z-index:4}
+    .btn{border:0;border-radius:11px;padding:10px 14px;cursor:pointer;font-weight:700}.btn.primary{background:#c5a15a;color:#111}.btn.secondary{background:#252c30;color:#fff;border:1px solid #384247}.btn:disabled{opacity:.48;cursor:not-allowed}
+    .content{width:min(920px,100%);margin:0 auto;padding:28px 22px 120px}.hero h1{margin:0 0 8px;font-size:clamp(28px,5vw,46px);line-height:1.05}.hero p{color:#adb6bb;margin:0 0 24px;max-width:700px}
+    .panel{background:rgba(23,28,31,.92);border:1px solid #30393e;border-radius:18px;padding:18px;box-shadow:0 18px 50px rgba(0,0,0,.25)}
+    .messages{display:flex;flex-direction:column;gap:12px;min-height:260px;max-height:54vh;overflow:auto;padding:4px}.msg{padding:13px 15px;border-radius:14px;white-space:pre-wrap;line-height:1.52}
+    .msg.user{align-self:flex-end;max-width:82%;background:#2c3539}.msg.ai{align-self:flex-start;max-width:88%;background:#171c1f;border:1px solid #30383c}.msg.sys{align-self:center;color:#98a2a8;font-size:13px;text-align:center}
+    .composer{position:fixed;left:280px;right:0;bottom:0;padding:14px 22px calc(14px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(14,17,19,0),rgba(14,17,19,.96) 35%);z-index:5}
+    .compose-inner{width:min(920px,100%);margin:0 auto;display:grid;grid-template-columns:1fr auto;gap:10px;background:#171c1f;border:1px solid #3a4449;border-radius:16px;padding:10px}
+    textarea{resize:none;min-height:48px;max-height:150px;border:0;outline:0;background:transparent;color:#fff;padding:10px}.error{color:#ff9b9b}.oktext{color:#8de1b2}
+    .chips{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0}.chip{border:1px solid #354046;background:#1b2124;color:#cfd6da;border-radius:999px;padding:8px 11px;cursor:pointer;font-size:13px}
+    @media(max-width:780px){.app{grid-template-columns:1fr}.side{display:none}.composer{left:0}.top{padding:14px}.content{padding:22px 14px 118px}.msg.user,.msg.ai{max-width:94%}.compose-inner{grid-template-columns:1fr auto}}
+  </style>
+  <script src="https://js.puter.com/v2/"></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="brand">AI <span class="gold">Creator Studio</span></div>
+      <p class="muted">Stabiele browserversie zonder eigen AI-API-key.</p>
+      <div class="status">
+        <div class="row"><span id="dot" class="dot wait"></span><strong id="statusTitle">Puter laden…</strong></div>
+        <div id="statusDetail" class="muted" style="margin-top:7px">Initialisatie bezig.</div>
+      </div>
+      <button class="mode active" data-mode="assistant">💬 AI Assistent</button>
+      <button class="mode" data-mode="improve">✨ Prompt verbeteren</button>
+      <button class="mode" data-mode="social">📣 Social copy</button>
+      <button class="mode" data-mode="ideas">💡 Idee-generator</button>
+    </aside>
+
+    <main class="main">
+      <header class="top">
+        <div><strong id="modeTitle">AI Assistent</strong><div class="muted">Vercel + Puter.js</div></div>
+        <div class="row">
+          <button id="testBtn" class="btn secondary">AI testen</button>
+          <button id="authBtn" class="btn primary">Verbind Puter</button>
+        </div>
+      </header>
+
+      <section class="content">
+        <div class="hero">
+          <h1>Geen grijs scherm.<br><span class="gold">Altijd duidelijke status.</span></h1>
+          <p>Schrijf een opdracht. Als Puter niet geladen, niet verbonden of tijdelijk onbereikbaar is, krijg je een concrete foutmelding in plaats van een lege pagina.</p>
+          <div class="chips">
+            <button class="chip" data-prompt="Maak mijn tekst professioneler en korter: ">Tekst verbeteren</button>
+            <button class="chip" data-prompt="Bedenk 10 sterke verkoopideeën voor: ">Verkoopideeën</button>
+            <button class="chip" data-prompt="Maak een opvallende social media post over: ">Social post</button>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:22px">
+          <div id="messages" class="messages">
+            <div class="msg sys">AI Creator Studio is gestart. Je kunt meteen typen of eerst Puter verbinden.</div>
+          </div>
+        </div>
+      </section>
+
+      <div class="composer">
+        <div class="compose-inner">
+          <textarea id="prompt" placeholder="Typ je opdracht…" rows="1"></textarea>
+          <button id="sendBtn" class="btn primary">Verstuur</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const messages = $("messages");
+    const promptEl = $("prompt");
+    const sendBtn = $("sendBtn");
+    const authBtn = $("authBtn");
+    const testBtn = $("testBtn");
+    const statusTitle = $("statusTitle");
+    const statusDetail = $("statusDetail");
+    const dot = $("dot");
+    const modeTitle = $("modeTitle");
+    let busy = false;
+    let currentMode = "assistant";
+
+    const modes = {
+      assistant: {title:"AI Assistent", prefix:""},
+      improve: {title:"Prompt verbeteren", prefix:"Verbeter deze prompt zodat hij duidelijk, krachtig en direct bruikbaar is. Geef alleen de verbeterde prompt.\n\n"},
+      social: {title:"Social copy", prefix:"Schrijf sterke social media copy in natuurlijk Nederlands voor deze opdracht. Geef een duidelijke hook, hoofdtekst en CTA.\n\n"},
+      ideas: {title:"Idee-generator", prefix:"Genereer concrete, originele en uitvoerbare ideeën voor deze opdracht. Rangschik de beste eerst.\n\n"}
+    };
+
+    function setStatus(kind, title, detail){
+      dot.className = "dot " + (kind || "");
+      statusTitle.textContent = title;
+      statusDetail.textContent = detail;
+    }
+
+    function addMessage(type, text){
+      const el = document.createElement("div");
+      el.className = "msg " + type;
+      el.textContent = text;
+      messages.appendChild(el);
+      messages.scrollTop = messages.scrollHeight;
+      return el;
+    }
+
+    function getPuter(){
+      return window.puter && window.puter.ai ? window.puter : null;
+    }
+
+    function responseText(res){
+      if (!res) return "";
+      if (typeof res === "string") return res;
+      if (res.message && typeof res.message.content === "string") return res.message.content;
+      if (res.message && Array.isArray(res.message.content)) {
+        return res.message.content.map(x => x && (x.text || x.content || "")).filter(Boolean).join("\n");
+      }
+      if (typeof res.text === "string") return res.text;
+      try { return JSON.stringify(res, null, 2); } catch { return String(res); }
+    }
+
+    async function withTimeout(promise, ms){
+      let timer;
+      const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("De AI reageerde niet binnen " + Math.round(ms/1000) + " seconden.")), ms);
+      });
+      try { return await Promise.race([promise, timeout]); }
+      finally { clearTimeout(timer); }
+    }
+
+    function refreshStatus(){
+      const p = getPuter();
+      if (!p){
+        setStatus("err","Puter niet geladen","Controleer internetverbinding of blokkerende browserextensies.");
+        return false;
+      }
+      let signed = false;
+      try { signed = !!p.auth.isSignedIn(); } catch {}
+      if (signed){
+        setStatus("ok","AI klaar","Puter is verbonden. Je kunt AI-opdrachten uitvoeren.");
+        authBtn.textContent = "Verbonden";
+      } else {
+        setStatus("wait","AI beschikbaar","Nog niet aangemeld. Bij gebruik kan Puter om toestemming vragen.");
+        authBtn.textContent = "Verbind Puter";
+      }
+      return true;
+    }
+
+    async function connectPuter(){
+      const p = getPuter();
+      if (!p){
+        refreshStatus();
+        addMessage("sys","Puter.js kon niet worden geladen. Herlaad de pagina en controleer je internetverbinding.");
+        return;
+      }
+      authBtn.disabled = true;
+      setStatus("wait","Verbinden…","Rond de Puter-aanmelding af in het geopende venster.");
+      try {
+        await p.auth.signIn();
+        refreshStatus();
+        addMessage("sys","Puter is succesvol verbonden.");
+      } catch (e){
+        const code = e && (e.error || e.code);
+        const msg = (e && (e.msg || e.message)) || String(e || "Onbekende fout");
+        setStatus("err","Aanmelding mislukt", (code ? code + ": " : "") + msg);
+        addMessage("sys","Aanmelden lukte niet: " + msg);
+      } finally {
+        authBtn.disabled = false;
+      }
+    }
+
+    async function runAI(raw){
+      if (busy) return;
+      const text = String(raw || "").trim();
+      if (!text) return;
+      const p = getPuter();
+      if (!p){
+        refreshStatus();
+        addMessage("sys","AI kan niet starten omdat Puter.js niet geladen is.");
+        return;
+      }
+
+      busy = true;
+      sendBtn.disabled = true;
+      testBtn.disabled = true;
+      addMessage("user", text);
+      promptEl.value = "";
+      const waiting = addMessage("ai","Bezig met antwoorden…");
+      setStatus("wait","AI denkt…","De aanvraag is verzonden.");
+
+      try {
+        const fullPrompt = modes[currentMode].prefix + text;
+        const res = await withTimeout(
+          p.ai.chat(fullPrompt, { model: "gpt-5.6-luna", normalize: true }),
+          45000
+        );
+        const out = responseText(res).trim();
+        if (!out) throw new Error("De AI gaf een leeg antwoord terug.");
+        waiting.textContent = out;
+        setStatus("ok","AI klaar","Laatste opdracht succesvol verwerkt.");
+      } catch (e){
+        const msg = (e && (e.msg || e.message)) || String(e || "Onbekende fout");
+        waiting.textContent = "Fout: " + msg;
+        waiting.classList.add("error");
+        setStatus("err","AI-fout",msg);
+      } finally {
+        busy = false;
+        sendBtn.disabled = false;
+        testBtn.disabled = false;
+        promptEl.focus();
+      }
+    }
+
+    authBtn.addEventListener("click", connectPuter);
+    sendBtn.addEventListener("click", () => runAI(promptEl.value));
+    testBtn.addEventListener("click", () => runAI("Antwoord exact met: AI WERKT"));
+    promptEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey){
+        e.preventDefault();
+        runAI(promptEl.value);
+      }
+    });
+    promptEl.addEventListener("input", () => {
+      promptEl.style.height = "auto";
+      promptEl.style.height = Math.min(promptEl.scrollHeight,150) + "px";
+    });
+
+    document.querySelectorAll(".mode").forEach(btn => btn.addEventListener("click", () => {
+      document.querySelectorAll(".mode").forEach(x => x.classList.remove("active"));
+      btn.classList.add("active");
+      currentMode = btn.dataset.mode;
+      modeTitle.textContent = modes[currentMode].title;
+      promptEl.focus();
+    }));
+
+    document.querySelectorAll(".chip").forEach(btn => btn.addEventListener("click", () => {
+      promptEl.value = btn.dataset.prompt;
+      promptEl.focus();
+    }));
+
+    window.addEventListener("error", (e) => {
+      setStatus("err","Paginafout", e.message || "Onbekende browserfout");
+    });
+
+    setTimeout(refreshStatus, 500);
+    setTimeout(() => { if (!getPuter()) refreshStatus(); }, 3500);
+  </script>
+</body>
+</html>
