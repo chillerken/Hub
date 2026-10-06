@@ -146,3 +146,26 @@ body{overflow-x:hidden}
   .demo-compose{grid-template-columns:1fr}
   .demo-compose .send{width:100%}
 }
+
+
+/* Mobile hardening for public sales/demo page */
+html,body{max-width:100%;overflow-x:hidden}
+.sales-v2{width:100%;min-width:0}
+.sales-v2 section,.sales-v2 article,.demo-grid>*{min-width:0}
+.demo-grid{grid-template-columns:minmax(0,.72fr) minmax(0,1.28fr)}
+.sectionhead,.sectionhead *{max-width:100%;overflow-wrap:anywhere}
+@media(max-width:1100px){
+  .demo-grid,.pilot-section{grid-template-columns:minmax(0,1fr)}
+  .problem-grid,.steps4,.salesfeatures,.faq-sales{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:700px){
+  .problem-grid,.steps4,.salesfeatures,.faq-sales{grid-template-columns:minmax(0,1fr)}
+  .demo-section{padding:26px 0 54px}
+  .demo-info{padding:18px}
+  .demo-chat-card{min-height:430px}
+  .demo-log{padding:16px;max-height:360px}
+  .demo-compose{grid-template-columns:minmax(0,1fr);padding:14px}
+  .demo-compose .send{width:100%;margin:0}
+  .chathead{flex-wrap:wrap;padding:15px 16px}
+  .hero-v2 h1{font-size:clamp(38px,11vw,48px)}
+}
