@@ -77,3 +77,25 @@
  .clientintro h2{font-size:29px}
  .dossiergrid{grid-template-columns:1fr 1fr}
 }
+
+/* Hard mobile/tablet containment: also works when Chrome "Desktop site" uses a ~980px CSS viewport. */
+html,body{max-width:100%;overflow-x:hidden}
+.shell,.main,.view,.clientlayout,.clientdetail,.dossiersection,.datagrid,.integrationgrid{min-width:0;max-width:100%}
+.clientdetail,.datarow,.integrationcard,.dossiermetric{overflow-wrap:anywhere;word-break:break-word}
+.clientdetail img,.clientdetail video,.clientdetail canvas{max-width:100%;height:auto}
+@media(max-width:1100px){
+ .integrationgrid{grid-template-columns:1fr}
+ .datarow{grid-template-columns:minmax(0,1fr)}
+ .datarow .right{text-align:left}
+ .rowactions{justify-content:flex-start}
+ .clienthead{flex-direction:column}
+ .clientactions{justify-content:flex-start}
+ .clientsettings{align-items:stretch}
+ .clientsettings .button,.clientsettings .inline-select{max-width:100%}
+}
+@media(max-width:1024px){
+ .clientlayout{display:block}
+ .clientlistpanel{margin-bottom:14px}
+ .clientdetail{width:100%;box-sizing:border-box}
+ .integrationcard{width:100%;box-sizing:border-box}
+}
