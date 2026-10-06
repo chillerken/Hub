@@ -5,12 +5,17 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'ai-receptionist-host/**'
+      - 'tests/luxwash-widget.spec.ts'
+      - 'playwright.config.ts'
+      - '.github/workflows/luxwash-widget-e2e.yml'
   schedule:
     - cron: "17 5 * * *"
 
 concurrency:
-  group: luxwash-reception-ai-e2e-main
-  cancel-in-progress: true
+  group: luxwash-reception-ai-e2e
+  cancel-in-progress: false
 
 permissions:
   contents: read
