@@ -46,3 +46,6 @@
 .money{font-variant-numeric:tabular-nums}
 @media(max-width:1120px){.clientkpis{grid-template-columns:repeat(3,1fr)}.clientlayout{grid-template-columns:1fr}.clientlistpanel{min-height:auto}.clientlist{max-height:320px}.clientdetail{min-height:500px}.dossiergrid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:760px){.clientintro{align-items:start;flex-direction:column}.clienttoolbar{width:100%}.clienttoolbar input{min-width:0;flex:1}.clientkpis{grid-template-columns:repeat(2,1fr)}.clienthead{flex-direction:column}.clientactions{justify-content:flex-start}.integrationgrid{grid-template-columns:1fr}.datarow{grid-template-columns:1fr}.datarow .right{text-align:left}}
+
+.rowactions{display:flex;gap:5px;justify-content:flex-end;flex-wrap:wrap;margin-top:6px}.appointmentrow .button{padding:5px 7px;font-size:8px}.appointmentrow .right>span{display:block}
+@media(max-width:760px){.rowactions{justify-content:flex-start}.appointmentrow .right>span{margin-bottom:5px}}
