@@ -171,3 +171,14 @@ html,body{max-width:100%;overflow-x:hidden}
 }
 
 .outcomedialog{width:min(560px,calc(100vw - 28px));max-height:calc(100vh - 40px);overflow:auto;border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:22px;background:#101720;color:#eef3f8}.outcomedialog::backdrop{background:rgba(2,6,12,.74)}.outcomedialog .sectionhead{text-align:left;margin:0 0 16px}.outcomedialog textarea{min-height:110px;resize:vertical}.lossreasonrow p{margin:.28rem 0}@media(max-width:560px){.outcomedialog{padding:16px;border-radius:15px}.outcomedialog .clientactions{display:grid;grid-template-columns:1fr}}
+
+/* Guided tenant onboarding */
+.onboardingprogress{overflow:hidden}
+.progressbar{height:10px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:14px 0 18px}
+.progressbar>span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#d7a84d,#f0c66d);transition:width .25s ease}
+.onboardingsteps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 16px}
+.onboardingstep{display:block;padding:12px 13px;border:1px solid rgba(255,255,255,.1);border-radius:12px;text-decoration:none;color:inherit;background:rgba(255,255,255,.025)}
+.onboardingstep.done{border-color:rgba(66,190,130,.35);background:rgba(66,190,130,.07)}
+.onboardingstep:hover{border-color:rgba(231,184,91,.45)}
+@media(max-width:760px){.onboardingsteps{grid-template-columns:1fr 1fr}}
+@media(max-width:480px){.onboardingsteps{grid-template-columns:1fr}}
