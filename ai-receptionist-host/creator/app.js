@@ -68,6 +68,7 @@ const tools={
   {id:'process',label:'Proces dat je wilt automatiseren',type:'textarea',placeholder:'Beschrijf wat nu handmatig gebeurt, stap voor stap of in gewone taal…'},
   {id:'trigger',label:'Startsignaal',type:'input',placeholder:'bv. nieuw formulier, inkomend bericht, betaling, nieuwe lead'},
   {id:'systems',label:'Apps / systemen',type:'input',placeholder:'bv. Gmail, Calendar, Supabase, WhatsApp, Stripe'},
+  {id:'execution',label:'Uitvoering',type:'select',options:['Alleen blueprint opslaan','Reception AI lifecycle activeren']},
   {id:'result',label:'Gewenst eindresultaat',type:'textarea',placeholder:'Wat moet automatisch gebeurd zijn wanneer de workflow klaar is?'}
  ],prompt:v=>`Je bent automation architect. Ontwerp een robuuste productie-workflow met naam "${v.name}". Huidig proces: ${v.process}. Trigger: ${v.trigger}. Systemen: ${v.systems}. Gewenst resultaat: ${v.result}. Geef een genummerde flow met trigger, validatie, deduplicatie, beslispunten, acties, data die wordt opgeslagen, foutafhandeling, retries, human handoff, logging en eindstatus. Sluit af met een MVP-versie en een productieversie.`}
 };
@@ -201,12 +202,12 @@ function printQuote(){
 async function deployReceptionist(){
  const v=values();assetStatus.textContent='Receptionist wordt in productie aangemaakt…';
  try{
-  const data=await platformInvoke('creator-hub-action',{action:'create_receptionist',organization_id:v.organization_id||null,business_name:v.business,receptionist_name:v.receptionist_name,widget_greeting:v.widget_greeting,services:v.services,qualification_questions:v.qualification_questions,description:'Gewenste acties: '+v.actions+' | Tone: '+v.tone,notification_email:v.notification_email,widget_allowed_domains:v.widget_allowed_domains,widget_accent:'#6d5dfc'});
+  const data=await platformInvoke('creator-hub-action',{action:'create_receptionist',organization_id:v.organization_id||null,business_name:v.business,receptionist_name:v.receptionist_name,widget_greeting:v.widget_greeting,services:v.services,qualification_questions:v.qualification_questions,description:'Gewenste acties: '+v.actions+' | Tone: '+v.tone,notification_email:v.notification_email,widget_allowed_domains:v.widget_allowed_domains,widget_accent:'#6d5dfc',custom_instructions:lastOutput});
   lastAsset={id:data.asset_id};assetStatus.innerHTML='✓ Live receptionist aangemaakt · <a target="_blank" rel="noopener" href="'+escHtml(data.widget_url)+'">Open live widget ↗</a>';await loadPlatformContext();
  }catch(e){assetStatus.textContent='Niet aangemaakt: '+errorText(e)}
 }
 async function saveWebsite(){const v=values();assetStatus.textContent='Website opslaan…';try{await saveCurrentAsset('website',(v.business||'Website')+' – website','ready')}catch(e){assetStatus.textContent='Opslaan mislukt: '+errorText(e)}}
-async function saveWorkflow(){const v=values();assetStatus.textContent='Workflow opslaan…';try{await saveCurrentAsset('workflow',(v.name||'Workflow'),'ready')}catch(e){assetStatus.textContent='Opslaan mislukt: '+errorText(e)}}
+async function saveWorkflow(){const v=values();assetStatus.textContent='Workflow opslaan…';try{const activate=v.execution==='Reception AI lifecycle activeren';const data=await platformInvoke('creator-hub-action',{action:'save_workflow',name:v.name||'Workflow',organization_id:v.organization_id||null,activate_lifecycle:activate,payload:{...v,content:lastOutput}});lastAsset=data.asset;assetStatus.textContent=data.lifecycle_active?'✓ Workflow opgeslagen en Reception AI productie-lifecycle geactiveerd.':'✓ Workflow als blueprint opgeslagen.';await loadPlatformContext()}catch(e){assetStatus.textContent='Opslaan mislukt: '+errorText(e)}}
 async function saveQuote(){const v=values();assetStatus.textContent='Offerte opslaan…';try{return await saveCurrentAsset('quote',(v.customer||'Klant')+' – offerte','ready')}catch(e){assetStatus.textContent='Opslaan mislukt: '+errorText(e);throw e}}
 async function sendQuote(){
  const v=values();if(!v.organization_id){assetStatus.textContent='Kies eerst een organisatie met actieve e-mailintegratie.';return}if(!v.recipient_email){assetStatus.textContent='Vul het e-mailadres van de klant in.';return}
@@ -218,7 +219,7 @@ function renderAssetActions(){
  if(currentTool==='website'){add('Preview website',previewWebsite);add('Download HTML',downloadWebsite);add('Bewaar website',saveWebsite,'button gold')}
  if(currentTool==='quote'){add('Bewaar offerte',saveQuote,'button gold');add('PDF / print',printQuote);add('E-mail offerte',sendQuote)}
  if(currentTool==='receptionist'){add('Maak live receptionist',deployReceptionist,'button gold')}
- if(currentTool==='workflow'){add('Sla workflow op',saveWorkflow,'button gold')}
+ if(currentTool==='workflow'){add('Workflow opslaan / activeren',saveWorkflow,'button gold')}
 }
 
 async function testAI(){
