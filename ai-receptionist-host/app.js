@@ -343,9 +343,11 @@ if(view==="clients"){
       const embed=token?`<script src="${widgetOrigin}/widget.js" data-widget-token="${token}" defer><\/script>`:"";
       const testUrl=token?`${widgetOrigin}/?widget=${encodeURIComponent(token)}`:"#";
       const trial=c.trial_ends_at?new Date(c.trial_ends_at).toLocaleDateString("nl-BE",{day:"2-digit",month:"2-digit",year:"numeric"}):"—";
+      const activationLabel=({not_started:"Nog niet gebruikt",usage_started:"Gebruik gestart",value_event:"Waarde-event",value_proven:"Waarde bewezen"})[c.activation_stage]||"Nog niet gebruikt";
       return `<article class="card clientcard" data-search="${esc([c.business_name,c.organization_name,c.receptionist_name,c.plan,c.subscription_status].filter(Boolean).join(" ").toLowerCase())}">
         <div class="clienthead"><div><span class="eyebrow">${c.is_internal?"INTERN · €0":esc(c.plan||"trial")}</span><h2>${name}</h2><p class="muted">${esc(c.receptionist_name||"AI Assistent")} · abonnement ${esc(c.subscription_status||"—")}</p></div><span class="badge">${enabled?"WIDGET ACTIEF":"WIDGET UIT"}</span></div>
-        <div class="clientstats"><span><b>${esc(c.leads_count||0)}</b> leads</span><span><b>${esc(c.conversations_count||0)}</b> gesprekken</span><span><b>${esc(c.appointments_active||0)}</b> afspraken</span><span>trial tot <b>${esc(trial)}</b></span></div>
+        <div class="clientstats"><span><b>${esc(c.leads_count||0)}</b> leads</span><span><b>${esc(c.conversations_count||0)}</b> gesprekken</span><span><b>${esc(c.appointments_active||0)}</b> afspraken</span><span>onboarding <b>${esc(c.onboarding_progress||0)}%</b></span><span>activatie <b>${esc(c.activation_score||0)}%</b></span><span><b>${esc(activationLabel)}</b></span><span>trial tot <b>${esc(trial)}</b></span></div>
+        ${!c.is_internal?`<div class="clientfunnel"><span class="badge">${esc(c.sales_onboarding_status||c.organization_status||"account")}</span>${c.requested_plan?`<span class="badge">plan ${esc(c.requested_plan)}</span>`:""}<div class="progressbar"><span style="width:${Math.max(0,Math.min(100,Number(c.onboarding_progress||0)))}%"></span></div></div>`:""}
         <div class="clientactions">
           <button class="clienteditbtn ghostbtn small" data-id="${id}" type="button">Bewerken</button>
           <button class="clientcopy ghostbtn small" data-code="${esc(embed)}" type="button" ${token?"":"disabled"}>Widgetcode</button>
