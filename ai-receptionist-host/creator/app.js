@@ -235,6 +235,43 @@ function rowHtml(main,sub,mid,right){
 function sectionHtml(title,note,body){
  return '<div class="dossiersection"><div class="sectionhead"><div><span class="eyebrow">DOSSIER</span><h3>'+escHtml(title)+'</h3></div><p>'+escHtml(note||'')+'</p></div>'+body+'</div>';
 }
+function appointmentRowHtml(x){
+ const canConfirm=!!(x.start_at&&x.end_at)&&!['confirmed','completed','cancelled'].includes(x.status);
+ const canSchedule=!['completed','cancelled'].includes(x.status);
+ const canCancel=x.status!=='completed'&&x.status!=='cancelled';
+ const canComplete=x.status==='confirmed';
+ const buttons=[
+  canSchedule?'<button class="button mini ghost" data-appt-act="schedule" data-appt-id="'+escHtml(x.id)+'">Plan</button>':'',
+  canConfirm?'<button class="button mini ghost" data-appt-act="confirm" data-appt-id="'+escHtml(x.id)+'">Bevestig</button>':'',
+  canComplete?'<button class="button mini ghost" data-appt-act="complete" data-appt-id="'+escHtml(x.id)+'">Afronden</button>':'',
+  canCancel?'<button class="button mini ghost" data-appt-act="cancel" data-appt-id="'+escHtml(x.id)+'">Annuleer</button>':''
+ ].filter(Boolean).join('');
+ return '<div class="datarow appointmentrow"><div><strong>'+escHtml(x.requested_text||'Afspraak')+'</strong><small>'+escHtml(x.location||'')+'</small></div><div class="mid">'+escHtml(x.status)+'</div><div class="right"><span>'+(x.start_at?escHtml(fmtDate(x.start_at,true)):'nog niet gepland')+'</span><div class="rowactions">'+buttons+'</div></div></div>';
+}
+async function clientAppointmentAction(id,mode){
+ if(!activeClientId||!id)return;
+ const appt=(currentClientDashboard?.appointments||[]).find(x=>x.id===id);
+ let payload={action:'client_appointment_action',organization_id:activeClientId,appointment_id:id,mode};
+ if(mode==='schedule'){
+  const current=appt?.start_at?new Date(appt.start_at):new Date(Date.now()+24*60*60*1000);
+  const pad=n=>String(n).padStart(2,'0');
+  const suggestion=current.getFullYear()+'-'+pad(current.getMonth()+1)+'-'+pad(current.getDate())+'T'+pad(current.getHours())+':'+pad(current.getMinutes());
+  const startText=prompt('Startdatum en uur (YYYY-MM-DDTHH:MM)',suggestion);
+  if(!startText)return;
+  const start=new Date(startText);if(Number.isNaN(start.getTime())){alert('Ongeldige starttijd.');return}
+  const durationText=prompt('Duur in minuten','90');if(!durationText)return;
+  const duration=Number(durationText);if(!Number.isFinite(duration)||duration<=0){alert('Ongeldige duur.');return}
+  const location=prompt('Locatie (optioneel)',appt?.location||'')??'';
+  payload={...payload,start_at:start.toISOString(),end_at:new Date(start.getTime()+duration*60000).toISOString(),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Brussels',location};
+ }
+ if(mode==='cancel'&&!confirm('Deze afspraak annuleren?'))return;
+ if(mode==='complete'&&!confirm('Deze afspraak als afgerond markeren?'))return;
+ try{
+  await platformInvoke('creator-hub-action',payload);
+  await loadClientDashboard(activeClientId);await loadPlatformContext();
+ }catch(e){alert('Afspraakactie mislukt: '+errorText(e))}
+}
+
 function renderClientDashboard(c){
  const o=c.organization||{},p=c.profile||{},la=c.lead_agent,m=c.metrics||{};
  const widgetUrl=p.widget_token?'/?widget='+encodeURIComponent(p.widget_token):'/';
@@ -251,7 +288,7 @@ function renderClientDashboard(c){
  ].join('')+'</div>';
 
  const leadBody='<div class="datagrid">'+(leads.length?leads.map(x=>rowHtml(x.name||x.email||x.phone||'Lead',x.summary||x.source,x.status,'score '+x.score+' · '+fmtDate(x.created_at,true))).join(''):'<div class="assetempty">Nog geen leads.</div>')+'</div>';
- const apptBody='<div class="datagrid">'+(appts.length?appts.map(x=>rowHtml(x.requested_text||'Afspraak',x.location||'',x.status,(x.start_at?fmtDate(x.start_at,true):'nog niet gepland'))).join(''):'<div class="assetempty">Nog geen afspraken.</div>')+'</div>';
+ const apptBody='<div class="datagrid">'+(appts.length?appts.map(appointmentRowHtml).join(''):'<div class="assetempty">Nog geen afspraken.</div>')+'</div>';
  const flowBody='<div class="datagrid">'+(flows.length?flows.map(x=>rowHtml(x.action_type,x.last_error||('kanaal: '+x.channel),x.status,(x.attempts||0)+'/'+(x.max_attempts||0)+' · '+fmtDate(x.scheduled_at,true))).join(''):'<div class="assetempty">Nog geen workflowacties.</div>')+'</div>';
  const intBody='<div class="integrationgrid">'+(ints.length?ints.map(x=>'<div class="integrationcard"><div class="integrationtop"><strong>'+escHtml(x.channel)+' · '+escHtml(x.provider)+'</strong><span class="statuschip '+statusClass(x.status)+'">'+escHtml(x.status)+'</span></div><p>'+(x.last_error?escHtml(x.last_error):'Laatste verificatie: '+escHtml(fmtDate(x.last_verified_at,true)))+'</p></div>').join(''):'<div class="assetempty">Geen integraties geconfigureerd.</div>')+'</div>';
  const paymentBody='<div class="datagrid">'+(payments.length?payments.map(x=>rowHtml(fmtMoney(x.amount_cents,x.currency),x.provider||'betaling',x.status,fmtDate(x.paid_at||x.created_at,true))).join(''):'<div class="assetempty">Nog geen betalingen.</div>')+'</div>';
@@ -290,6 +327,7 @@ function renderClientDashboard(c){
  $('saveClientStatusBtn')?.addEventListener('click',()=>setClientRuntime({organization_status:statusSel.value}));
  $('editReceptionBtn')?.addEventListener('click',()=>openClientBuilder('receptionist'));
  $('editLeadBtn')?.addEventListener('click',()=>openClientBuilder('lead'));
+ clientDetail.querySelectorAll('[data-appt-act]').forEach(b=>b.addEventListener('click',()=>clientAppointmentAction(b.dataset.apptId,b.dataset.apptAct)));
 }
 async function setClientRuntime(patch){
  if(!activeClientId)return;
