@@ -161,7 +161,17 @@ async function platformInvoke(slug,body){
  const {data:{session}}=await supabase.auth.getSession();
  if(!session)throw new Error('Log eerst in op Reception AI via Platform login.');
  const {data,error}=await supabase.functions.invoke(slug,{body});
- if(error)throw new Error(data?.error||error.message||'Backendactie mislukt');
+ if(error){
+  let detail=data?.error||'';
+  try{
+   const ctx=error.context;
+   if(ctx&&typeof ctx.clone==='function'){
+    const parsed=await ctx.clone().json();
+    detail=parsed?.error||parsed?.detail||parsed?.message||detail;
+   }
+  }catch{}
+  throw new Error(detail||error.message||'Backendactie mislukt');
+ }
  if(data?.error)throw new Error(data.error);
  return data;
 }
@@ -226,7 +236,8 @@ async function loadClientDashboard(orgId){
   const data=await platformInvoke('creator-hub-action',{action:'client_dashboard',organization_id:orgId});
   currentClientDashboard=data.client;renderClientDashboard(data.client);
  }catch(e){
-  clientDetail.innerHTML='<div class="clientempty"><div><strong>Dossier kon niet laden</strong><p>'+escHtml(errorText(e))+'</p></div></div>';
+  clientDetail.innerHTML='<div class="clientempty"><div><strong>Dossier kon niet laden</strong><p>'+escHtml(errorText(e))+'</p><button id="retryClientLoad" class="button ghost">Opnieuw proberen</button></div></div>';
+  $('retryClientLoad')?.addEventListener('click',()=>loadClientDashboard(orgId));
  }
 }
 function rowHtml(main,sub,mid,right){
