@@ -328,6 +328,7 @@ if(view==="clients"){
     const totalLeads=platformClients.reduce((n,c)=>n+Number(c.leads_count||0),0);
     const activeWidgets=platformClients.filter(c=>c.widget_enabled).length;
     const activePlans=platformClients.filter(c=>c.is_internal||["active","trialing"].includes(c.subscription_status)||c.plan==="trial").length;
+    const customerRisk=platformClients.filter(c=>["attention","critical"].includes(String(c.customer_health_status||""))).length;
     const widgetOrigin="https://reception-ai-luxwash.vercel.app";
     body=`<section class="pagehead"><span class="eyebrow">PLATFORMBEHEER</span><h1>Klanten & Widgets</h1><p class="muted">Beheer alle Reception AI-klanten vanuit één overzicht. Wijzigingen lopen via een beveiligde platformbeheerfunctie; tenant-RLS blijft intact.</p></section>
     ${platformLoadError?`<div class="notice error">${esc(platformLoadError)}</div>`:""}
@@ -336,6 +337,7 @@ if(view==="clients"){
       <div class="card"><div class="muted">Widgets actief</div><div class="metric">${activeWidgets}</div></div>
       <div class="card"><div class="muted">Leads totaal</div><div class="metric">${totalLeads}</div></div>
       <div class="card"><div class="muted">Actieve/trial accounts</div><div class="metric">${activePlans}</div></div>
+      <div class="card"><div class="muted">Customer Success aandacht</div><div class="metric">${customerRisk}</div></div>
     </section>
     <section class="card clienttoolbar"><div><h2>Alle bedrijven</h2><p class="muted">Zoek op bedrijfsnaam, plan of receptionist.</p></div><input id="clientSearch" type="search" placeholder="Zoek klant…"></section>
     <section id="clientGrid" class="clientgrid">${platformClients.map(c=>{
@@ -344,10 +346,12 @@ if(view==="clients"){
       const testUrl=token?`${widgetOrigin}/?widget=${encodeURIComponent(token)}`:"#";
       const trial=c.trial_ends_at?new Date(c.trial_ends_at).toLocaleDateString("nl-BE",{day:"2-digit",month:"2-digit",year:"numeric"}):"—";
       const activationLabel=({not_started:"Nog niet gebruikt",usage_started:"Gebruik gestart",value_event:"Waarde-event",value_proven:"Waarde bewezen"})[c.activation_stage]||"Nog niet gebruikt";
+      const healthStatus=String(c.customer_health_status||"");
+      const healthLabel=({healthy:"GEZOND",attention:"AANDACHT",critical:"KRITIEK",launching:"LANCERING"})[healthStatus]||"";
       return `<article class="card clientcard" data-search="${esc([c.business_name,c.organization_name,c.receptionist_name,c.plan,c.subscription_status].filter(Boolean).join(" ").toLowerCase())}">
         <div class="clienthead"><div><span class="eyebrow">${c.is_internal?"INTERN · €0":esc(c.plan||"trial")}</span><h2>${name}</h2><p class="muted">${esc(c.receptionist_name||"AI Assistent")} · abonnement ${esc(c.subscription_status||"—")}</p></div><span class="badge">${enabled?"WIDGET ACTIEF":"WIDGET UIT"}</span></div>
         <div class="clientstats"><span><b>${esc(c.leads_count||0)}</b> leads</span><span><b>${esc(c.conversations_count||0)}</b> gesprekken</span><span><b>${esc(c.appointments_active||0)}</b> afspraken</span><span>onboarding <b>${esc(c.onboarding_progress||0)}%</b></span><span>activatie <b>${esc(c.activation_score||0)}%</b></span><span><b>${esc(activationLabel)}</b></span><span>trial tot <b>${esc(trial)}</b></span></div>
-        ${!c.is_internal?`<div class="clientfunnel"><span class="badge">${esc(c.sales_onboarding_status||c.organization_status||"account")}</span>${c.requested_plan?`<span class="badge">plan ${esc(c.requested_plan)}</span>`:""}<div class="progressbar"><span style="width:${Math.max(0,Math.min(100,Number(c.onboarding_progress||0)))}%"></span></div></div>`:""}
+        ${!c.is_internal?`<div class="clientfunnel"><span class="badge">${esc(c.sales_onboarding_status||c.organization_status||"account")}</span>${c.requested_plan?`<span class="badge">plan ${esc(c.requested_plan)}</span>`:""}${healthLabel?`<span class="badge">${esc(healthLabel)} · ${esc(c.customer_health_score||0)}/100</span>`:""}<div class="progressbar"><span style="width:${Math.max(0,Math.min(100,healthLabel?Number(c.customer_health_score||0):Number(c.onboarding_progress||0)))}%"></span></div>${healthLabel?`<p class="muted"><b>Customer Success:</b> ${esc(c.customer_health_next_action||"Geen directe actie nodig.")} · 14d: ${esc(c.recent_conversations_14d||0)} gesprekken, ${esc(c.recent_leads_14d||0)} leads, ${esc(c.recent_warm_leads_14d||0)} warm.</p>`:""}</div>`:""}
         <div class="clientactions">
           <button class="clienteditbtn ghostbtn small" data-id="${id}" type="button">Bewerken</button>
           <button class="clientcopy ghostbtn small" data-code="${esc(embed)}" type="button" ${token?"":"disabled"}>Widgetcode</button>
