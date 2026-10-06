@@ -7,7 +7,66 @@ const app=document.querySelector("#app");
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\\\"":"&quot;","'":"&#39;"}[c]));
 window.__jarvisEsc=esc;
 const arr=v=>Array.isArray(v)?v:[];
-function legalFooter(){return '<div class="legal">Door Reception AI te gebruiken gaat u akkoord met <a href="?page=privacy">Privacy</a> en <a href="?page=terms">Voorwaarden</a>.</div>'}function legalView(page){const privacy=page==="privacy";app.innerHTML='<main class="shell"><header class="top"><div class="brand">Reception AI</div><a class="pricebtn small" href="./">Terug</a></header><section class="card"><h1>'+ (privacy?'Privacybeleid':'Gebruiksvoorwaarden') +'</h1><p class="muted">Versie 4 oktober 2026</p>'+ (privacy?'<p>Reception AI verwerkt accountgegevens, bedrijfsconfiguratie en informatie die bezoekers vrijwillig in de AI-receptionist invoeren om de dienst te leveren, beveiligen en ondersteunen.</p><h2>Verwerking</h2><p>Bedrijven die Reception AI gebruiken blijven verantwoordelijk voor de persoonsgegevens die zij via hun receptionist verzamelen. Reception AI verwerkt deze gegevens voor de uitvoering van de SaaS-dienst. Betalingen worden door Stripe verwerkt; AI-antwoorden worden via de geconfigureerde AI-provider verwerkt.</p><h2>Bewaring en rechten</h2><p>Gegevens worden niet langer bewaard dan nodig voor de dienst en wettelijke verplichtingen. Gebruikers kunnen verzoeken om inzage, correctie of verwijdering via de aanbieder van Reception AI. De dienst wordt aangeboden door Redant, Gert-Jan, ondernemingsnummer 1040.131.790, Hoogstraat 106 bus 12, 9340 Lede, België. Privacycontact: info@luxwash.online.</p>':'<p>Reception AI is een SaaS-hulpmiddel voor klantontvangst en leadopvolging. AI-antwoorden kunnen fouten bevatten en vervangen geen professioneel medisch, juridisch of financieel advies.</p><h2>Abonnement</h2><p>Betaalde plannen worden maandelijks gefactureerd via Stripe. Opzegging kan via het facturatieportaal en geldt volgens de daar getoonde abonnementsvoorwaarden.</p><h2>Verantwoord gebruik</h2><p>De klant is verantwoordelijk voor correcte bedrijfsinformatie, rechtmatige verwerking van persoonsgegevens en menselijke opvolging wanneer de AI een gesprek escaleert.</p><p>Reception AI wordt aangeboden door Redant, Gert-Jan, ondernemingsnummer 1040.131.790, Hoogstraat 106 bus 12, 9340 Lede, België. Contact: info@luxwash.online. Op deze overeenkomst is Belgisch recht van toepassing, onverminderd dwingende consumenten- en privacywetgeving.</p>')+'</section>'+legalFooter()+'</main>'}async function publicWidgetView(token){app.innerHTML='<main class="shell widgetShell"><section class="card chatcard"><div class="brand">AI Receptionist</div><h2 id="wtitle">Welkom</h2><div id="chatlog" class="chatlog"><div class="bubble ai">Hallo! Waarmee kan ik helpen?</div></div><form id="wchat"><div class="chatmeta"><input id="wname" placeholder="Naam (optioneel)" maxlength="120"><input id="wemail" placeholder="E-mail (optioneel)" type="email"><input id="wphone" placeholder="Telefoon (optioneel)" type="tel"></div><label class="check consentline"><input id="wconsent" type="checkbox"> Dit bedrijf mag mij contacteren over deze aanvraag.</label><label class="check consentline"><input id="wmarketing" type="checkbox"> Ik wil later relevante opvolging ontvangen (optioneel).</label><div class="chatrow"><input id="wmsg" placeholder="Typ uw vraag…" maxlength="2000" required><button class="send">Verstuur</button></div></form><div id="wstatus" class="muted"></div></section>${legalFooter()}</main>';let lead=null,conv=null;document.querySelector("#wchat").onsubmit=async e=>{e.preventDefault();const input=document.querySelector("#wmsg"),log=document.querySelector("#chatlog"),status=document.querySelector("#wstatus"),message=input.value.trim();if(!message)return;log.insertAdjacentHTML("beforeend",'<div class="bubble customer">'+esc(message)+'</div>');input.value="";status.textContent="Even geduld…";const {data,error}=await supabase.functions.invoke("public-reception-chat",{body:{widget_token:token,message,name:document.querySelector("#wname").value.trim(),email:document.querySelector("#wemail").value.trim(),phone:document.querySelector("#wphone").value.trim(),contact_consent:document.querySelector("#wconsent").checked,marketing_consent:document.querySelector("#wmarketing").checked,lead_id:lead,conversation_id:conv}});if(error||data?.error){status.textContent=data?.error||"Tijdelijk niet beschikbaar.";return}lead=data.lead_id;conv=data.conversation_id;document.querySelector("#wtitle").textContent=data.business_name||"Welkom";log.insertAdjacentHTML("beforeend",'<div class="bubble ai">'+esc(data.reply)+'</div>');status.textContent=data.lead_state==="handoff"?"✓ Uw aanvraag is geregistreerd voor persoonlijke opvolging.":data.lead_state==="qualified"?"✓ Uw aanvraag is geregistreerd en wordt opgevolgd.":"✓ Uw aanvraag is geregistreerd.";log.scrollTop=log.scrollHeight}}
+function legalFooter(){return '<div class="legal">Door Reception AI te gebruiken gaat u akkoord met <a href="?page=privacy">Privacy</a> en <a href="?page=terms">Voorwaarden</a>.</div>'}function legalView(page){const privacy=page==="privacy";app.innerHTML='<main class="shell"><header class="top"><div class="brand">Reception AI</div><a class="pricebtn small" href="./">Terug</a></header><section class="card"><h1>'+ (privacy?'Privacybeleid':'Gebruiksvoorwaarden') +'</h1><p class="muted">Versie 4 oktober 2026</p>'+ (privacy?'<p>Reception AI verwerkt accountgegevens, bedrijfsconfiguratie en informatie die bezoekers vrijwillig in de AI-receptionist invoeren om de dienst te leveren, beveiligen en ondersteunen.</p><h2>Verwerking</h2><p>Bedrijven die Reception AI gebruiken blijven verantwoordelijk voor de persoonsgegevens die zij via hun receptionist verzamelen. Reception AI verwerkt deze gegevens voor de uitvoering van de SaaS-dienst. Betalingen worden door Stripe verwerkt; AI-antwoorden worden via de geconfigureerde AI-provider verwerkt.</p><h2>Bewaring en rechten</h2><p>Gegevens worden niet langer bewaard dan nodig voor de dienst en wettelijke verplichtingen. Gebruikers kunnen verzoeken om inzage, correctie of verwijdering via de aanbieder van Reception AI. De dienst wordt aangeboden door Redant, Gert-Jan, ondernemingsnummer 1040.131.790, Hoogstraat 106 bus 12, 9340 Lede, België. Privacycontact: info@luxwash.online.</p>':'<p>Reception AI is een SaaS-hulpmiddel voor klantontvangst en leadopvolging. AI-antwoorden kunnen fouten bevatten en vervangen geen professioneel medisch, juridisch of financieel advies.</p><h2>Abonnement</h2><p>Betaalde plannen worden maandelijks gefactureerd via Stripe. Opzegging kan via het facturatieportaal en geldt volgens de daar getoonde abonnementsvoorwaarden.</p><h2>Verantwoord gebruik</h2><p>De klant is verantwoordelijk voor correcte bedrijfsinformatie, rechtmatige verwerking van persoonsgegevens en menselijke opvolging wanneer de AI een gesprek escaleert.</p><p>Reception AI wordt aangeboden door Redant, Gert-Jan, ondernemingsnummer 1040.131.790, Hoogstraat 106 bus 12, 9340 Lede, België. Contact: info@luxwash.online. Op deze overeenkomst is Belgisch recht van toepassing, onverminderd dwingende consumenten- en privacywetgeving.</p>')+'</section>'+legalFooter()+'</main>'}async function publicWidgetView(token){
+  app.innerHTML=`<main class="shell widgetShell">
+    <section class="card chatcard">
+      <div class="brand" id="wbrand">AI Receptionist</div>
+      <h2 id="wtitle">Welkom</h2>
+      <div id="chatlog" class="chatlog"><div class="bubble ai" id="wgreeting">Hallo! Waarmee kan ik helpen?</div></div>
+      <form id="wchat">
+        <div class="chatmeta">
+          <input id="wname" placeholder="Naam (optioneel)" maxlength="120">
+          <input id="wemail" placeholder="E-mail (optioneel)" type="email">
+          <input id="wphone" placeholder="Telefoon (optioneel)" type="tel">
+        </div>
+        <label class="check consentline"><input id="wconsent" type="checkbox"> Dit bedrijf mag mij contacteren over deze aanvraag.</label>
+        <label class="check consentline"><input id="wmarketing" type="checkbox"> Ik wil later relevante opvolging ontvangen (optioneel).</label>
+        <div class="chatrow"><input id="wmsg" placeholder="Typ uw vraag…" maxlength="2000" required><button class="send" type="submit">Verstuur</button></div>
+      </form>
+      <div id="wstatus" class="muted"></div>
+    </section>
+    ${legalFooter()}
+  </main>`;
+
+  let lead=null,conv=null;
+  const title=document.querySelector("#wtitle"),brand=document.querySelector("#wbrand"),greeting=document.querySelector("#wgreeting");
+  supabase.functions.invoke("public-widget-config",{body:{widget_token:token}}).then(({data})=>{
+    if(!data?.active)return;
+    title.textContent=data.business_name||"Welkom";
+    brand.textContent=(data.receptionist_name||"AI Assistent")+" · AI Receptionist";
+    greeting.textContent=data.greeting||"Hallo! Waarmee kan ik helpen?";
+    if(/^#[0-9a-f]{6}$/i.test(data.accent||""))document.documentElement.style.setProperty("--gold",data.accent);
+  }).catch(()=>{});
+
+  document.querySelector("#wchat").onsubmit=async e=>{
+    e.preventDefault();
+    const form=e.currentTarget,input=document.querySelector("#wmsg"),log=document.querySelector("#chatlog"),status=document.querySelector("#wstatus"),send=form.querySelector(".send"),message=input.value.trim();
+    if(!message)return;
+    log.insertAdjacentHTML("beforeend",'<div class="bubble customer">'+esc(message)+'</div>');
+    input.value="";
+    send.disabled=true;
+    status.textContent="Even geduld…";
+    const {data,error}=await supabase.functions.invoke("public-reception-chat",{body:{
+      widget_token:token,
+      message,
+      name:document.querySelector("#wname").value.trim(),
+      email:document.querySelector("#wemail").value.trim(),
+      phone:document.querySelector("#wphone").value.trim(),
+      contact_consent:document.querySelector("#wconsent").checked,
+      marketing_consent:document.querySelector("#wmarketing").checked,
+      lead_id:lead,
+      conversation_id:conv
+    }});
+    send.disabled=false;
+    if(error||data?.error){status.textContent=data?.error||"Tijdelijk niet beschikbaar.";return}
+    lead=data.lead_id;conv=data.conversation_id;
+    title.textContent=data.business_name||title.textContent||"Welkom";
+    log.insertAdjacentHTML("beforeend",'<div class="bubble ai">'+esc(data.reply)+'</div>');
+    status.textContent=data.lead_state==="handoff"?"✓ Doorgegeven voor persoonlijke opvolging.":data.lead_state==="qualified"?"✓ Uw aanvraag wordt opgevolgd.":"✓ Antwoord verwerkt.";
+    log.scrollTop=log.scrollHeight;
+    input.focus();
+  };
+}
 function authView(){
   const showAuth=new URLSearchParams(location.search).get("auth")==="1";
   if(!showAuth){
