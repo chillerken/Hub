@@ -41,6 +41,7 @@
         <h1 id="pageTitle">Dashboard</h1>
       </div>
       <div class="topactions">
+        <button id="platformBtn" class="button ghost">Platform login</button>
         <button id="testBtn" class="button ghost">AI testen</button>
         <a class="button ghost" href="/" target="_blank" rel="noopener">Reception AI ↗</a>
       </div>
@@ -89,6 +90,9 @@
         <a class="product" href="./business-scan/" target="_blank" rel="noopener"><div><strong>LuxAI Business Scan</strong><p>Bedrijfsscan met automatisatiescore en verbeterplan.</p></div><span>Open ↗</span></a>
         <a class="product" href="./business-scan/website/" target="_blank" rel="noopener"><div><strong>Website Scan</strong><p>Analyseer een website en krijg concrete verbeterpunten.</p></div><span>Open ↗</span></a>
       </div>
+
+      <div class="sectionhead"><div><span class="eyebrow">OPGESLAGEN</span><h3>Recente Hub-assets</h3></div><p>Verschijnt na platform-login.</p></div>
+      <div id="recentAssets" class="assetslist"><div class="assetempty">Log in op Reception AI om opgeslagen websites, offertes, workflows en receptionisten te zien.</div></div>
     </section>
 
     <section id="workspace" class="view">
@@ -110,11 +114,13 @@
           <div class="outputhead"><div><span class="eyebrow">RESULTAAT</span><strong id="outputLabel">AI-uitvoer</strong></div><button id="copyBtn" class="button mini ghost">Kopieer</button></div>
           <div id="output" class="output"><span class="placeholder">Je resultaat verschijnt hier.</span></div>
           <div id="imageOutput" class="imageoutput"></div>
+          <div id="assetActions" class="assetactions"></div>
+          <div id="assetStatus" class="assetstatus"></div>
         </section>
       </div>
     </section>
   </main>
 </div>
-<script src="./app.js"></script>
+<script type="module" src="./app.js"></script>
 </body>
 </html>
