@@ -16,6 +16,96 @@ function planFromSubscription(o:any){
  }
  return "";
 }
+
+async function customerSuccessPaymentRisk(db:any,organizationId:string,reason:string){
+ const {data:invite}=await db.from("sales_onboarding_invites")
+  .select("id,lead_id,sales_organization_id")
+  .eq("claimed_organization_id",organizationId)
+  .eq("status","converted")
+  .order("converted_at",{ascending:false}).limit(1).maybeSingle();
+ if(!invite)return;
+ const {data:lead}=await db.from("leads").select("name,email,phone")
+  .eq("id",invite.lead_id).eq("organization_id",invite.sales_organization_id).maybeSingle();
+ const who=String(lead?.name||lead?.email||lead?.phone||"klant").trim().slice(0,120);
+ const title="Customer Success: URGENT – betaling – "+who;
+ const {data:existing}=await db.from("tasks").select("id")
+  .eq("organization_id",invite.sales_organization_id).eq("lead_id",invite.lead_id)
+  .eq("status","open").eq("title",title).limit(1);
+ if(!existing?.length){
+   await db.from("tasks").insert({
+     organization_id:invite.sales_organization_id,lead_id:invite.lead_id,title,
+     status:"open",priority:"urgent",due_at:new Date(Date.now()+2*3600000).toISOString()
+   });
+ }
+ await db.from("audit_events").insert({
+   organization_id:invite.sales_organization_id,actor_user_id:null,event_type:"customer_success.payment_risk",
+   entity_type:"lead",entity_id:invite.lead_id,
+   payload:{claimed_organization_id:organizationId,reason}
+ });
+}
+
+async function resolveCustomerSuccessPaymentRisk(db:any,organizationId:string){
+ const {data:invite}=await db.from("sales_onboarding_invites")
+  .select("lead_id,sales_organization_id")
+  .eq("claimed_organization_id",organizationId)
+  .eq("status","converted")
+  .order("converted_at",{ascending:false}).limit(1).maybeSingle();
+ if(!invite)return;
+ await db.from("tasks").update({status:"done",completed_at:new Date().toISOString()})
+  .eq("organization_id",invite.sales_organization_id).eq("lead_id",invite.lead_id)
+  .eq("status","open").ilike("title","Customer Success: URGENT – betaling – %");
+}
+async function markSalesConverted(db:any,organizationId:string,plan:string){
+ const {data:invite}=await db.from("sales_onboarding_invites")
+  .select("id,lead_id,sales_organization_id,status")
+  .eq("claimed_organization_id",organizationId)
+  .in("status",["pending","claimed"])
+  .order("created_at",{ascending:false}).limit(1).maybeSingle();
+ if(!invite)return;
+ const now=new Date().toISOString();
+ const {data:lead}=await db.from("leads").select("name,email,phone")
+  .eq("id",invite.lead_id).eq("organization_id",invite.sales_organization_id).maybeSingle();
+ const who=String(lead?.name||lead?.email||lead?.phone||"nieuwe klant").trim().slice(0,120);
+
+ await db.from("organizations").update({status:"active",updated_at:now}).eq("id",organizationId);
+ await db.from("sales_onboarding_invites").update({status:"converted",converted_at:now,updated_at:now}).eq("id",invite.id);
+ await db.from("leads").update({
+   status:"won",
+   outcome_reason:"Reception AI abonnement geactiveerd",
+   outcome_notes:"SaaS-plan: "+plan,
+   updated_at:now
+ }).eq("id",invite.lead_id).eq("organization_id",invite.sales_organization_id);
+ await db.from("sales_opportunities").update({
+   temperature:"hot",stage:"won",confidence:100,
+   next_action:"Voer een productiecontrole uit en volg de eerste klantresultaten op.",
+   reason:"De prospect heeft een betaald Reception AI-abonnement geactiveerd.",
+   updated_at:now,analyzed_at:now
+ }).eq("organization_id",invite.sales_organization_id).eq("lead_id",invite.lead_id);
+ await db.from("tasks").update({status:"done",completed_at:now})
+   .eq("organization_id",invite.sales_organization_id).eq("lead_id",invite.lead_id)
+   .eq("status","open").ilike("title","Sales Agent:%");
+
+ const csTitle="Customer Success: productiecontrole – "+who;
+ const {data:existingCs}=await db.from("tasks").select("id")
+   .eq("organization_id",invite.sales_organization_id).eq("lead_id",invite.lead_id)
+   .eq("status","open").eq("title",csTitle).limit(1);
+ if(!existingCs?.length){
+   await db.from("tasks").insert({
+     organization_id:invite.sales_organization_id,
+     lead_id:invite.lead_id,
+     title:csTitle,
+     status:"open",
+     priority:"high",
+     due_at:new Date(Date.now()+48*3600000).toISOString()
+   });
+ }
+
+ await db.from("audit_events").insert({
+   organization_id:invite.sales_organization_id,actor_user_id:null,event_type:"sales_onboarding.converted",
+   entity_type:"lead",entity_id:invite.lead_id,
+   payload:{invite_id:invite.id,claimed_organization_id:organizationId,plan,customer_success_task:true}
+ });
+}
 async function valid(payload:string,header:string,secret:string){
  const vals:Record<string,string[]>={};
  for(const x of header.split(",")){const i=x.indexOf("=");if(i>0){const k=x.slice(0,i).trim(),v=x.slice(i+1).trim();(vals[k]??=[]).push(v)}}
@@ -48,11 +138,13 @@ Deno.serve(async req=>{
     else if(ie)throw ie;
    }
   }
-  if(["checkout.session.completed","checkout.session.async_payment_succeeded","checkout.session.async_payment_failed"].includes(e.type)&&o.mode==="subscription"&&String(o.metadata?.app||"")==="mijn_ai_business"){
+  if(["checkout.session.completed","checkout.session.async_payment_succeeded","checkout.session.async_payment_failed"].includes(e.type)&&o.mode==="subscription"&&["reception_ai","mijn_ai_business"].includes(String(o.metadata?.app||""))){
    const plan=String(o.metadata?.plan||"").toLowerCase(),ref=String(o.client_reference_id||""),customer=String(o.customer||""),sub=String(o.subscription||"");
-   const paid=e.type==="checkout.session.async_payment_succeeded"||["paid","no_payment_required"].includes(String(o.payment_status||"").toLowerCase());
+   const paymentStatus=String(o.payment_status||"").toLowerCase();
+   const paid=e.type==="checkout.session.async_payment_succeeded"||paymentStatus==="paid";
+   const noPaymentRequired=paymentStatus==="no_payment_required";
    const explicitlyFailed=e.type==="checkout.session.async_payment_failed";
-   const checkoutStatus=paid?"active":explicitlyFailed?"past_due":"incomplete";
+   const checkoutStatus=paid?"active":noPaymentRequired?"trialing":explicitlyFailed?"past_due":"incomplete";
    let resolvedOrg:string|null=null;
 
    if(["starter","pro","business"].includes(plan)&&ref){
@@ -93,6 +185,7 @@ Deno.serve(async req=>{
       stripe_customer_id:customer,
       stripe_subscription_id:sub
     }).eq("id",resolvedOrg);
+    if(checkoutStatus==="active"){await markSalesConverted(db,resolvedOrg,plan);await resolveCustomerSuccessPaymentRisk(db,resolvedOrg)}
     console.log(paid?"BILLING activated tenant":"BILLING checkout pending payment",resolvedOrg,plan,String(o.payment_status||"unknown"));
    }else if(["starter","pro","business"].includes(plan)){
     console.warn("BILLING checkout not linked to an authorized tenant",String(e.id||""),plan);
@@ -103,10 +196,18 @@ Deno.serve(async req=>{
    const patch:any={subscription_status:status,stripe_subscription_id:String(o.id||"")};
    const derivedPlan=planFromSubscription(o);
    if(derivedPlan)patch.plan=derivedPlan;
-   await db.from("organizations").update(patch).eq("stripe_customer_id",customer);
+   const {data:updatedOrgs}=await db.from("organizations").update(patch).eq("stripe_customer_id",customer).select("id,plan");
+   if(status==="active")for(const orgRow of updatedOrgs||[]){await markSalesConverted(db,String(orgRow.id),String(orgRow.plan||derivedPlan||"paid"));await resolveCustomerSuccessPaymentRisk(db,String(orgRow.id))}
+   if(["past_due","unpaid","canceled","incomplete_expired"].includes(status))for(const orgRow of updatedOrgs||[])await customerSuccessPaymentRisk(db,String(orgRow.id),"subscription_"+status);
   }
-  if(e.type==="invoice.payment_failed")await db.from("organizations").update({subscription_status:"past_due"}).eq("stripe_customer_id",String(o.customer||""));
-  if(e.type==="invoice.paid")await db.from("organizations").update({subscription_status:"active"}).eq("stripe_customer_id",String(o.customer||""));
+  if(e.type==="invoice.payment_failed"){
+   const {data:updatedOrgs}=await db.from("organizations").update({subscription_status:"past_due"}).eq("stripe_customer_id",String(o.customer||"")).select("id");
+   for(const orgRow of updatedOrgs||[])await customerSuccessPaymentRisk(db,String(orgRow.id),"invoice_payment_failed");
+  }
+  if(e.type==="invoice.paid"){
+   const {data:updatedOrgs}=await db.from("organizations").update({subscription_status:"active"}).eq("stripe_customer_id",String(o.customer||"")).select("id,plan");
+   for(const orgRow of updatedOrgs||[]){await markSalesConverted(db,String(orgRow.id),String(orgRow.plan||"paid"));await resolveCustomerSuccessPaymentRisk(db,String(orgRow.id))}
+  }
   if(e.id)await db.from("stripe_events").update({status:"processed",last_error:null,updated_at:new Date().toISOString()}).eq("id",String(e.id));
   return new Response("ok");
  }catch(err){console.error(err);try{const e=JSON.parse(payload);if(e?.id){const url=Deno.env.get("SUPABASE_URL")!,sec=JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")||"{}").default||Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;const db=createClient(url,sec,{auth:{persistSession:false}});await db.from("stripe_events").update({status:"failed",last_error:String(err).slice(0,1000),updated_at:new Date().toISOString()}).eq("id",String(e.id));}}catch{}return new Response("error",{status:500})}
