@@ -17,7 +17,7 @@
 .assetstatus a{color:var(--gold2);font-weight:850}
 .assetslist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
 .assetrow,.assetempty{border:1px solid var(--line);background:#11181b;border-radius:13px;padding:13px}
-.assetrow{display:flex;justify-content:space-between;gap:16px;align-items:center}
+.assetrow{display:flex;justify-content:space-between;gap:16px;align-items:center;width:100%;color:var(--text);text-align:left;font:inherit;cursor:pointer}.assetrow:hover{border-color:#536169;background:#172126;transform:translateY(-1px)}
 .assetrow strong{display:block;font-size:12px}
 .assetrow span{display:block;color:var(--muted);font-size:10px;margin-top:4px;text-transform:capitalize}
 .assetrow small{color:#738189;font-size:9px;white-space:nowrap}
