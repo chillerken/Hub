@@ -35,6 +35,7 @@
   const privacyUrl = String(script.dataset.privacyUrl || "").trim();
   const showConsent = !/^(0|false|no)$/i.test(script.dataset.consent || "");
   const storageKey = "reception_ai:" + token;
+  const campaignCode = String(script.dataset.campaign || new URLSearchParams(window.location.search).get("rai_campaign") || "").trim().slice(0,80);
 
   const host = document.createElement("div");
   host.id = "reception-ai-widget";
@@ -366,7 +367,8 @@
           contact_consent: Boolean(consent?.checked),
           marketing_consent: false,
           lead_id: state.lead_id,
-          conversation_id: state.conversation_id
+          conversation_id: state.conversation_id,
+          campaign_code: campaignCode || null
         })
       });
       const data = await response.json().catch(() => ({}));
