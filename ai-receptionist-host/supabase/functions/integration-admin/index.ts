@@ -100,6 +100,156 @@ Deno.serve(async(req:Request)=>{
       return out({ok:true,integration:updated,warning:disconnectWarning});
     }
 
+    if(action==="verify_calendar"){
+      if(integration.provider!=="google_calendar"||integration.channel!=="calendar"){
+        return out({error:"Google Calendar integration required"},400);
+      }
+
+      if(integration?.config?.calendar_bridge_mode===true){
+        const verifiedAt=new Date().toISOString();
+        const nextConfig={
+          ...(integration.config||{}),
+          calendar_id:clean(integration?.config?.calendar_id||"primary",500),
+          bridge_connected:true,
+          calendar_summary:clean(integration?.config?.calendar_summary||"redant.gj@gmail.com",300),
+          calendar_timezone:clean(integration?.config?.calendar_timezone||"Europe/Brussels",120),
+          calendar_access_role:clean(integration?.config?.calendar_access_role||"owner",80)
+        };
+        const {data:updated,error:updateErr}=await serviceDb.from("tenant_integrations").update({
+          status:"active",
+          config:nextConfig,
+          last_verified_at:verifiedAt,
+          last_error:null,
+          updated_at:verifiedAt
+        }).eq("id",integration.id).eq("organization_id",membership.organization_id)
+          .select("id,channel,provider,status,config,last_verified_at,last_error").single();
+        if(updateErr) throw updateErr;
+        return out({ok:true,integration:updated,bridge:true});
+      }
+
+      const {data:rawCredential,error:credReadErr}=await serviceDb.rpc("get_integration_credential",{
+        p_integration_id:integration.id,
+        p_organization_id:membership.organization_id
+      });
+      if(credReadErr) throw credReadErr;
+
+      let credential:any={};
+      if(rawCredential){try{credential=JSON.parse(rawCredential)}catch{}}
+      const refreshToken=clean(credential?.refresh_token,6000);
+      let accessToken=clean(credential?.access_token,6000);
+      let expiresAt=Number(credential?.expires_at||0);
+
+      if(!refreshToken&&!accessToken){
+        await serviceDb.from("tenant_integrations").update({
+          status:"needs_setup",
+          last_error:"Google OAuth-authenticatie ontbreekt. Rond de Google-toestemmingsflow volledig af.",
+          last_verified_at:null,
+          updated_at:new Date().toISOString()
+        }).eq("id",integration.id).eq("organization_id",membership.organization_id);
+        return out({
+          ok:false,
+          code:"google_calendar_oauth_required",
+          detail:"Er is nog geen Google OAuth-token opgeslagen. Klik op Google Agenda koppelen en rond de Google-toestemming volledig af."
+        },200);
+      }
+
+      if(!accessToken||expiresAt<=Date.now()+60_000){
+        if(!refreshToken){
+          return out({ok:false,code:"google_calendar_reauthorize_required",detail:"De Google-sessie is verlopen en er is geen refresh token. Autoriseer Google Agenda opnieuw."},200);
+        }
+        const [{data:clientId},{data:clientSecret}]=await Promise.all([
+          serviceDb.rpc("get_platform_secret",{p_name:"reception_ai_google_client_id"}),
+          serviceDb.rpc("get_platform_secret",{p_name:"reception_ai_google_client_secret"})
+        ]);
+        if(!clientId||!clientSecret){
+          return out({ok:false,code:"google_oauth_platform_setup_required",detail:"Google OAuth is nog niet centraal geconfigureerd."},200);
+        }
+        const form=new URLSearchParams({
+          client_id:String(clientId),
+          client_secret:String(clientSecret),
+          refresh_token:refreshToken,
+          grant_type:"refresh_token"
+        });
+        const tr=await fetch("https://oauth2.googleapis.com/token",{
+          method:"POST",
+          headers:{"Content-Type":"application/x-www-form-urlencoded"},
+          body:form
+        });
+        const tj=await tr.json().catch(()=>({}));
+        if(!tr.ok){
+          const detail=clean(tj?.error_description||tj?.error||tr.statusText,800);
+          await serviceDb.from("tenant_integrations").update({
+            status:"needs_setup",last_error:"Google token vernieuwen mislukt: "+detail,last_verified_at:null,updated_at:new Date().toISOString()
+          }).eq("id",integration.id).eq("organization_id",membership.organization_id);
+          return out({ok:false,code:"google_calendar_reauthorize_required",detail:"Google-token kon niet worden vernieuwd. Autoriseer Google Agenda opnieuw."},200);
+        }
+        accessToken=clean(tj?.access_token,6000);
+        expiresAt=Date.now()+Math.max(0,Number(tj?.expires_in||3600)-60)*1000;
+        const nextCredential={
+          ...credential,
+          refresh_token:refreshToken,
+          access_token:accessToken,
+          expires_at:expiresAt,
+          token_type:clean(tj?.token_type||credential?.token_type||"Bearer",100),
+          scope:clean(tj?.scope||credential?.scope||"https://www.googleapis.com/auth/calendar.events",3000)
+        };
+        const {error:credStoreErr}=await serviceDb.rpc("set_integration_credential",{
+          p_integration_id:integration.id,
+          p_organization_id:membership.organization_id,
+          p_secret:JSON.stringify(nextCredential)
+        });
+        if(credStoreErr) throw credStoreErr;
+      }
+
+      const vr=await fetch("https://www.googleapis.com/calendar/v3/calendars/primary?fields=id,summary,timeZone,accessRole",{
+        headers:{Authorization:`Bearer ${accessToken}`}
+      });
+      const vj=await vr.json().catch(()=>({}));
+      if(!vr.ok){
+        const detail=clean(vj?.error?.message||vr.statusText,800);
+        await serviceDb.from("tenant_integrations").update({
+          status:"needs_setup",last_error:"Google Calendar verificatie mislukt: "+detail,last_verified_at:null,updated_at:new Date().toISOString()
+        }).eq("id",integration.id).eq("organization_id",membership.organization_id);
+        return out({ok:false,code:"google_calendar_verify_failed",detail},200);
+      }
+
+      const verifiedAt=new Date().toISOString();
+      const nextConfig={
+        ...(integration.config||{}),
+        calendar_id:"primary",
+        scope:"https://www.googleapis.com/auth/calendar.events",
+        oauth_connected:true,
+        calendar_summary:clean(vj?.summary,300)||null,
+        calendar_timezone:clean(vj?.timeZone,120)||null,
+        calendar_access_role:clean(vj?.accessRole,80)||null
+      };
+      const {data:updated,error:updateErr}=await serviceDb.from("tenant_integrations").update({
+        status:"active",
+        config:nextConfig,
+        last_verified_at:verifiedAt,
+        last_error:null,
+        updated_at:verifiedAt
+      }).eq("id",integration.id).eq("organization_id",membership.organization_id)
+        .select("id,channel,provider,status,config,last_verified_at,last_error").single();
+      if(updateErr) throw updateErr;
+
+      await serviceDb.from("audit_events").insert({
+        organization_id:membership.organization_id,
+        actor_user_id:user.id,
+        event_type:"integration.google_calendar_verified",
+        entity_type:"tenant_integration",
+        entity_id:integration.id,
+        payload:{
+          calendar_id:"primary",
+          calendar_summary:nextConfig.calendar_summary,
+          timezone:nextConfig.calendar_timezone,
+          access_role:nextConfig.calendar_access_role
+        }
+      });
+
+      return out({ok:true,integration:updated});
+    }
+
     if(action!=="configure") return out({error:"Unknown action"},400);
 
     const config=(body.config&&typeof body.config==="object"&&!Array.isArray(body.config))?body.config:{};
@@ -122,21 +272,33 @@ Deno.serve(async(req:Request)=>{
       }
     } else if(integration.provider==="meta_whatsapp"){
       if(integration.channel!=="whatsapp") return out({error:"Meta WhatsApp is only valid for WhatsApp"},400);
-      if(!clean(nextConfig.phone_number_id,100)) return out({error:"phone_number_id is required"},400);
-      if(!/^v\d+\.\d+$/.test(clean(nextConfig.api_version,20))) return out({error:"api_version must look like v23.0"},400);
-      if(activate && !secret){
-        const {data:existing}=await serviceDb.rpc("get_integration_credential",{
-          p_integration_id:integration.id,p_organization_id:membership.organization_id
-        });
-        if(!existing) return out({error:"WhatsApp access token required before activation"},400);
+      const izapBridge=nextConfig.izap_bridge_mode===true;
+      if(izapBridge){
+        if(!clean(nextConfig.izap_business_id,100)) return out({error:"iZap business id is required"},400);
+        if(!clean(nextConfig.phone_number_id,100)) return out({error:"phone_number_id is required"},400);
+      }else{
+        if(!clean(nextConfig.phone_number_id,100)) return out({error:"phone_number_id is required"},400);
+        if(!/^v\d+\.\d+$/.test(clean(nextConfig.api_version,20))) return out({error:"api_version must look like v23.0"},400);
+        if(activate && !secret){
+          const {data:existing}=await serviceDb.rpc("get_integration_credential",{
+            p_integration_id:integration.id,p_organization_id:membership.organization_id
+          });
+          if(!existing) return out({error:"WhatsApp access token required before activation"},400);
+        }
       }
     } else if(integration.provider==="stripe"){
       if(integration.channel!=="payment") return out({error:"Stripe is only valid for payment"},400);
       if(!/^https:\/\//i.test(clean(nextConfig.success_url,1000))||!/^https:\/\//i.test(clean(nextConfig.cancel_url,1000))) return out({error:"HTTPS success_url and cancel_url are required"},400);
     } else if(integration.provider==="webhook"){
       if(!/^https:\/\//i.test(clean(nextConfig.endpoint,1000))) return out({error:"HTTPS webhook endpoint required"},400);
-    } else if(activate && integration.provider==="google_calendar"){
-      return out({error:"google_calendar runtime adapter is not enabled yet"},409);
+    } else if(integration.provider==="google_calendar"){
+      if(integration.channel!=="calendar") return out({error:"Google Calendar is only valid for calendar"},400);
+      if(activate && nextConfig.calendar_bridge_mode===true){
+        nextConfig.calendar_id=clean(nextConfig.calendar_id||"primary",500);
+        nextConfig.bridge_connected=true;
+      }else if(activate){
+        return out({error:"Use Google OAuth or enable calendar bridge mode before activation"},409);
+      }
     }
 
     let credentialToStore=secret;
@@ -149,9 +311,13 @@ Deno.serve(async(req:Request)=>{
       if(existingRaw){try{existing=JSON.parse(existingRaw)}catch{}}
       const webhookSecret=clean(body.webhook_secret,2000)||clean(existing?.webhook_secret,2000);
       const secretKey=secret||clean(existing?.secret_key,2000);
-      if(activate && (!secretKey || (!secretKey.startsWith("sk_")&&!secretKey.startsWith("rk_")))) return out({error:"Stripe secret/restricted key required before activation"},400);
+      const bridgeMode=nextConfig.stripe_bridge_mode===true;
+      const bridgeToken=clean(existing?.bridge_token,2000);
+      const bridgeUrl=clean(nextConfig.stripe_bridge_url,1000);
+      if(activate && bridgeMode && (!bridgeToken || !/^https:\/\//i.test(bridgeUrl))) return out({error:"Stripe bridge configuration is incomplete"},400);
+      if(activate && !bridgeMode && (!secretKey || (!secretKey.startsWith("sk_")&&!secretKey.startsWith("rk_")))) return out({error:"Stripe secret/restricted key required before activation"},400);
       if(body.webhook_secret && !webhookSecret.startsWith("whsec_")) return out({error:"Stripe webhook signing secret must start with whsec_"},400);
-      stripeCredential={...existing,secret_key:secretKey,webhook_secret:webhookSecret};
+      stripeCredential={...existing,...(secret?{secret_key:secretKey}:{}),webhook_secret:webhookSecret};
       credentialToStore=(secret||body.webhook_secret)?JSON.stringify(stripeCredential):"";
     }
 
@@ -207,28 +373,68 @@ Deno.serve(async(req:Request)=>{
     }
 
     if(activate && integration.provider==="meta_whatsapp"){
-      const {data:tokenValue}=await serviceDb.rpc("get_integration_credential",{
-        p_integration_id:integration.id,p_organization_id:membership.organization_id
-      });
-      try{
-        const vr=await fetch(`https://graph.facebook.com/${nextConfig.api_version}/${nextConfig.phone_number_id}?fields=display_phone_number,verified_name,quality_rating`,{
-          headers:{Authorization:`Bearer ${tokenValue}`}
-        });
-        const vj=await vr.json().catch(()=>({}));
-        if(!vr.ok){
-          return out({error:"WhatsApp credential verification failed",detail:clean(vj?.error?.message||vr.statusText,800)},400);
-        }
+      if(nextConfig.izap_bridge_mode===true){
+        if(!clean(nextConfig.izap_business_id,100)) return out({error:"iZap business id is required"},400);
+        if(!clean(nextConfig.phone_number_id,100)) return out({error:"iZap phone number id is required"},400);
         verifiedAt=new Date().toISOString();
-        nextConfig.display_phone_number=vj.display_phone_number||nextConfig.display_phone_number||null;
-        nextConfig.verified_name=vj.verified_name||nextConfig.verified_name||null;
-        nextConfig.quality_rating=vj.quality_rating||nextConfig.quality_rating||null;
-      }catch(e){
-        lastError=clean(e instanceof Error?e.message:e,800);
-        return out({error:"WhatsApp verification failed",detail:lastError},400);
+        nextConfig.izap_bridge_verified=true;
+      }else{
+        const {data:tokenValue}=await serviceDb.rpc("get_integration_credential",{
+          p_integration_id:integration.id,p_organization_id:membership.organization_id
+        });
+        try{
+          const vr=await fetch(`https://graph.facebook.com/${nextConfig.api_version}/${nextConfig.phone_number_id}?fields=display_phone_number,verified_name,quality_rating`,{
+            headers:{Authorization:`Bearer ${tokenValue}`}
+          });
+          const vj=await vr.json().catch(()=>({}));
+          if(!vr.ok){
+            return out({error:"WhatsApp credential verification failed",detail:clean(vj?.error?.message||vr.statusText,800)},400);
+          }
+          verifiedAt=new Date().toISOString();
+          nextConfig.display_phone_number=vj.display_phone_number||nextConfig.display_phone_number||null;
+          nextConfig.verified_name=vj.verified_name||nextConfig.verified_name||null;
+          nextConfig.quality_rating=vj.quality_rating||nextConfig.quality_rating||null;
+        }catch(e){
+          lastError=clean(e instanceof Error?e.message:e,800);
+          return out({error:"WhatsApp verification failed",detail:lastError},400);
+        }
       }
     }
 
     if(activate && integration.provider==="stripe"){
+      if(nextConfig.stripe_bridge_mode===true){
+        const {data:rawStripe}=await serviceDb.rpc("get_integration_credential",{
+          p_integration_id:integration.id,p_organization_id:membership.organization_id
+        });
+        let stored:any={};
+        try{stored=JSON.parse(rawStripe||"{}")}catch{}
+        const bridgeToken=clean(stored?.bridge_token,2000);
+        const bridgeUrl=clean(nextConfig.stripe_bridge_url,1000);
+        const webhookSecret=clean(stored?.webhook_secret,2000);
+        const webhookEndpointId=clean(nextConfig.webhook_endpoint_id||stored?.webhook_endpoint_id,500);
+        if(!bridgeToken||!/^https:\/\//i.test(bridgeUrl)) return out({error:"Stripe bridge configuration is incomplete"},400);
+        if(!webhookSecret.startsWith("whsec_")||!webhookEndpointId) return out({error:"Stripe bridge webhook is not provisioned"},400);
+        try{
+          const vr=await fetch(bridgeUrl,{
+            method:"POST",
+            headers:{"Content-Type":"application/json","x-reception-bridge-token":bridgeToken},
+            body:JSON.stringify({action:"health"})
+          });
+          const vj=await vr.json().catch(()=>({}));
+          if(!vr.ok||vj?.ok!==true) return out({error:"Stripe bridge verification failed",detail:clean(vj?.detail||vj?.error||vr.statusText,800)},400);
+          if(nextConfig.stripe_account_id&&vj?.account_id&&String(nextConfig.stripe_account_id)!==String(vj.account_id)){
+            return out({error:"Stripe bridge account mismatch"},400);
+          }
+          nextConfig.stripe_account_id=vj?.account_id||nextConfig.stripe_account_id||null;
+          nextConfig.stripe_country=vj?.country||nextConfig.stripe_country||null;
+          nextConfig.stripe_mode="live";
+          nextConfig.webhook_managed=true;
+          verifiedAt=new Date().toISOString();
+        }catch(e){
+          lastError=clean(e instanceof Error?e.message:e,800);
+          return out({error:"Stripe bridge verification failed",detail:lastError},400);
+        }
+      }else{
       const {data:rawStripe}=await serviceDb.rpc("get_integration_credential",{
         p_integration_id:integration.id,p_organization_id:membership.organization_id
       });
@@ -334,6 +540,8 @@ Deno.serve(async(req:Request)=>{
       }catch(e){
         lastError=clean(e instanceof Error?e.message:e,800);
         return out({error:"Stripe verification failed",detail:lastError},400);
+      }
+    
       }
     }
 
