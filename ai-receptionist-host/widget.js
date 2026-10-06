@@ -30,6 +30,10 @@
   const CONFIG_URL = API_BASE + "/public-widget-config";
   const CHAT_URL = API_BASE + "/public-reception-chat";
   const position = script.dataset.position === "left" ? "left" : "right";
+  const bottomRaw = String(script.dataset.bottom || "").trim();
+  const bottomOffset = /^(?:\d{1,4}(?:\.\d+)?)(?:px|rem|vh|dvh|%)$/i.test(bottomRaw)
+    ? bottomRaw
+    : "";
   const launcherLabel = script.dataset.label || "Chat";
   const initialOpen = /^(1|true|yes)$/i.test(script.dataset.open || "");
   const privacyUrl = String(script.dataset.privacyUrl || "").trim();
@@ -56,7 +60,7 @@
       --rai-border: rgba(17,24,39,.12);
       --rai-user: #f1f5f9;
       position: fixed;
-      bottom: 18px;
+      bottom: ${bottomOffset || "18px"};
       ${position}: 18px;
       z-index: 2147483000;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -206,7 +210,7 @@
       font-size: 12px;
     }
     @media (max-width: 520px) {
-      .rai-wrap { bottom: 10px; ${position}: 10px; }
+      .rai-wrap { bottom: ${bottomOffset || "10px"}; ${position}: 10px; }
       .rai-panel {
         width: calc(100vw - 20px);
         height: min(72vh, 640px);
