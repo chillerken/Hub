@@ -398,9 +398,13 @@ if(view==="agents"){const salesCfg=agentData.sales||{},marketingCfg=agentData.ma
       <div class="card"><div class="muted">Demo-aanvragen</div><div class="metric">${esc(saasFunnel.demo_requests||0)}</div></div>
       <div class="card"><div class="muted">Wacht op onboarding</div><div class="metric">${esc(saasFunnel.awaiting_onboarding||0)}</div></div>
       <div class="card"><div class="muted">Onboarding gestart</div><div class="metric">${esc(saasFunnel.onboarding_started||0)}</div><small class="muted">${esc(saasFunnel.demo_to_onboarding_rate||0)}% van demo</small></div>
+      <div class="card"><div class="muted">Kern klaar</div><div class="metric">${esc(saasFunnel.core_ready||0)}</div><small class="muted">${esc(saasFunnel.onboarding_to_core_ready_rate||0)}% van onboarding</small></div>
+      <div class="card"><div class="muted">Echt gebruik</div><div class="metric">${esc(saasFunnel.usage_started||0)}</div><small class="muted">${esc(saasFunnel.core_ready_to_usage_rate||0)}% van kernklaar</small></div>
+      <div class="card"><div class="muted">Waarde-event</div><div class="metric">${esc(saasFunnel.value_event||0)}</div><small class="muted">${esc(saasFunnel.usage_to_value_rate||0)}% van gebruik</small></div>
+      <div class="card"><div class="muted">Waarde bewezen</div><div class="metric">${esc(saasFunnel.value_proven||0)}</div></div>
       <div class="card"><div class="muted">Betaald geconverteerd</div><div class="metric">${esc(saasFunnel.converted_paid||0)}</div><small class="muted">${esc(saasFunnel.demo_to_paid_rate||0)}% van demo</small></div>
     </div>
-    <p class="muted">Onboarding → betaald: <b>${esc(saasFunnel.onboarding_to_paid_rate||0)}%</b>. Een betaalde Stripe-activatie sluit de saleslead automatisch als gewonnen af.</p>
+    <p class="muted">Waarde bewezen → betaald: <b>${esc(saasFunnel.value_proven_to_paid_rate||0)}%</b> · onboarding → betaald: <b>${esc(saasFunnel.onboarding_to_paid_rate||0)}%</b>. Stripe sluit een werkelijk betaald account automatisch als gewonnen af.</p>
   </div>
   <div class="grid commercialmetrics">
     <div class="card"><div class="muted">Leads</div><div class="metric">${esc(funnel.leads||0)}</div></div>
