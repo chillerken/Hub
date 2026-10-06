@@ -241,7 +241,27 @@ async function deployReceptionist(){
   lastAsset={id:data.asset_id};assetStatus.innerHTML='✓ Live receptionist aangemaakt · <a target="_blank" rel="noopener" href="'+escHtml(data.widget_url)+'">Open live widget ↗</a>';await loadPlatformContext();
  }catch(e){assetStatus.textContent='Niet aangemaakt: '+errorText(e)}
 }
-async function saveWebsite(){const v=values();assetStatus.textContent='Website opslaan…';try{await saveCurrentAsset('website',(v.business||'Website')+' – website','ready')}catch(e){assetStatus.textContent='Opslaan mislukt: '+errorText(e)}}
+async function saveWebsite(){const v=values();assetStatus.textContent='Website opslaan…';try{return await saveCurrentAsset('website',(v.business||'Website')+' – website','ready')}catch(e){assetStatus.textContent='Opslaan mislukt: '+errorText(e);throw e}}
+async function publishWebsite(){
+ try{
+  assetStatus.textContent='Website publiceren…';
+  const asset=lastAsset?.id?lastAsset:await saveWebsite();
+  const data=await platformInvoke('creator-hub-action',{action:'publish_website',asset_id:asset.id});
+  lastAsset={...asset,status:'live',public_url:data.public_url};
+  assetStatus.innerHTML='✓ Website live · <a href="'+escHtml(data.public_url)+'" target="_blank" rel="noopener">Open publieke website ↗</a>';
+  renderAssetActions();await loadPlatformContext();
+ }catch(e){assetStatus.textContent='Publiceren mislukt: '+errorText(e)}
+}
+async function unpublishWebsite(){
+ if(!lastAsset?.id){assetStatus.textContent='Er is nog geen opgeslagen website.';return}
+ try{
+  assetStatus.textContent='Website offline halen…';
+  await platformInvoke('creator-hub-action',{action:'unpublish_website',asset_id:lastAsset.id});
+  lastAsset={...lastAsset,status:'ready',public_url:null};
+  assetStatus.textContent='✓ Website is offline gehaald.';
+  renderAssetActions();await loadPlatformContext();
+ }catch(e){assetStatus.textContent='Offline halen mislukt: '+errorText(e)}
+}
 async function saveLeadAgent(){
  const v=values();
  if(!v.organization_id){assetStatus.textContent='Kies eerst een organisatie.';return}
@@ -281,7 +301,7 @@ async function sendQuote(){
 function renderAssetActions(){
  assetActions.replaceChildren();assetStatus.textContent='';if(!lastOutput)return;
  const add=(label,fn,cls='button ghost')=>{const b=document.createElement('button');b.className=cls;b.textContent=label;b.addEventListener('click',fn);assetActions.appendChild(b)};
- if(currentTool==='website'){add('Preview website',previewWebsite);add('Download HTML',downloadWebsite);add('Bewaar website',saveWebsite,'button gold')}
+ if(currentTool==='website'){add('Preview website',previewWebsite);add('Download HTML',downloadWebsite);add('Bewaar website',saveWebsite);lastAsset?.status==='live'?add('Haal website offline',unpublishWebsite):add('Publiceer website',publishWebsite,'button gold')}
  if(currentTool==='quote'){add('Bewaar offerte',saveQuote,'button gold');add('PDF / print',printQuote);add('E-mail offerte',sendQuote)}
  if(currentTool==='receptionist'){add('Maak live receptionist',deployReceptionist,'button gold')}
  if(currentTool==='lead'){add('Lead Agent opslaan / activeren',saveLeadAgent,'button gold')}
