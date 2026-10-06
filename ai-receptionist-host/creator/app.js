@@ -272,8 +272,49 @@ async function clientAppointmentAction(id,mode){
  }catch(e){alert('Afspraakactie mislukt: '+errorText(e))}
 }
 
+function leadRowHtml(x){
+ const opts=['new','qualifying','qualified','follow_up','handoff','won','lost'];
+ const select='<select class="inline-select leadstatus" data-lead-id="'+escHtml(x.id)+'">'+opts.map(s=>'<option value="'+s+'"'+(s===x.status?' selected':'')+'>'+s+'</option>').join('')+'</select>';
+ return '<div class="datarow"><div><strong>'+escHtml(x.name||x.email||x.phone||'Lead')+'</strong><small>'+escHtml(x.summary||x.source||'')+'</small></div><div class="mid">score '+escHtml(x.score)+'</div><div class="right">'+select+'<small>'+escHtml(fmtDate(x.created_at,true))+'</small></div></div>';
+}
+function workflowRowHtml(x){
+ const retry=['blocked','failed'].includes(x.status)
+  ?'<button class="button mini ghost" data-workflow-retry="'+escHtml(x.id)+'">Opnieuw</button>'
+  :'';
+ return '<div class="datarow"><div><strong>'+escHtml(x.action_type)+'</strong><small>'+escHtml(x.last_error||('kanaal: '+x.channel))+'</small></div><div class="mid">'+escHtml(x.status)+'</div><div class="right"><span>'+escHtml((x.attempts||0)+'/'+(x.max_attempts||0)+' · '+fmtDate(x.scheduled_at,true))+'</span><div class="rowactions">'+retry+'</div></div></div>';
+}
+async function setBusinessAgent(agent,active){
+ if(!activeClientId)return;
+ try{
+  await platformInvoke('creator-hub-action',{action:'set_business_agent',organization_id:activeClientId,agent,active});
+  await loadClientDashboard(activeClientId);
+ }catch(e){alert('Agentwijziging mislukt: '+errorText(e))}
+}
+async function setLeadStatus(leadId,status){
+ if(!activeClientId||!leadId)return;
+ try{
+  await platformInvoke('creator-hub-action',{action:'lead_status_action',organization_id:activeClientId,lead_id:leadId,status});
+  await loadClientDashboard(activeClientId);await loadPlatformContext();
+ }catch(e){alert('Leadstatus wijzigen mislukt: '+errorText(e))}
+}
+async function retryClientWorkflow(id){
+ if(!activeClientId||!id)return;
+ try{
+  await platformInvoke('creator-hub-action',{action:'retry_client_workflow',organization_id:activeClientId,workflow_action_id:id});
+  await loadClientDashboard(activeClientId);
+ }catch(e){
+  const msg=errorText(e);
+  if(msg.toLowerCase().includes('leveringsstatus')&&confirm(msg+'\n\nToch opnieuw proberen?')){
+   try{
+    await platformInvoke('creator-hub-action',{action:'retry_client_workflow',organization_id:activeClientId,workflow_action_id:id,confirm_delivery_unknown:true});
+    await loadClientDashboard(activeClientId);
+   }catch(e2){alert('Opnieuw proberen mislukt: '+errorText(e2))}
+  }else alert('Opnieuw proberen mislukt: '+msg);
+ }
+}
+
 function renderClientDashboard(c){
- const o=c.organization||{},p=c.profile||{},la=c.lead_agent,m=c.metrics||{};
+ const o=c.organization||{},p=c.profile||{},la=c.lead_agent,sa=c.sales_agent,ma=c.marketing_agent,m=c.metrics||{};
  const widgetUrl=p.widget_token?'/?widget='+encodeURIComponent(p.widget_token):'/';
  const leads=(c.leads||[]).slice(0,10);
  const appts=(c.appointments||[]).slice(0,10);
@@ -281,15 +322,21 @@ function renderClientDashboard(c){
  const payments=(c.payments||[]).slice(0,8);
  const assets=(c.assets||[]).slice(0,10);
  const ints=c.integrations||[];
+ const opps=(c.sales_opportunities||[]).slice(0,8);
+ const campaigns=(c.marketing_campaigns||[]).slice(0,8);
 
  const aiBody='<div class="integrationgrid">'+[
   '<div class="integrationcard"><div class="integrationtop"><strong>AI Receptionist</strong><span class="statuschip '+statusClass(p.widget_enabled?'active':'disabled')+'">'+(p.widget_enabled?'live':'uit')+'</span></div><p>'+escHtml(p.receptionist_name||'AI Assistent')+' · '+(p.automation_enabled?'automatisering actief':'automatisering uit')+'</p></div>',
-  '<div class="integrationcard"><div class="integrationtop"><strong>Lead Agent</strong><span class="statuschip '+statusClass(la?.active?'active':'disabled')+'">'+(la?.active?'actief':'niet actief')+'</span></div><p>'+(la?escHtml(la.name)+' · score ≥ '+escHtml(la.min_score)+' · '+escHtml(la.preferred_channel):'Nog geen Lead Agent-configuratie')+'</p></div>'
+  '<div class="integrationcard"><div class="integrationtop"><strong>Lead Agent</strong><span class="statuschip '+statusClass(la?.active?'active':'disabled')+'">'+(la?.active?'actief':'niet actief')+'</span></div><p>'+(la?escHtml(la.name)+' · score ≥ '+escHtml(la.min_score)+' · '+escHtml(la.preferred_channel):'Nog geen Lead Agent-configuratie')+'</p></div>',
+  '<div class="integrationcard"><div class="integrationtop"><strong>Sales Agent</strong><span class="statuschip '+statusClass(sa?.active?'active':'disabled')+'">'+(sa?.active?'actief':'uit')+'</span></div><p>'+(sa?escHtml(sa.name)+' · score ≥ '+escHtml(sa.min_score)+' · '+escHtml(sa.preferred_channel):'Nog geen configuratie')+'</p><div class="rowactions"><button class="button mini ghost" id="toggleSalesAgent">'+(sa?.active?'Uitschakelen':'Activeren')+'</button></div></div>',
+  '<div class="integrationcard"><div class="integrationtop"><strong>Marketing Agent</strong><span class="statuschip '+statusClass(ma?.active?'active':'disabled')+'">'+(ma?.active?'actief':'uit')+'</span></div><p>'+(ma?escHtml(ma.name)+' · '+escHtml((ma.channels||[]).join(', '))+' · '+escHtml(ma.cadence_per_week)+'×/week':'Nog geen configuratie')+'</p><div class="rowactions"><button class="button mini ghost" id="toggleMarketingAgent">'+(ma?.active?'Uitschakelen':'Activeren')+'</button></div></div>'
  ].join('')+'</div>';
 
- const leadBody='<div class="datagrid">'+(leads.length?leads.map(x=>rowHtml(x.name||x.email||x.phone||'Lead',x.summary||x.source,x.status,'score '+x.score+' · '+fmtDate(x.created_at,true))).join(''):'<div class="assetempty">Nog geen leads.</div>')+'</div>';
+ const leadBody='<div class="datagrid">'+(leads.length?leads.map(leadRowHtml).join(''):'<div class="assetempty">Nog geen leads.</div>')+'</div>';
  const apptBody='<div class="datagrid">'+(appts.length?appts.map(appointmentRowHtml).join(''):'<div class="assetempty">Nog geen afspraken.</div>')+'</div>';
- const flowBody='<div class="datagrid">'+(flows.length?flows.map(x=>rowHtml(x.action_type,x.last_error||('kanaal: '+x.channel),x.status,(x.attempts||0)+'/'+(x.max_attempts||0)+' · '+fmtDate(x.scheduled_at,true))).join(''):'<div class="assetempty">Nog geen workflowacties.</div>')+'</div>';
+ const flowBody='<div class="datagrid">'+(flows.length?flows.map(workflowRowHtml).join(''):'<div class="assetempty">Nog geen workflowacties.</div>')+'</div>';
+ const salesBody='<div class="datagrid">'+(opps.length?opps.map(x=>rowHtml((x.temperature||'cold')+' opportunity',x.next_action||x.reason||'',x.stage||'',(x.confidence||0)+'% · '+fmtDate(x.updated_at,true))).join(''):'<div class="assetempty">Nog geen Sales Agent-analyses.</div>')+'</div>';
+ const marketingBody='<div class="datagrid">'+(campaigns.length?campaigns.map(x=>rowHtml(x.hook||x.objective,x.audience||'',x.channel+' · '+x.status,fmtDate(x.created_at,true))).join(''):'<div class="assetempty">Nog geen marketingcampagnes.</div>')+'</div>';
  const intBody='<div class="integrationgrid">'+(ints.length?ints.map(x=>'<div class="integrationcard"><div class="integrationtop"><strong>'+escHtml(x.channel)+' · '+escHtml(x.provider)+'</strong><span class="statuschip '+statusClass(x.status)+'">'+escHtml(x.status)+'</span></div><p>'+(x.last_error?escHtml(x.last_error):'Laatste verificatie: '+escHtml(fmtDate(x.last_verified_at,true)))+'</p></div>').join(''):'<div class="assetempty">Geen integraties geconfigureerd.</div>')+'</div>';
  const paymentBody='<div class="datagrid">'+(payments.length?payments.map(x=>rowHtml(fmtMoney(x.amount_cents,x.currency),x.provider||'betaling',x.status,fmtDate(x.paid_at||x.created_at,true))).join(''):'<div class="assetempty">Nog geen betalingen.</div>')+'</div>';
  const assetBody='<div class="datagrid">'+(assets.length?assets.map(x=>rowHtml(x.title,x.asset_type,x.status,fmtDate(x.updated_at,true))).join(''):'<div class="assetempty">Nog geen Hub-assets voor deze klant.</div>')+'</div>';
@@ -313,8 +360,10 @@ function renderClientDashboard(c){
     '<div class="dossiermetric"><span>Ontvangen</span><strong class="money">'+escHtml(fmtMoney(m.payments_paid_cents,'EUR'))+'</strong></div>'+
     '<div class="dossiermetric"><span>Openstaand</span><strong class="money">'+escHtml(fmtMoney(m.payments_pending_cents,'EUR'))+'</strong></div>'+
   '</div>'+
-  sectionHtml('AI-systemen','Receptionist en Lead Agent',aiBody)+
-  sectionHtml('Leads','Laatste 10',leadBody)+
+  sectionHtml('AI-systemen','Receptionist, Lead, Sales en Marketing',aiBody)+
+  sectionHtml('Leads','Laatste 10 · status direct aanpasbaar',leadBody)+
+  sectionHtml('Sales opportunities','Recente Sales Agent-analyses',salesBody)+
+  sectionHtml('Marketingcampagnes','Recente opgeslagen drafts',marketingBody)+
   sectionHtml('Afspraken','Laatste 10',apptBody)+
   sectionHtml('Workflow-acties','Laatste 12',flowBody)+
   sectionHtml('Integraties','Operationele status',intBody)+
@@ -327,6 +376,10 @@ function renderClientDashboard(c){
  $('saveClientStatusBtn')?.addEventListener('click',()=>setClientRuntime({organization_status:statusSel.value}));
  $('editReceptionBtn')?.addEventListener('click',()=>openClientBuilder('receptionist'));
  $('editLeadBtn')?.addEventListener('click',()=>openClientBuilder('lead'));
+ $('toggleSalesAgent')?.addEventListener('click',()=>setBusinessAgent('sales',!sa?.active));
+ $('toggleMarketingAgent')?.addEventListener('click',()=>setBusinessAgent('marketing',!ma?.active));
+ clientDetail.querySelectorAll('.leadstatus').forEach(s=>s.addEventListener('change',()=>setLeadStatus(s.dataset.leadId,s.value)));
+ clientDetail.querySelectorAll('[data-workflow-retry]').forEach(b=>b.addEventListener('click',()=>retryClientWorkflow(b.dataset.workflowRetry)));
  clientDetail.querySelectorAll('[data-appt-act]').forEach(b=>b.addEventListener('click',()=>clientAppointmentAction(b.dataset.apptId,b.dataset.apptAct)));
 }
 async function setClientRuntime(patch){
