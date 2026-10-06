@@ -352,6 +352,8 @@ if(view==="agents"){const salesCfg=agentData.sales||{},marketingCfg=agentData.ma
   <div class="sectionhead"><div><span class="eyebrow">RESULTAATMETING · 90 DAGEN</span><h2>Revenue Intelligence</h2><p class="muted">Reception AI meet de echte funnel van lead naar contact, afspraak, gewonnen klant en betaalde omzet.</p></div><button id="refreshCommercialAnalytics" class="ghostbtn small" type="button">Ververs resultaten</button></div>
   <div class="grid commercialmetrics">
     <div class="card"><div class="muted">Leads</div><div class="metric">${esc(funnel.leads||0)}</div></div>
+    <div class="card"><div class="muted">Bereikbaar</div><div class="metric">${esc(capture.reachable||0)}</div><small class="muted">${esc(capture.reachable_rate||0)}% met contact + toestemming</small></div>
+    <div class="card"><div class="muted">Hoge intentie bereikbaar</div><div class="metric">${esc(capture.high_intent_reachable||0)}/${esc(capture.high_intent||0)}</div><small class="muted">${esc(capture.high_intent_reachable_rate||0)}%</small></div>
     <div class="card"><div class="muted">Gecontacteerd</div><div class="metric">${esc(funnel.contacted||0)}</div><small class="muted">${esc(funnel.lead_to_contact_rate||0)}%</small></div>
     <div class="card"><div class="muted">Afspraakaanvragen</div><div class="metric">${esc(appointmentStages.requested??funnel.appointments??0)}</div></div>
     <div class="card"><div class="muted">Bevestigde afspraken</div><div class="metric">${esc(appointmentStages.confirmed||0)}</div><small class="muted">${esc(appointmentStages.contact_to_confirmed_rate||0)}% van contact</small></div>
