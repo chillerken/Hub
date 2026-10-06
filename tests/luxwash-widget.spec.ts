@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 const WIDGET_HOST = '#reception-ai-widget';
+const DEFERRED_LAUNCHER = '#reception-ai-direct-launcher';
 const CONFIG_URL =
   'https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/public-widget-config';
 const CHAT_URL =
@@ -25,7 +26,7 @@ async function acceptCookieBannerIfPresent(page: Page) {
   }
 }
 
-test('LuxWash Reception AI laadt, opent en kan antwoorden tonen zonder CRM-testlead', async ({ page, request }) => {
+test('LuxWash Reception AI opent via deferred launcher zonder CRM-testlead', async ({ page, request }) => {
   const configResponse = await request.post(CONFIG_URL, {
     data: { widget_token: WIDGET_TOKEN },
     headers: { 'Content-Type': 'application/json' },
@@ -59,15 +60,18 @@ test('LuxWash Reception AI laadt, opent en kan antwoorden tonen zonder CRM-testl
   await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await acceptCookieBannerIfPresent(page);
 
+  // The lightweight first-party launcher must be present without loading
+  // Reception AI from the third-party host before a visitor explicitly clicks.
+  const deferredLauncher = page.locator(DEFERRED_LAUNCHER);
+  await expect(deferredLauncher).toBeVisible({ timeout: 30_000 });
+  await deferredLauncher.click();
+
+  // Clicking the launcher explicitly loads widget.js and opens the panel.
   const host = page.locator(WIDGET_HOST);
   await expect(host).toHaveCount(1, { timeout: 30_000 });
 
-  const launcher = host.locator('.rai-launcher');
-  await expect(launcher).toBeVisible({ timeout: 20_000 });
-  await launcher.click();
-
   const panel = host.locator('.rai-panel');
-  await expect(panel).toHaveAttribute('data-open', 'true');
+  await expect(panel).toHaveAttribute('data-open', 'true', { timeout: 20_000 });
   await expect(panel).toBeVisible();
 
   const title = host.locator('.rai-title strong');
