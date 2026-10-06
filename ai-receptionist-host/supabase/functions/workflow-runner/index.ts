@@ -44,11 +44,13 @@ function actionMessage(action:any, lead:any, profile:any, appointment:any) {
           summary ? `Laatste vraag: ${summary}` : null
         ].filter(Boolean).join("\n")
       };
-    case "lead_follow_up":
+    case "lead_follow_up": {
+      const custom=clean(action?.payload?.custom_message||"",1800);
       return {
-        subject:`Uw aanvraag bij ${business}`,
-        text:`Beste ${name},\n\nBedankt voor uw aanvraag bij ${business}. We hebben uw gegevens en vraag goed ontvangen. Uw aanvraag wordt verder opgevolgd. Een aanvraag is pas definitief zodra een afspraak of voorstel uitdrukkelijk bevestigd is.\n\nMet vriendelijke groet,\n${business}`
+        subject:clean(action?.payload?.subject||`Uw aanvraag bij ${business}`,180),
+        text:custom||`Beste ${name},\n\nBedankt voor uw aanvraag bij ${business}. We hebben uw gegevens en vraag goed ontvangen. Uw aanvraag wordt verder opgevolgd. Een aanvraag is pas definitief zodra een afspraak of voorstel uitdrukkelijk bevestigd is.\n\nMet vriendelijke groet,\n${business}`
       };
+    }
     case "payment_link_send":
       return {
         subject:`Betaalverzoek – ${business}`,
@@ -89,6 +91,24 @@ async function finish(db:any, action:any, outcome:string, opts:any={}) {
     p_retry_after_seconds:opts.retry_after_seconds||null
   });
   if(error) console.error("finish_workflow_action",action.id,error.message);
+
+  const stepId=action?.payload?.sales_sequence_step_id;
+  const sequenceId=action?.payload?.sales_sequence_id;
+  if(!error&&stepId&&sequenceId&&outcome==="completed"){
+    await db.from("sales_sequence_steps").update({status:"completed",updated_at:new Date().toISOString()})
+      .eq("id",stepId).eq("organization_id",action.organization_id);
+    const {data:remaining}=await db.from("sales_sequence_steps").select("step_no")
+      .eq("sequence_id",sequenceId).eq("organization_id",action.organization_id)
+      .not("status","in","(completed,skipped,cancelled)")
+      .order("step_no",{ascending:true}).limit(1);
+    if(remaining?.length){
+      await db.from("sales_sequences").update({current_step:remaining[0].step_no,updated_at:new Date().toISOString()})
+        .eq("id",sequenceId).eq("organization_id",action.organization_id);
+    }else{
+      await db.from("sales_sequences").update({status:"completed",updated_at:new Date().toISOString()})
+        .eq("id",sequenceId).eq("organization_id",action.organization_id);
+    }
+  }
   return data;
 }
 
@@ -209,19 +229,67 @@ async function createStripeCheckout(db:any,action:any,integration:any,lead:any,p
 
   const raw=await credential(db,integration,action.organization_id);
   if(!raw) return {outcome:"blocked",provider:"stripe",error_code:"credential_missing",error_message:"Stripe credential missing"};
+
+  let parsedCredential:any={};
   let secretKey="";
   try{
-    const parsed=JSON.parse(raw);
-    secretKey=clean(parsed?.secret_key,500);
+    parsedCredential=JSON.parse(raw);
+    secretKey=clean(parsedCredential?.secret_key,500);
   }catch{
     secretKey=clean(raw,500);
   }
-  if(!secretKey.startsWith("sk_") && !secretKey.startsWith("rk_")) return {outcome:"blocked",provider:"stripe",error_code:"credential_invalid",error_message:"Stripe secret or restricted key missing"};
 
   const cfg=integration.config||{};
   const successUrl=clean(cfg.success_url,1000);
   const cancelUrl=clean(cfg.cancel_url,1000);
   if(!/^https:\/\//i.test(successUrl)||!/^https:\/\//i.test(cancelUrl)) return {outcome:"blocked",provider:"stripe",error_code:"redirect_url_missing",error_message:"HTTPS success_url and cancel_url are required"};
+
+  const bridgeUrl=clean(cfg.stripe_bridge_url,1000);
+  const bridgeToken=clean(parsedCredential?.bridge_token,500);
+  if(cfg.stripe_bridge_mode===true && /^https:\/\//i.test(bridgeUrl) && bridgeToken){
+    let resp:Response;
+    try{
+      resp=await fetch(bridgeUrl,{
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "x-reception-bridge-token":bridgeToken
+        },
+        body:JSON.stringify({
+          action:"create_checkout",
+          idempotency_key:action.idempotency_key,
+          amount_cents:Number(payment.amount_cents),
+          currency:String(payment.currency||"EUR"),
+          product_name:clean(cfg.product_name||(`Betaling ${profile?.business_name||"service"}`),120),
+          customer_email:isEmail(lead?.email)?lead.email:"",
+          success_url:successUrl,
+          cancel_url:cancelUrl,
+          organization_id:String(action.organization_id),
+          lead_id:String(action.lead_id||""),
+          customer_payment_id:String(payment.id)
+        })
+      });
+    }catch(e){
+      return {outcome:"retry",provider:"stripe_bridge",error_code:"network_error",error_message:String(e),retry_after_seconds:retrySeconds(action.attempts)};
+    }
+    const body=await resp.json().catch(()=>({}));
+    if(resp.ok && body?.checkout_session_id && body?.checkout_url){
+      const {error:updateError}=await db.from("customer_payments")
+        .update({
+          provider:"stripe",
+          provider_payment_id:String(body.checkout_session_id),
+          payment_url:String(body.checkout_url),
+          updated_at:new Date().toISOString()
+        })
+        .eq("id",payment.id).eq("organization_id",action.organization_id);
+      if(updateError) return {outcome:"retry",provider:"stripe_bridge",provider_reference:String(body.checkout_session_id),http_status:resp.status,error_code:"payment_record_update_failed",error_message:updateError.message,retry_after_seconds:60};
+      return {outcome:"completed",provider:"stripe_bridge",provider_reference:String(body.checkout_session_id),http_status:resp.status,response_meta:{checkout_created:true,bridge:true}};
+    }
+    if(resp.status===429||resp.status>=500) return {outcome:"retry",provider:"stripe_bridge",http_status:resp.status,error_code:"provider_retryable",error_message:clean(body?.detail||body?.error||resp.statusText,1000),retry_after_seconds:retrySeconds(action.attempts)};
+    return {outcome:"failed",provider:"stripe_bridge",http_status:resp.status,error_code:clean(body?.error||"provider_rejected",200),error_message:clean(body?.detail||body?.error||resp.statusText,1000)};
+  }
+
+  if(!secretKey.startsWith("sk_") && !secretKey.startsWith("rk_")) return {outcome:"blocked",provider:"stripe",error_code:"credential_invalid",error_message:"Stripe secret or restricted key missing"};
 
   const params=new URLSearchParams();
   params.set("mode","payment");
@@ -333,6 +401,74 @@ async function googleAccessToken(db:any,action:any,integration:any) {
   });
   if(storeErr) return {error:"credential_store_failed",message:storeErr.message,retry:true};
   return {access_token:next.access_token};
+}
+
+async function queueGoogleCalendar(db:any,action:any,integration:any,lead:any,profile:any,appointment:any,operationHint:"sync"|"delete") {
+  if(!appointment?.id) return {outcome:"failed",provider:"google_calendar_bridge",error_code:"appointment_missing",error_message:"Appointment not found"};
+
+  const cfg=integration.config||{};
+  const calendarId=clean(cfg.calendar_id||"primary",500);
+  const timezone=clean(appointment.timezone||"Europe/Brussels",100);
+  const existingEventId=clean(appointment.provider_booking_id||action?.payload?.provider_booking_id,1024);
+
+  if(operationHint==="delete" && !existingEventId){
+    return {outcome:"completed",provider:"google_calendar_bridge",response_meta:{already_absent:true}};
+  }
+  if(operationHint==="sync" && (!appointment.start_at||!appointment.end_at)){
+    return {outcome:"blocked",provider:"google_calendar_bridge",error_code:"scheduling_required",error_message:"A precise start and end time must be resolved before creating a calendar event"};
+  }
+
+  const operation=operationHint==="delete"?"delete":(existingEventId?"update":"create");
+  const summary=clean(`${profile?.business_name||"Afspraak"} – ${lead?.name||"klant"}`,300);
+  const description=[
+    appointment.requested_text?String(appointment.requested_text):null,
+    lead?.email?`E-mail: ${lead.email}`:null,
+    lead?.phone?`Telefoon: ${lead.phone}`:null,
+    `Reception AI appointment: ${appointment.id}`
+  ].filter(Boolean).join("\n");
+
+  const {data:existing,error:existingErr}=await db.from("google_calendar_dispatch_queue")
+    .select("*")
+    .eq("workflow_action_id",action.id)
+    .maybeSingle();
+  if(existingErr) return {outcome:"retry",provider:"google_calendar_bridge",error_code:"queue_lookup_failed",error_message:existingErr.message,retry_after_seconds:60};
+  if(existing?.status==="synced"){
+    return {outcome:"completed",provider:"google_calendar_bridge",provider_reference:existing.provider_event_id||existingEventId||null,response_meta:{queued_external:true,synced:true}};
+  }
+  if(existing && ["pending","processing"].includes(String(existing.status||""))){
+    return {outcome:"blocked",provider:"google_calendar_bridge",error_code:"external_calendar_queued",error_message:"Queued for Google Calendar dispatcher",response_meta:{queue_id:existing.id}};
+  }
+  if(existing && ["failed","manual_required"].includes(String(existing.status||""))){
+    return {outcome:"blocked",provider:"google_calendar_bridge",error_code:"external_calendar_attention_required",error_message:clean(existing.last_error||"Calendar queue requires attention",1000),response_meta:{queue_id:existing.id}};
+  }
+
+  const row:any={
+    organization_id:action.organization_id,
+    workflow_action_id:action.id,
+    appointment_id:appointment.id,
+    operation,
+    calendar_id:calendarId,
+    provider_event_id:existingEventId||null,
+    title:operation==="delete"?null:summary,
+    description:operation==="delete"?null:clean(description,8000),
+    location:operation==="delete"?null:clean(appointment.location||"",1000)||null,
+    start_at:operation==="delete"?null:appointment.start_at,
+    end_at:operation==="delete"?null:appointment.end_at,
+    timezone,
+    status:"pending",
+    attempts:0,
+    max_attempts:3,
+    scheduled_at:action.scheduled_at||new Date().toISOString(),
+    updated_at:new Date().toISOString()
+  };
+
+  const {data:queued,error:queueErr}=await db.from("google_calendar_dispatch_queue")
+    .upsert(row,{onConflict:"workflow_action_id"})
+    .select("id,status,operation")
+    .single();
+  if(queueErr) return {outcome:"retry",provider:"google_calendar_bridge",error_code:"queue_insert_failed",error_message:queueErr.message,retry_after_seconds:60};
+
+  return {outcome:"blocked",provider:"google_calendar_bridge",error_code:"external_calendar_queued",error_message:"Queued for Google Calendar dispatcher",response_meta:{queue_id:queued?.id||null,operation}};
 }
 
 async function syncGoogleCalendar(db:any,action:any,integration:any,lead:any,profile:any,appointment:any) {
@@ -476,6 +612,70 @@ async function cancelGoogleCalendar(db:any,action:any,integration:any,appointmen
   return {outcome:"failed",provider:"google_calendar",http_status:resp.status,error_code:"provider_rejected",error_message:clean(body?.error?.message||resp.statusText,1000)};
 }
 
+async function queueIzapWhatsApp(db:any,action:any,integration:any,lead:any,profile:any,appointment:any) {
+  if(!lead?.phone) return {outcome:"blocked",provider:"izap_whatsapp",error_code:"recipient_missing",error_message:"No WhatsApp phone number"};
+  if(!lead?.contact_consent_at) return {outcome:"failed",provider:"izap_whatsapp",error_code:"contact_consent_required",error_message:"Customer contact consent missing"};
+  if(action.action_type==="retention_follow_up" && !lead?.marketing_consent_at) return {outcome:"failed",provider:"izap_whatsapp",error_code:"marketing_consent_required",error_message:"Retention consent missing"};
+
+  const cfg=integration.config||{};
+  const template=cfg?.templates?.[action.action_type];
+  if(!template?.name || !template?.language) {
+    return {outcome:"blocked",provider:"izap_whatsapp",error_code:"template_missing",error_message:`Approved iZap/WhatsApp template mapping missing for ${action.action_type}`};
+  }
+
+  const values:any={
+    lead_name:clean(lead.name||"klant",120),
+    business_name:clean(profile?.business_name||"",120),
+    service_name:clean(appointment?.service_id||action?.payload?.service_name||"uw afspraak",200),
+    appointment_date:appointment?.start_at?fmtDate(appointment.start_at,profile?.locale||"nl-BE",appointment?.timezone||"Europe/Brussels"):"",
+    appointment_location:clean(appointment?.location||action?.payload?.appointment_location||"",500),
+    review_url:clean(cfg.review_url||"",500),
+    payment_url:clean(action?.payload?.payment_url||"",1000),
+    payment_amount:action?.payload?.amount_cents
+      ? new Intl.NumberFormat(profile?.locale||"nl-BE",{style:"currency",currency:action?.payload?.currency||"EUR"}).format(Number(action.payload.amount_cents)/100)
+      : ""
+  };
+  const variableKeys=Array.isArray(template.variables)?template.variables:[];
+  const bodyVariables=variableKeys.map((k:string)=>clean(values[k]||"",1000));
+
+  const {data:existing,error:existingErr}=await db.from("izap_dispatch_queue")
+    .select("*")
+    .eq("workflow_action_id",action.id)
+    .maybeSingle();
+  if(existingErr) return {outcome:"retry",provider:"izap_whatsapp",error_code:"queue_lookup_failed",error_message:existingErr.message,retry_after_seconds:60};
+  if(existing?.status==="sent") {
+    return {outcome:"completed",provider:"izap_whatsapp",provider_reference:existing.provider_message_id||null,response_meta:{queued_external:true,sent:true}};
+  }
+  if(existing && ["pending","sending"].includes(String(existing.status||""))) {
+    return {outcome:"blocked",provider:"izap_whatsapp",error_code:"external_dispatch_queued",error_message:"Queued for iZap dispatcher",response_meta:{queue_id:existing.id}};
+  }
+
+  const row={
+    organization_id:action.organization_id,
+    workflow_action_id:action.id,
+    lead_id:action.lead_id||null,
+    business_id:clean(cfg.izap_business_id,100),
+    recipient_phone:clean(lead.phone,100),
+    template_name:clean(template.name,200),
+    template_language:clean(template.language,40)||"nl",
+    body_variables:bodyVariables,
+    status:"pending",
+    attempts:0,
+    max_attempts:3,
+    scheduled_at:action.scheduled_at||new Date().toISOString(),
+    updated_at:new Date().toISOString()
+  };
+  if(!row.business_id) return {outcome:"blocked",provider:"izap_whatsapp",error_code:"izap_business_missing",error_message:"iZap business id missing"};
+
+  const {data:queued,error:queueErr}=await db.from("izap_dispatch_queue")
+    .upsert(row,{onConflict:"workflow_action_id"})
+    .select("id,status")
+    .single();
+  if(queueErr) return {outcome:"retry",provider:"izap_whatsapp",error_code:"queue_insert_failed",error_message:queueErr.message,retry_after_seconds:60};
+
+  return {outcome:"blocked",provider:"izap_whatsapp",error_code:"external_dispatch_queued",error_message:"Queued for iZap dispatcher",response_meta:{queue_id:queued?.id||null}};
+}
+
 async function sendMetaWhatsApp(db:any,action:any,integration:any,lead:any,profile:any,appointment:any) {
   if(!lead?.phone) return {outcome:"blocked",provider:"meta_whatsapp",error_code:"recipient_missing",error_message:"No WhatsApp phone number"};
   if(!lead?.contact_consent_at) return {outcome:"failed",provider:"meta_whatsapp",error_code:"contact_consent_required",error_message:"Customer contact consent missing"};
@@ -554,6 +754,27 @@ Deno.serve(async (req:Request)=>{
         db.from("business_profiles").select("*").eq("organization_id",action.organization_id).single(),
         action.lead_id ? db.from("leads").select("*").eq("id",action.lead_id).eq("organization_id",action.organization_id).maybeSingle() : Promise.resolve({data:null})
       ]);
+
+      if(action?.payload?.sales_sequence_id){
+        const sequenceId=action.payload.sales_sequence_id;
+        const stepId=action.payload.sales_sequence_step_id;
+        const {data:seq}=await db.from("sales_sequences").select("id,status").eq("id",sequenceId).eq("organization_id",action.organization_id).maybeSingle();
+        const leadClosed=lead&&["won","lost"].includes(String(lead.status||""));
+        if(seq?.status==="paused"&&!leadClosed){
+          await finish(db,action,"retry",{provider:"internal",error_code:"sequence_paused",error_message:"Sales sequence is paused",retry_after_seconds:3600});
+          results.push({id:action.id,status:"retry",provider:"internal",reason:"sequence_paused"});
+          continue;
+        }
+        if(!seq||["cancelled","completed"].includes(String(seq.status||""))||leadClosed){
+          if(stepId) await db.from("sales_sequence_steps").update({status:"cancelled",updated_at:new Date().toISOString()})
+            .eq("id",stepId).eq("organization_id",action.organization_id);
+          if(leadClosed&&seq) await db.from("sales_sequences").update({status:"completed",updated_at:new Date().toISOString()})
+            .eq("id",sequenceId).eq("organization_id",action.organization_id);
+          await finish(db,action,"completed",{provider:"internal",response_meta:{skipped:true,reason:leadClosed?"lead_closed":"sequence_inactive"}});
+          results.push({id:action.id,status:"completed",provider:"internal",skipped:true});
+          continue;
+        }
+      }
 
       let appointment:any=null;
       const appointmentId=action.payload?.appointment_id;
@@ -659,13 +880,19 @@ Deno.serve(async (req:Request)=>{
       } else if(integration.provider==="stripe" && channel==="payment" && action.action_type==="payment_request") {
         outcome=await createStripeCheckout(db,action,integration,lead,profile,payment);
       } else if(integration.provider==="google_calendar" && channel==="calendar" && action.action_type==="calendar_request") {
-        outcome=await syncGoogleCalendar(db,action,integration,lead,profile,appointment);
+        outcome=integration?.config?.calendar_bridge_mode===true
+          ? await queueGoogleCalendar(db,action,integration,lead,profile,appointment,"sync")
+          : await syncGoogleCalendar(db,action,integration,lead,profile,appointment);
       } else if(integration.provider==="google_calendar" && channel==="calendar" && action.action_type==="calendar_cancel") {
-        outcome=await cancelGoogleCalendar(db,action,integration,appointment);
+        outcome=integration?.config?.calendar_bridge_mode===true
+          ? await queueGoogleCalendar(db,action,integration,null,null,appointment,"delete")
+          : await cancelGoogleCalendar(db,action,integration,appointment);
       } else if(integration.provider==="webhook") {
         outcome=await sendWebhook(db,action,integration,lead,profile,appointment,payment);
       } else if(integration.provider==="meta_whatsapp" && channel==="whatsapp") {
-        outcome=await sendMetaWhatsApp(db,action,integration,lead,profile,appointment);
+        outcome=integration?.config?.izap_bridge_mode===true
+          ? await queueIzapWhatsApp(db,action,integration,lead,profile,appointment)
+          : await sendMetaWhatsApp(db,action,integration,lead,profile,appointment);
       } else {
         outcome={outcome:"blocked",provider:integration.provider,error_code:"adapter_unavailable",error_message:`Provider adapter ${integration.provider} is not enabled in the runtime`};
       }
