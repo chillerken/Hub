@@ -121,7 +121,14 @@
       width: 34px; height: 34px; border: 0; border-radius: 10px;
       background: rgba(255,255,255,.14); color: white; cursor: pointer; font-size: 21px;
     }
+    .rai-body {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 1fr auto;
+      background: #f8fafc;
+    }
     .rai-log {
+      min-height: 0;
       overflow-y: auto;
       padding: 16px;
       background: #f8fafc;
@@ -223,7 +230,7 @@
         </div>
         <button class="rai-close" type="button" aria-label="Chat sluiten">×</button>
       </header>
-      <div>
+      <div class="rai-body">
         <div class="rai-log" role="log" aria-live="polite" aria-relevant="additions"></div>
         <div class="rai-typing" aria-live="polite">Even geduld…</div>
       </div>
