@@ -49,3 +49,6 @@
 
 .rowactions{display:flex;gap:5px;justify-content:flex-end;flex-wrap:wrap;margin-top:6px}.appointmentrow .button{padding:5px 7px;font-size:8px}.appointmentrow .right>span{display:block}
 @media(max-width:760px){.rowactions{justify-content:flex-start}.appointmentrow .right>span{margin-bottom:5px}}
+
+.leadstatus{max-width:125px}.datarow .right small{display:block;color:var(--muted);font-size:8px;margin-top:4px}
+@media(max-width:760px){.leadstatus{max-width:100%}}
