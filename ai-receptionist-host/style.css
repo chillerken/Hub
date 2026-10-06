@@ -115,3 +115,16 @@
   .clienthead{flex-direction:column}
   .clientactions>*{flex:1 1 auto;text-align:center}
 }
+
+
+/* Password recovery box */
+.recoverybox{
+  margin-top:14px;
+  padding:16px;
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:14px;
+  background:rgba(255,255,255,.025);
+}
+.recoverybox h3{margin:0 0 6px}
+.recoverybox .opbuttons{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.recoverybox .opbuttons button{flex:1 1 160px}
