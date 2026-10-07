@@ -17,6 +17,29 @@ function planFromSubscription(o:any){
  return "";
 }
 
+function isReceptionAiApp(v:any){
+ return ["reception_ai","mijn_ai_business"].includes(String(v||"").toLowerCase());
+}
+function invoiceSubscriptionId(o:any){
+ const direct=[
+  o?.parent?.subscription_details?.subscription,
+  o?.subscription,
+  o?.subscription_details?.subscription,
+  o?.subscription_id
+ ].map((x:any)=>String(x||"")).find(Boolean);
+ if(direct)return direct;
+ for(const line of (o?.lines?.data||[])){
+  const candidate=String(
+   line?.parent?.subscription_item_details?.subscription||
+   line?.subscription||
+   line?.subscription_id||
+   ""
+  );
+  if(candidate)return candidate;
+ }
+ return "";
+}
+
 async function customerSuccessPaymentRisk(db:any,organizationId:string,reason:string){
  const {data:invite}=await db.from("sales_onboarding_invites")
   .select("id,lead_id,sales_organization_id")
@@ -138,7 +161,7 @@ Deno.serve(async req=>{
     else if(ie)throw ie;
    }
   }
-  if(["checkout.session.completed","checkout.session.async_payment_succeeded","checkout.session.async_payment_failed"].includes(e.type)&&o.mode==="subscription"&&["reception_ai","mijn_ai_business"].includes(String(o.metadata?.app||""))){
+  if(["checkout.session.completed","checkout.session.async_payment_succeeded","checkout.session.async_payment_failed"].includes(e.type)&&o.mode==="subscription"&&isReceptionAiApp(o.metadata?.app)){
    const plan=String(o.metadata?.plan||"").toLowerCase(),ref=String(o.client_reference_id||""),customer=String(o.customer||""),sub=String(o.subscription||"");
    const paymentStatus=String(o.payment_status||"").toLowerCase();
    const paid=e.type==="checkout.session.async_payment_succeeded"||paymentStatus==="paid";
@@ -192,21 +215,43 @@ Deno.serve(async req=>{
    }
   }
   if(["customer.subscription.created","customer.subscription.updated","customer.subscription.deleted","customer.subscription.paused","customer.subscription.resumed"].includes(e.type)){
-   const status=String(o.status||(e.type==="customer.subscription.deleted"?"canceled":"incomplete")),customer=String(o.customer||"");
-   const patch:any={subscription_status:status,stripe_subscription_id:String(o.id||"")};
+   const status=String(o.status||(e.type==="customer.subscription.deleted"?"canceled":"incomplete"));
+   const customer=String(o.customer||""),subscriptionId=String(o.id||"");
    const derivedPlan=planFromSubscription(o);
-   if(derivedPlan)patch.plan=derivedPlan;
-   const {data:updatedOrgs}=await db.from("organizations").update(patch).eq("stripe_customer_id",customer).select("id,plan");
-   if(status==="active")for(const orgRow of updatedOrgs||[]){await markSalesConverted(db,String(orgRow.id),String(orgRow.plan||derivedPlan||"paid"));await resolveCustomerSuccessPaymentRisk(db,String(orgRow.id))}
-   if(["past_due","unpaid","canceled","incomplete_expired"].includes(status))for(const orgRow of updatedOrgs||[])await customerSuccessPaymentRisk(db,String(orgRow.id),"subscription_"+status);
+   let targetOrgs:any[]=[];
+   if(subscriptionId){
+    const {data:bySub}=await db.from("organizations").select("id,plan,stripe_subscription_id").eq("stripe_subscription_id",subscriptionId);
+    targetOrgs=bySub||[];
+   }
+   if(!targetOrgs.length&&customer&&isReceptionAiApp(o?.metadata?.app)&&derivedPlan){
+    const {data:byCustomer}=await db.from("organizations").select("id,plan,stripe_subscription_id").eq("stripe_customer_id",customer);
+    targetOrgs=byCustomer||[];
+   }
+   if(!targetOrgs.length){
+    console.log("BILLING ignored unrelated subscription event",String(e.id||""),subscriptionId||"no_subscription_id");
+   }else{
+    for(const target of targetOrgs){
+     const patch:any={subscription_status:status,stripe_subscription_id:subscriptionId};
+     if(derivedPlan)patch.plan=derivedPlan;
+     const {data:updated}=await db.from("organizations").update(patch).eq("id",target.id).select("id,plan").single();
+     if(status==="active"&&updated){await markSalesConverted(db,String(updated.id),String(updated.plan||derivedPlan||"paid"));await resolveCustomerSuccessPaymentRisk(db,String(updated.id))}
+     if(["past_due","unpaid","canceled","incomplete_expired"].includes(status)&&updated)await customerSuccessPaymentRisk(db,String(updated.id),"subscription_"+status);
+    }
+   }
   }
   if(e.type==="invoice.payment_failed"){
-   const {data:updatedOrgs}=await db.from("organizations").update({subscription_status:"past_due"}).eq("stripe_customer_id",String(o.customer||"")).select("id");
-   for(const orgRow of updatedOrgs||[])await customerSuccessPaymentRisk(db,String(orgRow.id),"invoice_payment_failed");
+   const subscriptionId=invoiceSubscriptionId(o);
+   if(subscriptionId){
+    const {data:updatedOrgs}=await db.from("organizations").update({subscription_status:"past_due"}).eq("stripe_subscription_id",subscriptionId).select("id");
+    for(const orgRow of updatedOrgs||[])await customerSuccessPaymentRisk(db,String(orgRow.id),"invoice_payment_failed");
+   }else console.log("BILLING ignored invoice.payment_failed without linked subscription",String(e.id||""));
   }
   if(e.type==="invoice.paid"){
-   const {data:updatedOrgs}=await db.from("organizations").update({subscription_status:"active"}).eq("stripe_customer_id",String(o.customer||"")).select("id,plan");
-   for(const orgRow of updatedOrgs||[]){await markSalesConverted(db,String(orgRow.id),String(orgRow.plan||"paid"));await resolveCustomerSuccessPaymentRisk(db,String(orgRow.id))}
+   const subscriptionId=invoiceSubscriptionId(o);
+   if(subscriptionId){
+    const {data:updatedOrgs}=await db.from("organizations").update({subscription_status:"active"}).eq("stripe_subscription_id",subscriptionId).select("id,plan");
+    for(const orgRow of updatedOrgs||[]){await markSalesConverted(db,String(orgRow.id),String(orgRow.plan||"paid"));await resolveCustomerSuccessPaymentRisk(db,String(orgRow.id))}
+   }else console.log("BILLING ignored invoice.paid without linked subscription",String(e.id||""));
   }
   if(e.id)await db.from("stripe_events").update({status:"processed",last_error:null,updated_at:new Date().toISOString()}).eq("id",String(e.id));
   return new Response("ok");
