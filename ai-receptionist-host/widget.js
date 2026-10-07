@@ -42,6 +42,28 @@
   const storageKey = "reception_ai:" + token;
   const campaignCode = String(script.dataset.campaign || new URLSearchParams(window.location.search).get("rai_campaign") || "").trim().slice(0,80);
 
+  const currentHost = String(window.location.hostname || "")
+    .toLowerCase()
+    .replace(/^www\./, "");
+  const shouldRemoveLuxWashLegacy = currentHost === "luxwash.online";
+
+  function removeLuxWashLegacy() {
+    if (!shouldRemoveLuxWashLegacy) return;
+    document
+      .querySelectorAll(".lux-chat,.lux-chat-launcher,.lux-chat-entry,#luxwash-new-chat-v5")
+      .forEach((el) => el.remove());
+  }
+
+  // Compatibility shim for the current LuxWash Editorless bundle, which still
+  // emits its legacy chatbot before Reception AI. Keep this host-scoped so
+  // other Reception AI tenants are unaffected.
+  removeLuxWashLegacy();
+  if (shouldRemoveLuxWashLegacy) {
+    const legacyObserver = new MutationObserver(removeLuxWashLegacy);
+    legacyObserver.observe(document.documentElement, { childList: true, subtree: true });
+    setTimeout(() => legacyObserver.disconnect(), 15000);
+  }
+
   const host = document.createElement("div");
   host.id = "reception-ai-widget";
   host.setAttribute("data-reception-ai", "true");
