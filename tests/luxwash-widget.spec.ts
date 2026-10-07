@@ -44,7 +44,11 @@ test('LuxWash laadt uitsluitend de echte Reception AI widget', async ({ page, re
   await expect(host).toHaveCount(1, { timeout: 30_000 });
 
   // There must be no competing old LuxWash chatbot UI.
-  await expect(page.locator('.lux-chat-launcher')).toHaveCount(0, { timeout: 10_000 });
+  const legacyLaunchers = page.locator('.lux-chat-launcher');
+  if (await legacyLaunchers.count()) {
+    console.log('LEGACY_LAUNCHER_HTML', await legacyLaunchers.first().evaluate((el) => el.outerHTML));
+  }
+  await expect(legacyLaunchers).toHaveCount(0, { timeout: 10_000 });
   await expect(page.locator('.lux-chat')).toHaveCount(0, { timeout: 10_000 });
   await expect(page.locator('.lux-chat-entry')).toHaveCount(0, { timeout: 10_000 });
 
@@ -79,8 +83,10 @@ test('LuxWash echte production AI smoke test zonder CRM-vervuiling', async ({ re
     headers: { 'Content-Type': 'application/json' },
   });
 
+  const responseText = await response.text();
+  console.log('SMOKE_HTTP', response.status(), responseText);
   expect(response.ok()).toBeTruthy();
-  const body = await response.json();
+  const body = JSON.parse(responseText);
   expect(body?.smoke_test).toBe(true);
   expect(body?.smoke_id).toBe(smokeId);
   expect(body?.business_name).toBeTruthy();
