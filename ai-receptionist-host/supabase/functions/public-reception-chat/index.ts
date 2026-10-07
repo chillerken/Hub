@@ -19,8 +19,9 @@ function normalizePhone(raw:string,locale:string){
   if(digits.length<8||digits.length>15)return null;
   if(hasPlus)return "+"+digits;
   if((locale||"").toLowerCase().includes("be")){
-    if(digits.startsWith("32"))return "+"+digits;
-    if(digits.startsWith("0"))return "+32"+digits.slice(1);
+    if(digits.startsWith("32")&&[10,11].includes(digits.length))return "+"+digits;
+    if(digits.startsWith("0")&&[9,10].includes(digits.length))return "+32"+digits.slice(1);
+    return null;
   }
   return digits;
 }
@@ -71,7 +72,11 @@ Deno.serve(async req=>{
     if(!token||!message)return json({error:"Ongeldige aanvraag"},400);
     const low=message.toLowerCase();
     const human=/medewerker|mens|persoon|bellen|bel\s+mij|contacteer/i.test(low);
-    const appointment=/afspraak|boeken|inplannen|beschikbaar|reserv|planning|tijdslot/i.test(low);
+    // Remove explicitly negated booking phrases before detecting booking intent.
+    const bookingText=low
+      .replace(/\b(?:geen|niet(?:\s+meer)?)\s+(?:(?:een|nieuwe|nu)\s+)?(?:afspraak|boek\w*|inplannen|reserver\w*)\b/g,"")
+      .replace(/\b(?:afspraak|boek\w*|inplannen|reserver\w*)\s+(?:niet|annuleren|afzeggen)\b/g,"");
+    const appointment=/afspraak|boeken|inplannen|beschikbaar|reserv|planning|tijdslot/i.test(bookingText);
     const urgent=/dringend|spoed|urgent|klacht|ontevreden|probleem/i.test(low);
 
     const url=Deno.env.get("SUPABASE_URL")!;
