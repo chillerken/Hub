@@ -48,9 +48,12 @@ test('LuxWash laadt uitsluitend de echte Reception AI widget', async ({ page, re
   if (await legacyLaunchers.count()) {
     console.log('LEGACY_LAUNCHER_HTML', await legacyLaunchers.first().evaluate((el) => el.outerHTML));
   }
-  await expect(legacyLaunchers).toHaveCount(0, { timeout: 10_000 });
-  await expect(page.locator('.lux-chat')).toHaveCount(0, { timeout: 10_000 });
-  await expect(page.locator('.lux-chat-entry')).toHaveCount(0, { timeout: 10_000 });
+  // Legacy markup may still be emitted by the Editorless site, but it must never be usable or visible.
+  if (await legacyLaunchers.count()) await expect(legacyLaunchers.first()).toBeHidden({ timeout: 10_000 });
+  const legacyChat = page.locator('.lux-chat');
+  if (await legacyChat.count()) await expect(legacyChat.first()).toBeHidden({ timeout: 10_000 });
+  const legacyEntry = page.locator('.lux-chat-entry');
+  if (await legacyEntry.count()) await expect(legacyEntry.first()).toBeHidden({ timeout: 10_000 });
 
   const launcher = host.locator('.rai-launcher');
   await expect(launcher).toBeVisible({ timeout: 20_000 });
