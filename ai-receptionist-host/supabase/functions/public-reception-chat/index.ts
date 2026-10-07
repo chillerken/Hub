@@ -301,8 +301,7 @@ Deno.serve(async req=>{
       "Kwalificatievragen: "+JSON.stringify(p.qualification_questions||[]),
       "Escalatieregels: "+JSON.stringify(p.escalation_rules||[]),
       "Aanvullende bedrijfsinstructies: "+(p.custom_instructions||"geen")
-    ].join("
-");
+    ].join("\\n");
 
     let reply="";
     const key=Deno.env.get("GEMINI_API_KEY");
