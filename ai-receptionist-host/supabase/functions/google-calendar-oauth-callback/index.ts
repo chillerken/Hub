@@ -9,7 +9,7 @@ async function sha256(value:string){
 
 const safeRedirect=(base:string,params:Record<string,string>)=>{
   let u:URL;
-  try{u=new URL(base);}catch{u=new URL("https://reception-ai-rho.vercel.app/?view=integrations");}
+  try{u=new URL(base);}catch{u=new URL("https://reception-ai-luxwash.onrender.com/?view=integrations");}
   for(const [k,v] of Object.entries(params)) u.searchParams.set(k,v);
   return u.toString();
 };
@@ -25,7 +25,7 @@ Deno.serve(async(req:Request)=>{
   const code=clean(incoming.searchParams.get("code"),5000);
   const oauthError=clean(incoming.searchParams.get("error"),300);
 
-  let fallback="https://reception-ai-rho.vercel.app/?view=integrations";
+  let fallback="https://reception-ai-luxwash.onrender.com/?view=integrations";
   try{
     const {data:appUrl}=await db.rpc("get_platform_secret",{p_name:"reception_ai_app_url"});
     if(appUrl) fallback=String(appUrl)+"/?view=integrations";
