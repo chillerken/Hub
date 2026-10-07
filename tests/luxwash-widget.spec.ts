@@ -1,45 +1,24 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 
-const RECEPTION_HOST = '#reception-ai-widget';
 const CONFIG_URL =
   'https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/public-widget-config';
 const CHAT_URL =
   'https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/public-reception-chat';
 const WIDGET_TOKEN = '597f9789-be65-4ab8-bdbe-276f696991f1';
 
-async function acceptCookieBannerIfPresent(page: Page) {
-  const names = [
-    /alles accepteren/i,
-    /accepteer alles/i,
-    /^accepteren$/i,
-    /accept all/i,
-    /^accept$/i,
-  ];
-
-  for (const name of names) {
-    const button = page.getByRole('button', { name }).first();
-    if (await button.isVisible({ timeout: 1200 }).catch(() => false)) {
-      await button.click();
-      await page.waitForTimeout(800);
-      return;
-    }
-  }
-}
-
-test('Reception AI is de actieve LuxWash website-assistent', async ({ page, request }) => {
-  // Validate the real production token/config without creating a CRM lead.
+test('LuxWash gebruikt één Reception AI launcher en opent de echte widget', async ({ page, request }) => {
+  // Validate real production widget configuration.
   const configResponse = await request.post(CONFIG_URL, {
     data: { widget_token: WIDGET_TOKEN },
     headers: { 'Content-Type': 'application/json' },
   });
-  expect(configResponse.ok()).toBeTruthy();
 
+  expect(configResponse.ok()).toBeTruthy();
   const config = await configResponse.json();
   expect(config?.error).toBeFalsy();
   expect(config?.business_name).toBeTruthy();
 
-  // Intercept only the chat POST. This exercises the real widget UI without
-  // creating a synthetic lead/conversation in production.
+  // Prevent a synthetic CI test from creating a real CRM lead.
   await page.route(CHAT_URL, async (route) => {
     if (route.request().method() !== 'POST') {
       await route.continue();
@@ -61,33 +40,29 @@ test('Reception AI is de actieve LuxWash website-assistent', async ({ page, requ
   });
 
   await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
-  await acceptCookieBannerIfPresent(page);
 
-  const host = page.locator(RECEPTION_HOST);
+  const directLauncher = page.locator('#reception-ai-direct-launcher');
+  await expect(directLauncher).toHaveCount(1, { timeout: 30_000 });
+  await expect(directLauncher).toBeVisible();
+
+  // No competing legacy/native assistant may remain customer-facing.
+  await expect(page.locator('.lux-chat-launcher')).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.locator('.lux-chat')).toHaveCount(0, { timeout: 10_000 });
+
+  await directLauncher.click();
+
+  const host = page.locator('#reception-ai-widget');
   await expect(host).toHaveCount(1, { timeout: 30_000 });
 
-  const launcher = host.locator('.rai-launcher');
-  await expect(launcher).toBeVisible({ timeout: 20_000 });
-
-  // Detect duplicate legacy/native assistants. Reception AI must be the
-  // single customer-facing assistant, not one of two competing launchers.
-  const nativeLegacyLaunchers = page.locator('.lux-chat-launcher');
-  const legacyCount = await nativeLegacyLaunchers.count();
-  expect(
-    legacyCount,
-    'Legacy/native LuxWash AI launcher is still present next to Reception AI'
-  ).toBe(0);
-
-  await launcher.click();
-
   const panel = host.locator('.rai-panel');
-  await expect(panel).toHaveAttribute('data-open', 'true');
+  await expect(panel).toHaveAttribute('data-open', 'true', { timeout: 15_000 });
   await expect(panel).toBeVisible();
 
-  await expect(host.locator('.rai-title strong')).not.toHaveText('');
+  await expect(page.locator('#reception-ai-direct-launcher')).toHaveCount(0);
 
   const input = host.locator('.rai-input');
   await expect(input).toBeEnabled();
+
   await input.fill('E2E test: werkt Reception AI?');
   await host.locator('.rai-send').click();
 
