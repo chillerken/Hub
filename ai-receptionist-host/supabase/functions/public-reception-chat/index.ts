@@ -235,14 +235,17 @@ Deno.serve(async req=>{
       updates.score=score;
       updates.qualification={...(lead.qualification||{}),intent:"appointment",has_email:!!effectiveEmail,has_phone:!!effectivePhone,contact_extracted:!!(updates.email||updates.phone||updates.name)};
 
-      const slot=parseExplicitBelgianSlot(message);\n      const {data:existingAppt}=await db.from("appointments").select("id,requested_text,status,start_at,end_at")
+      const slot=parseExplicitBelgianSlot(message);
+      const {data:existingAppt}=await db.from("appointments").select("id,requested_text,status,start_at,end_at")
         .eq("organization_id",p.organization_id).eq("lead_id",leadId)
         .in("status",["requested","proposed","confirmed"]).order("created_at",{ascending:false}).limit(1);
       if(existingAppt?.[0]){
         appointmentId=existingAppt[0].id;
         if(dateHintRe.test(message)){
           const requested=[existingAppt[0].requested_text,message].filter(Boolean).join(" | ").slice(0,2000);
-          const appointmentPatch:any={requested_text:requested,updated_at:new Date().toISOString()};\n          if(slot){appointmentPatch.start_at=slot.start_at;appointmentPatch.end_at=slot.end_at;appointmentPatch.timezone=slot.timezone;}\n          const {error:appointmentUpdateError}=await db.from("appointments").update(appointmentPatch).eq("id",appointmentId);
+          const appointmentPatch:any={requested_text:requested,updated_at:new Date().toISOString()};
+          if(slot){appointmentPatch.start_at=slot.start_at;appointmentPatch.end_at=slot.end_at;appointmentPatch.timezone=slot.timezone;}
+          const {error:appointmentUpdateError}=await db.from("appointments").update(appointmentPatch).eq("id",appointmentId);
           if(appointmentUpdateError)throw appointmentUpdateError;
           await db.from("workflow_actions").update({
             payload:{appointment_id:appointmentId,requested_text:requested}
@@ -297,7 +300,8 @@ Deno.serve(async req=>{
       "Kwalificatievragen: "+JSON.stringify(p.qualification_questions||[]),
       "Escalatieregels: "+JSON.stringify(p.escalation_rules||[]),
       "Aanvullende bedrijfsinstructies: "+(p.custom_instructions||"geen")
-    ].join("\n");
+    ].join("
+");
 
     let reply="";
     const key=Deno.env.get("GEMINI_API_KEY");
