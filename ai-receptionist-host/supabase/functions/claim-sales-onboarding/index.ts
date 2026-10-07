@@ -5,7 +5,9 @@ const H={
   "Access-Control-Allow-Origin":"*",
   "Access-Control-Allow-Headers":"authorization, x-client-info, apikey, content-type, x-supabase-api-version",
   "Access-Control-Allow-Methods":"POST,OPTIONS",
-  "Content-Type":"application/json"
+  "Content-Type":"application/json",
+  "Cache-Control":"no-store, max-age=0",
+  "Referrer-Policy":"no-referrer"
 };
 const J=(b:any,s=200)=>new Response(JSON.stringify(b),{status:s,headers:H});
 const clean=(v:any,max=500)=>String(v??"").trim().slice(0,max);
