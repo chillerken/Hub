@@ -25,6 +25,25 @@ function normalizePhone(raw:string,locale:string){
   return digits;
 }
 
+function parseExplicitBelgianSlot(message:string){
+  const dm=message.match(/\\b(\\d{1,2})[\\/.\\-](\\d{1,2})(?:[\\/.\\-](\\d{2,4}))?\\b/);
+  const tm=message.match(/\\b(?:om\\s*)?(\\d{1,2})(?:[:.]([0-5]\\d)|\\s*(?:u|uur)(?:\\s*([0-5]\\d))?)\\b/i);
+  if(!dm||!tm)return null;
+  let year=dm[3]?Number(dm[3]):new Date().getFullYear(); if(year<100)year+=2000;
+  const month=Number(dm[2]),day=Number(dm[1]),hour=Number(tm[1]),minute=Number(tm[2]||tm[3]||0);
+  if(month<1||month>12||day<1||day>31||hour>23)return null;
+  const pad=(n:number)=>String(n).padStart(2,"0");
+  const wall=year+"-"+pad(month)+"-"+pad(day)+"T"+pad(hour)+":"+pad(minute)+":00";
+  const probe=new Date(wall+"+02:00");
+  if(Number.isNaN(probe.getTime())||probe.getUTCFullYear()!==year||probe.getUTCMonth()+1!==month||probe.getUTCDate()!==day)return null;
+  const lastSunday=(m:number)=>{const d=new Date(Date.UTC(year,m,0));return d.getUTCDate()-d.getUTCDay()};
+  const dstStart=Date.UTC(year,2,lastSunday(3),1),dstEnd=Date.UTC(year,9,lastSunday(10),1),approx=Date.UTC(year,month-1,day,hour,minute);
+  const offset=approx>=dstStart&&approx<dstEnd?"+02:00":"+01:00";
+  const start=new Date(wall+offset); if(start.getTime()<Date.now()+5*60*1000)return null;
+  const end=new Date(start.getTime()+60*60*1000);
+  return {start_at:start.toISOString(),end_at:end.toISOString(),timezone:"Europe/Brussels"};
+}
+
 function extractName(message:string){
   const patterns=[
     /(?:mijn\s+naam\s+is|naam\s*[:=])\s*([A-Za-zÀ-ÿ'’-]+(?:\s+[A-Za-zÀ-ÿ'’-]+){0,3})/i,
@@ -216,14 +235,14 @@ Deno.serve(async req=>{
       updates.score=score;
       updates.qualification={...(lead.qualification||{}),intent:"appointment",has_email:!!effectiveEmail,has_phone:!!effectivePhone,contact_extracted:!!(updates.email||updates.phone||updates.name)};
 
-      const {data:existingAppt}=await db.from("appointments").select("id,requested_text,status")
+      const slot=parseExplicitBelgianSlot(message);\n      const {data:existingAppt}=await db.from("appointments").select("id,requested_text,status,start_at,end_at")
         .eq("organization_id",p.organization_id).eq("lead_id",leadId)
         .in("status",["requested","proposed","confirmed"]).order("created_at",{ascending:false}).limit(1);
       if(existingAppt?.[0]){
         appointmentId=existingAppt[0].id;
         if(dateHintRe.test(message)){
           const requested=[existingAppt[0].requested_text,message].filter(Boolean).join(" | ").slice(0,2000);
-          const {error:appointmentUpdateError}=await db.from("appointments").update({requested_text:requested,updated_at:new Date().toISOString()}).eq("id",appointmentId);
+          const appointmentPatch:any={requested_text:requested,updated_at:new Date().toISOString()};\n          if(slot){appointmentPatch.start_at=slot.start_at;appointmentPatch.end_at=slot.end_at;appointmentPatch.timezone=slot.timezone;}\n          const {error:appointmentUpdateError}=await db.from("appointments").update(appointmentPatch).eq("id",appointmentId);
           if(appointmentUpdateError)throw appointmentUpdateError;
           await db.from("workflow_actions").update({
             payload:{appointment_id:appointmentId,requested_text:requested}
