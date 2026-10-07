@@ -344,6 +344,7 @@ Deno.serve(async req=>{
       }
     }
 
+    const aiStatus=human||urgent||appointment?"workflow":reply?"generated":"unavailable";
     const hasContact=!!(effectiveEmail||effectivePhone);
     if(human||urgent){
       if(urgent)reply=hasContact
@@ -355,7 +356,7 @@ Deno.serve(async req=>{
     }else if(appointment){
       reply="Graag. Uw gewenste dag en tijd worden als afspraakaanvraag geregistreerd. Ik kan hier geen live beschikbaarheid bevestigen. Een medewerker of gekoppelde agenda bevestigt daarna het definitieve tijdstip.";
     }else if(!reply){
-      reply="Bedankt voor uw bericht. Ik registreer uw aanvraag. Kunt u kort aangeven waarmee we u kunnen helpen?";
+      reply="De AI-assistent is tijdelijk niet beschikbaar. Uw bericht is wel geregistreerd. Probeer later opnieuw of gebruik de contactgegevens op onze website.";
     }
 
     const {error:assistantMessageError}=await db.from("messages").insert({
@@ -365,6 +366,7 @@ Deno.serve(async req=>{
 
     return json({
       reply,
+      ai_status:aiStatus,
       lead_id:leadId,
       conversation_id:convId,
       appointment_id:appointmentId,
