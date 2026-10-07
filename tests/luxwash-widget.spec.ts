@@ -9,7 +9,10 @@ const WIDGET_TOKEN = '597f9789-be65-4ab8-bdbe-276f696991f1';
 test('LuxWash laadt uitsluitend de echte Reception AI widget', async ({ page, request }) => {
   const configResponse = await request.post(CONFIG_URL, {
     data: { widget_token: WIDGET_TOKEN },
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Origin: 'https://www.luxwash.online',
+    },
   });
   expect(configResponse.ok()).toBeTruthy();
 
@@ -82,9 +85,50 @@ test('Publieke smoke-bypass blijft veilig uitgeschakeld', async ({ request }) =>
       smoke_test: true,
       smoke_id: 'gha-security-check',
     },
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Origin: 'https://www.luxwash.online',
+    },
   });
   const body = await response.json();
   expect(response.status()).toBe(404);
   expect(body?.error).toBe('Smoke test endpoint disabled');
+});
+
+
+test('Onbekende widget-origin wordt geweigerd', async ({ request }) => {
+  const response = await request.post(CONFIG_URL, {
+    data: { widget_token: WIDGET_TOKEN },
+    headers: {
+      'Content-Type': 'application/json',
+      Origin: 'https://evil.example',
+    },
+  });
+  const body = await response.json();
+  expect(response.status()).toBe(403);
+  expect(body?.error).toBe('Deze widget is niet toegestaan op dit domein.');
+});
+
+test('Ontbrekende widget-origin wordt geweigerd', async ({ request }) => {
+  const response = await request.post(CONFIG_URL, {
+    data: { widget_token: WIDGET_TOKEN },
+    headers: { 'Content-Type': 'application/json' },
+  });
+  expect(response.status()).toBe(403);
+});
+
+test('Chat-endpoint weigert onbekende origin vóór CRM-writes', async ({ request }) => {
+  const response = await request.post(CHAT_URL, {
+    data: {
+      widget_token: WIDGET_TOKEN,
+      message: 'boundary test',
+    },
+    headers: {
+      'Content-Type': 'application/json',
+      Origin: 'https://evil.example',
+    },
+  });
+  const body = await response.json();
+  expect(response.status()).toBe(403);
+  expect(body?.error).toBe('Deze widget is niet toegestaan op dit domein.');
 });
