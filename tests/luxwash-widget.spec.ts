@@ -65,3 +65,26 @@ test('LuxWash laadt uitsluitend de echte Reception AI widget', async ({ page, re
     host.getByText('E2E OK — Reception AI antwoordt correct.')
   ).toBeVisible({ timeout: 15_000 });
 });
+
+
+test('LuxWash echte production AI smoke test zonder CRM-vervuiling', async ({ request }) => {
+  const smokeId = 'gha-' + Date.now();
+  const response = await request.post(CHAT_URL, {
+    data: {
+      widget_token: WIDGET_TOKEN,
+      message: 'Production smoke test: antwoord uitsluitend kort dat de AI-receptionist bereikbaar is.',
+      smoke_test: true,
+      smoke_id: smokeId,
+    },
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  expect(response.ok()).toBeTruthy();
+  const body = await response.json();
+  expect(body?.smoke_test).toBe(true);
+  expect(body?.smoke_id).toBe(smokeId);
+  expect(body?.business_name).toBeTruthy();
+  expect(body?.reply?.length).toBeGreaterThan(4);
+  expect(body?.lead_id).toBeUndefined();
+  expect(body?.conversation_id).toBeUndefined();
+});

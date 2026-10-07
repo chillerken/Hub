@@ -48,6 +48,8 @@ Deno.serve(async req=>{
     const b=await req.json();
     const token=String(b.widget_token||"");
     const message=String(b.message||"").trim().slice(0,2000);
+    const smokeTest=b.smoke_test===true;
+    const smokeId=String(b.smoke_id||"").trim().slice(0,120);
     if(!token||!message)return json({error:"Ongeldige aanvraag"},400);
 
     const url=Deno.env.get("SUPABASE_URL")!;
@@ -56,6 +58,31 @@ Deno.serve(async req=>{
 
     const {data:p}=await db.from("business_profiles").select("*").eq("widget_token",token).eq("widget_enabled",true).single();
     if(!p)return json({error:"Widget niet gevonden"},404);
+
+    // Safe production smoke test: exercise the real profile/config + Gemini path without creating CRM records.
+    // The marker is explicit and cannot be triggered by normal widget traffic.
+    if(smokeTest){
+      const key=Deno.env.get("GEMINI_API_KEY");
+      if(!key)return json({error:"AI provider niet geconfigureerd",smoke_test:true},503);
+      const services=Array.isArray(p.services)?p.services:[];
+      const instructions=[
+        "Je bent "+(p.receptionist_name||"Ava")+", AI-receptionist van "+p.business_name+".",
+        "Dit is een geautomatiseerde production smoke test. Maak geen afspraak en vraag geen persoonsgegevens.",
+        "Antwoord vriendelijk en compact. Gebruik uitsluitend de gegeven bedrijfsinformatie.",
+        "Beschrijving: "+(p.description||"niet ingevuld"),
+        "Diensten: "+(services.join(", ")||"niet ingevuld")
+      ].join("\\n");
+      const ai=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",{
+        method:"POST",headers:{"x-goog-api-key":key,"Content-Type":"application/json"},
+        body:JSON.stringify({system_instruction:{parts:[{text:instructions}]},contents:[{role:"user",parts:[{text:message}]}],generationConfig:{maxOutputTokens:180,temperature:.2,thinkingConfig:{thinkingBudget:0}}})
+      });
+      if(!ai.ok)return json({error:"AI provider smoke test mislukt",smoke_test:true,provider_status:ai.status},502);
+      const j=await ai.json();
+      const reply=String(j?.candidates?.[0]?.content?.parts?.map((x:any)=>x.text||"").join("")||"").trim();
+      if(reply.length<5)return json({error:"Leeg AI-antwoord",smoke_test:true},502);
+      console.log("PUBLIC_AI smoke success",smokeId||"no-id");
+      return json({smoke_test:true,smoke_id:smokeId||null,reply,receptionist_name:p.receptionist_name||"Ava",business_name:p.business_name});
+    }
 
     const {data:o}=await db.from("organizations").select("plan,trial_ends_at,subscription_status,status").eq("id",p.organization_id).single();
     if(!o||o.status==="suspended"||(o.plan==="trial"&&new Date(o.trial_ends_at)<new Date())||(["starter","pro","business"].includes(o.plan)&&!["active","trialing"].includes(o.subscription_status))){
