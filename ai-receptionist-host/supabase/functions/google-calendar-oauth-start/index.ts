@@ -53,14 +53,16 @@ Deno.serve(async(req:Request)=>{
       db.rpc("get_platform_secret",{p_name:"reception_ai_app_url"})
     ]);
     if(!clientId) return json({
-      error:"Google OAuth client is not configured",
+      ok:false,
+      error:"Google OAuth-platformconfiguratie ontbreekt.",
       code:"google_oauth_platform_setup_required",
+      detail:"Stel als Platform Owner eerst de Google OAuth Client ID en Client Secret in bij Integraties.",
       redirect_uri:url+"/functions/v1/google-calendar-oauth-callback"
-    },409);
+    },200);
 
     const state=crypto.randomUUID().replace(/-/g,"")+crypto.randomUUID().replace(/-/g,"");
     const stateHash=await sha256(state);
-    const returnBase=clean(appUrl,500)||"https://reception-ai-rho.vercel.app";
+    const returnBase=clean(appUrl,500)||"https://reception-ai-luxwash.onrender.com";
     const redirectAfter=returnBase+"/?view=integrations";
     const expiresAt=new Date(Date.now()+10*60*1000).toISOString();
 
