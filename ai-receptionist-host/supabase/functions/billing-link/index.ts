@@ -45,7 +45,7 @@ Deno.serve(async(req:Request)=>{
     const b=await req.json();
     const plan=clean(b.plan,20).toLowerCase();
     const {data:planRow,error:planError}=await db.from("reception_ai_plan_catalog")
-      .select("plan,public_name,monthly_cents,currency,payment_link_url,active")
+      .select("plan,public_name,monthly_cents,setup_cents,currency,payment_link_url,active")
       .eq("plan",plan)
       .eq("active",true)
       .maybeSingle();
@@ -71,7 +71,7 @@ Deno.serve(async(req:Request)=>{
       event_type:"billing.checkout_prepared",
       entity_type:"organization",
       entity_id:mem.organization_id,
-      payload:{plan,public_name:planRow.public_name,monthly_cents:planRow.monthly_cents,currency:planRow.currency,expires_at:expiresAt}
+      payload:{plan,public_name:planRow.public_name,monthly_cents:planRow.monthly_cents,setup_cents:planRow.setup_cents,currency:planRow.currency,expires_at:expiresAt}
     });
 
     return out({
@@ -79,6 +79,7 @@ Deno.serve(async(req:Request)=>{
       plan,
       public_name:planRow.public_name,
       monthly_cents:Number(planRow.monthly_cents||0),
+      setup_cents:Number(planRow.setup_cents||0),
       currency:planRow.currency||"EUR",
       checkout_url:String(planRow.payment_link_url)+"?client_reference_id="+encodeURIComponent(raw),
       expires_at:expiresAt
