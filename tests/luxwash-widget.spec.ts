@@ -1,77 +1,97 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
+const RECEPTION_HOST = '#reception-ai-widget';
 const CONFIG_URL =
   'https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/public-widget-config';
+const CHAT_URL =
+  'https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/public-reception-chat';
 const WIDGET_TOKEN = '597f9789-be65-4ab8-bdbe-276f696991f1';
 
-test('diagnose LuxWash native AI button and chatbot backend', async ({ page, request }) => {
+async function acceptCookieBannerIfPresent(page: Page) {
+  const names = [
+    /alles accepteren/i,
+    /accepteer alles/i,
+    /^accepteren$/i,
+    /accept all/i,
+    /^accept$/i,
+  ];
+
+  for (const name of names) {
+    const button = page.getByRole('button', { name }).first();
+    if (await button.isVisible({ timeout: 1200 }).catch(() => false)) {
+      await button.click();
+      await page.waitForTimeout(800);
+      return;
+    }
+  }
+}
+
+test('Reception AI is de actieve LuxWash website-assistent', async ({ page, request }) => {
+  // Validate the real production token/config without creating a CRM lead.
   const configResponse = await request.post(CONFIG_URL, {
     data: { widget_token: WIDGET_TOKEN },
     headers: { 'Content-Type': 'application/json' },
   });
   expect(configResponse.ok()).toBeTruthy();
 
-  const chatbotResponse = await request.get('/chatbot.js');
-  expect(chatbotResponse.ok()).toBeTruthy();
-  const chatbotJs = await chatbotResponse.text();
+  const config = await configResponse.json();
+  expect(config?.error).toBeFalsy();
+  expect(config?.business_name).toBeTruthy();
 
-  const absoluteUrls = [...new Set(
-    chatbotJs.match(/https?:\/\/[^"'\x60\s)]+/g) || []
-  )];
+  // Intercept only the chat POST. This exercises the real widget UI without
+  // creating a synthetic lead/conversation in production.
+  await page.route(CHAT_URL, async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
 
-  const backendLines = chatbotJs
-    .split('\n')
-    .map((line, index) => ({ n: index + 1, line: line.trim() }))
-    .filter(({ line }) =>
-      /fetch\s*\(|supabase|functions\/v1|endpoint|api\b|chat\b|assistant|bot/i.test(line)
-    )
-    .slice(0, 160);
-
-  console.log('CHATBOT_JS_LENGTH', chatbotJs.length);
-  console.log('CHATBOT_ABSOLUTE_URLS', JSON.stringify(absoluteUrls, null, 2));
-  console.log('CHATBOT_BACKEND_LINES', JSON.stringify(backendLines, null, 2));
-
-  const interestingRequests: string[] = [];
-  page.on('request', (req) => {
-    const url = req.url();
-    if (/ai|chat|reception|supabase|assistant/i.test(url)) interestingRequests.push(url);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        reply: 'E2E OK — Reception AI antwoordt correct.',
+        business_name: config.business_name,
+        receptionist_name: config.receptionist_name || 'AI Assistente',
+        lead_id: 'e2e-smoke-lead',
+        conversation_id: 'e2e-smoke-conversation',
+        contact_capture: { required: false },
+      }),
+    });
   });
 
   await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  await acceptCookieBannerIfPresent(page);
 
-  const nativeButton = page.getByRole('button', { name: /praat met ai assistente/i });
-  await expect(nativeButton).toBeVisible({ timeout: 30_000 });
+  const host = page.locator(RECEPTION_HOST);
+  await expect(host).toHaveCount(1, { timeout: 30_000 });
 
-  console.log('NATIVE_AI_BUTTON_HTML', await nativeButton.evaluate((el) => el.outerHTML));
+  const launcher = host.locator('.rai-launcher');
+  await expect(launcher).toBeVisible({ timeout: 20_000 });
 
-  await nativeButton.click();
-  await page.waitForTimeout(1500);
+  // Detect duplicate legacy/native assistants. Reception AI must be the
+  // single customer-facing assistant, not one of two competing launchers.
+  const nativeLegacyLaunchers = page.locator('.lux-chat-launcher');
+  const legacyCount = await nativeLegacyLaunchers.count();
+  expect(
+    legacyCount,
+    'Legacy/native LuxWash AI launcher is still present next to Reception AI'
+  ).toBe(0);
 
-  const snapshot = await page.evaluate(() => {
-    const visible = (el: Element) => {
-      const r = (el as HTMLElement).getBoundingClientRect();
-      const s = getComputedStyle(el);
-      return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';
-    };
+  await launcher.click();
 
-    return {
-      url: location.href,
-      dialogs: Array.from(document.querySelectorAll('[role="dialog"]'))
-        .filter(visible)
-        .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 1500)),
-      visibleInputs: Array.from(document.querySelectorAll('input,textarea'))
-        .filter(visible)
-        .map((el) => ({
-          tag: el.tagName,
-          placeholder: el.getAttribute('placeholder'),
-          aria: el.getAttribute('aria-label'),
-        })),
-      receptionHost: Boolean(document.getElementById('reception-ai-widget')),
-    };
-  });
+  const panel = host.locator('.rai-panel');
+  await expect(panel).toHaveAttribute('data-open', 'true');
+  await expect(panel).toBeVisible();
 
-  console.log('AFTER_NATIVE_AI_CLICK', JSON.stringify(snapshot, null, 2));
-  console.log('INTERESTING_REQUESTS', JSON.stringify([...new Set(interestingRequests)], null, 2));
+  await expect(host.locator('.rai-title strong')).not.toHaveText('');
 
-  expect(snapshot.dialogs.some((t) => /AI Assistente · LuxWash/i.test(t))).toBeTruthy();
+  const input = host.locator('.rai-input');
+  await expect(input).toBeEnabled();
+  await input.fill('E2E test: werkt Reception AI?');
+  await host.locator('.rai-send').click();
+
+  await expect(
+    host.getByText('E2E OK — Reception AI antwoordt correct.')
+  ).toBeVisible({ timeout: 15_000 });
 });
