@@ -51,6 +51,10 @@ Deno.serve(async req=>{
     const smokeTest=b.smoke_test===true;
     const smokeId=String(b.smoke_id||"").trim().slice(0,120);
     if(!token||!message)return json({error:"Ongeldige aanvraag"},400);
+    const low=message.toLowerCase();
+    const human=/medewerker|mens|persoon|bellen|bel\s+mij|contacteer/i.test(low);
+    const appointment=/afspraak|boeken|inplannen|beschikbaar|reserv|planning|tijdslot/i.test(low);
+    const urgent=/dringend|spoed|urgent|klacht|ontevreden|probleem/i.test(low);
 
     const url=Deno.env.get("SUPABASE_URL")!;
     const sec=JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")||"{}").default||Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -59,44 +63,62 @@ Deno.serve(async req=>{
     const {data:p}=await db.from("business_profiles").select("*").eq("widget_token",token).eq("widget_enabled",true).single();
     if(!p)return json({error:"Widget niet gevonden"},404);
 
-    // Safe production smoke test: exercise the real profile/config + Gemini path without creating CRM records.
-    // The marker is explicit and cannot be triggered by normal widget traffic.
-    if(smokeTest){
-      const key=Deno.env.get("GEMINI_API_KEY");
-      if(!key)return json({error:"AI provider niet geconfigureerd",smoke_test:true},503);
-      const services=Array.isArray(p.services)?p.services:[];
-      const instructions=[
-        "Je bent "+(p.receptionist_name||"Ava")+", AI-receptionist van "+p.business_name+".",
-        "Dit is een geautomatiseerde production smoke test. Maak geen afspraak en vraag geen persoonsgegevens.",
-        "Antwoord vriendelijk en compact. Gebruik uitsluitend de gegeven bedrijfsinformatie.",
-        "Beschrijving: "+(p.description||"niet ingevuld"),
-        "Diensten: "+(services.join(", ")||"niet ingevuld")
-      ].join("\\n");
-      const ai=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",{
-        method:"POST",headers:{"x-goog-api-key":key,"Content-Type":"application/json"},
-        body:JSON.stringify({system_instruction:{parts:[{text:instructions}]},contents:[{role:"user",parts:[{text:message}]}],generationConfig:{maxOutputTokens:180,temperature:.2,thinkingConfig:{thinkingBudget:0}}})
-      });
-      if(!ai.ok)return json({error:"AI provider smoke test mislukt",smoke_test:true,provider_status:ai.status},502);
-      const j=await ai.json();
-      const reply=String(j?.candidates?.[0]?.content?.parts?.map((x:any)=>x.text||"").join("")||"").trim();
-      if(reply.length<5)return json({error:"Leeg AI-antwoord",smoke_test:true},502);
-      console.log("PUBLIC_AI smoke success",smokeId||"no-id");
-      return json({smoke_test:true,smoke_id:smokeId||null,reply,receptionist_name:p.receptionist_name||"Ava",business_name:p.business_name});
+    const origin=req.headers.get("origin");
+    const allowed=Array.isArray(p.widget_allowed_domains)?p.widget_allowed_domains.map((x:string)=>String(x).trim().toLowerCase()).filter(Boolean):[];
+    if(allowed.length){
+      if(!origin)return json({error:"Deze widget is niet toegestaan op dit domein."},403);
+      let host="";try{host=new URL(origin).hostname.toLowerCase().replace(/^www\./,"")}catch{}
+      const trusted=["reception-ai-luxwash.vercel.app","reception-ai-rho.vercel.app"];
+      const ok=trusted.includes(host)||allowed.some((d:string)=>host===d.replace(/^https?:\/\//,"").replace(/\/.*$/,"").replace(/^www\./,""));
+      if(!ok)return json({error:"Deze widget is niet toegestaan op dit domein."},403);
     }
 
-    const {data:o}=await db.from("organizations").select("plan,trial_ends_at,subscription_status,status").eq("id",p.organization_id).single();
-    if(!o||o.status==="suspended"||(o.plan==="trial"&&new Date(o.trial_ends_at)<new Date())||(["starter","pro","business"].includes(o.plan)&&!["active","trialing"].includes(o.subscription_status))){
+    // Public widget tokens are intentionally public; never allow a special AI path to bypass
+    // subscription and rate-limit controls through a client-supplied flag.
+    if(smokeTest)return json({error:"Smoke test endpoint disabled"},404);
+
+    const {data:o}=await db.from("organizations")
+      .select("plan,trial_ends_at,subscription_status,status,is_internal")
+      .eq("id",p.organization_id).single();
+    const trialOk=o?.is_internal===true||(o?.plan==="trial"&&o?.trial_ends_at&&new Date(o.trial_ends_at).getTime()>Date.now());
+    const paidOk=["starter","pro","business"].includes(String(o?.plan||""))&&["active","trialing"].includes(String(o?.subscription_status||""));
+    if(!o||o.status==="suspended"||(!trialOk&&!paidOk)){
       return json({error:"Deze receptionist is momenteel niet actief."},402);
     }
+
+    const effectivePlan=o.is_internal===true?"business":(["starter","pro","business"].includes(String(o.plan||""))?String(o.plan):"trial");
+    let dailyLimit=500;
+    if(effectivePlan!=="trial"){
+      const {data:planRow}=await db.from("reception_ai_plan_catalog")
+        .select("daily_ai_limit").eq("plan",effectivePlan).eq("active",true).maybeSingle();
+      dailyLimit=Math.max(1,Number(planRow?.daily_ai_limit||500));
+    }
+    const minuteCaps:any={trial:30,starter:60,pro:120,business:240};
+    const orgMinuteLimit=Number(minuteCaps[effectivePlan]||30);
 
     const ip=req.headers.get("cf-connecting-ip")||req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()||"unknown";
     const enc=new TextEncoder().encode(token+":"+ip);
     const dig=await crypto.subtle.digest("SHA-256",enc);
     const hash=Array.from(new Uint8Array(dig)).map(x=>x.toString(16).padStart(2,"0")).join("");
     const since=new Date(Date.now()-60000).toISOString();
-    const {count}=await db.from("widget_rate_limits").select("id",{count:"exact",head:true})
-      .eq("organization_id",p.organization_id).eq("client_hash",hash).gte("created_at",since);
-    if((count||0)>=12)return json({error:"Even te veel berichten. Probeer over een minuut opnieuw."},429);
+    const [{count:clientMinute},{count:orgMinute}]=await Promise.all([
+      db.from("widget_rate_limits").select("id",{count:"exact",head:true})
+        .eq("organization_id",p.organization_id).eq("client_hash",hash).gte("created_at",since),
+      db.from("widget_rate_limits").select("id",{count:"exact",head:true})
+        .eq("organization_id",p.organization_id).gte("created_at",since)
+    ]);
+    if((clientMinute||0)>=12)return json({error:"Even te veel berichten. Probeer over een minuut opnieuw."},429);
+    if((orgMinute||0)>=orgMinuteLimit)return json({error:"Deze receptionist is tijdelijk erg druk. Probeer zo meteen opnieuw."},429);
+
+    if(!human&&!urgent&&!appointment){
+      const {data:quotaOk,error:quotaError}=await db.rpc("consume_ai_daily_quota",{
+        p_organization_id:p.organization_id,
+        p_limit:dailyLimit
+      });
+      if(quotaError)throw quotaError;
+      if(quotaOk!==true)return json({error:"Daglimiet voor AI-verwerking bereikt. Neem contact op met het bedrijf."},429);
+    }
+
     await db.from("widget_rate_limits").insert({organization_id:p.organization_id,client_hash:hash});
 
     const suppliedEmail=String(b.email||"").trim().slice(0,250)||null;
@@ -170,11 +192,6 @@ Deno.serve(async req=>{
     if(effectiveEmail&&effectivePhone)score=Math.max(score,50);
     if(effectiveName)score=Math.max(score,Math.min(55,score+5));
     if(message.length>=80)score=Math.max(score,Math.min(60,score+5));
-
-    const low=message.toLowerCase();
-    const human=/medewerker|mens|persoon|bellen|bel\s+mij|contacteer/i.test(low);
-    const appointment=/afspraak|boeken|inplannen|beschikbaar|reserv|planning|tijdslot/i.test(low);
-    const urgent=/dringend|spoed|urgent|klacht|ontevreden|probleem/i.test(low);
 
     let leadState="qualifying";
     let appointmentId:string|null=null;
@@ -260,20 +277,37 @@ Deno.serve(async req=>{
 
     let reply="";
     const key=Deno.env.get("GEMINI_API_KEY");
-    if(key){
-      const ai=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",{
-        method:"POST",
-        headers:{"x-goog-api-key":key,"Content-Type":"application/json"},
-        body:JSON.stringify({
-          system_instruction:{parts:[{text:instructions}]},
-          contents:history,
-          generationConfig:{maxOutputTokens:700,temperature:.35,thinkingConfig:{thinkingBudget:0}}
-        })
-      });
-      if(ai.ok){
-        const j=await ai.json();
-        reply=String(j?.candidates?.[0]?.content?.parts?.map((x:any)=>x.text||"").join("")||"").trim();
-        console.log("PUBLIC_AI gemini success");
+    if(key&&!human&&!urgent&&!appointment){
+      for(const model of ["gemini-3.5-flash-lite","gemini-3.1-flash-lite"]){
+        const controller=new AbortController();
+        const timer=setTimeout(()=>controller.abort(),9000);
+        try{
+          const ai=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent",{
+            method:"POST",
+            signal:controller.signal,
+            headers:{"x-goog-api-key":key,"Content-Type":"application/json"},
+            body:JSON.stringify({
+              system_instruction:{parts:[{text:instructions}]},
+              contents:history,
+              generationConfig:{maxOutputTokens:700,temperature:.35}
+            })
+          });
+          if(ai.ok){
+            const j=await ai.json();
+            reply=String(j?.candidates?.[0]?.content?.parts?.map((x:any)=>x.text||"").join("")||"").trim();
+            if(reply){
+              console.log("PUBLIC_AI gemini success",model);
+              break;
+            }
+          }else{
+            console.error("PUBLIC_AI provider",model,ai.status);
+            if(!([404,408,429].includes(ai.status)||ai.status>=500))break;
+          }
+        }catch(e){
+          console.error("PUBLIC_AI request",model,e instanceof Error?e.message:String(e));
+        }finally{
+          clearTimeout(timer);
+        }
       }
     }
 
@@ -287,7 +321,7 @@ Deno.serve(async req=>{
         :"Natuurlijk. Ik geef dit door aan een medewerker. Wat is het beste telefoonnummer of e-mailadres waarop we u kunnen bereiken?";
     }else if(appointment){
       reply="Graag. Ik kan hier geen live beschikbaarheid bevestigen. Welke dag of periode past voor u het best? Een medewerker of gekoppelde agenda bevestigt daarna het tijdstip.";
-    }else if(reply.length<25){
+    }else if(!reply){
       reply="Bedankt voor uw bericht. Ik registreer uw aanvraag. Kunt u kort aangeven waarmee we u kunnen helpen?";
     }
 
