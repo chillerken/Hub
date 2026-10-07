@@ -5,6 +5,7 @@ const CONFIG_URL =
 const CHAT_URL =
   'https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/public-reception-chat';
 const WIDGET_TOKEN = '597f9789-be65-4ab8-bdbe-276f696991f1';
+const WIDGET_URL = 'https://reception-ai-luxwash.vercel.app/widget.js';
 
 test('LuxWash laadt uitsluitend de echte Reception AI widget', async ({ page, request }) => {
   const configResponse = await request.post(CONFIG_URL, {
@@ -51,13 +52,12 @@ test('LuxWash laadt uitsluitend de echte Reception AI widget', async ({ page, re
   if (await legacyLaunchers.count()) {
     console.log('LEGACY_LAUNCHER_HTML', await legacyLaunchers.first().evaluate((el) => el.outerHTML));
   }
-  // Record stale Editorless legacy markup as diagnostic evidence.
-  // Production availability is gated on the real Reception AI host/launcher/panel below.
-  console.log('LEGACY_COUNTS', {
-    launcher: await legacyLaunchers.count(),
-    chat: await page.locator('.lux-chat').count(),
-    entry: await page.locator('.lux-chat-entry').count(),
-  });
+  await expect(
+    legacyLaunchers,
+    'Legacy LuxWash launcher must be removed by the active Reception AI build'
+  ).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.locator('.lux-chat')).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.locator('.lux-chat-entry')).toHaveCount(0, { timeout: 10_000 });
 
   const launcher = host.locator('.rai-launcher');
   await expect(launcher).toBeVisible({ timeout: 20_000 });
@@ -132,4 +132,13 @@ test('Chat-endpoint weigert onbekende origin vóór CRM-writes', async ({ reques
   const body = await response.json();
   expect(response.status()).toBe(403);
   expect(body?.error).toBe('Deze widget is niet toegestaan op dit domein.');
+});
+
+
+test('Actieve widgetbuild bevat de LuxWash legacy-cleanup', async ({ request }) => {
+  const response = await request.get(WIDGET_URL, { timeout: 30_000 });
+  expect(response.ok()).toBeTruthy();
+  const source = await response.text();
+  expect(source).toContain('shouldRemoveLuxWashLegacy');
+  expect(source).toContain('.lux-chat,.lux-chat-launcher,.lux-chat-entry');
 });
