@@ -8,6 +8,14 @@ const json = (body:any, status=200) => new Response(JSON.stringify(body), {
 const clean = (v:any, max=500) => String(v ?? "").trim().slice(0,max);
 const isEmail = (v:any) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v||""));
 const digits = (v:any) => String(v||"").replace(/\D/g,"");
+function isNonDeliverableTestLead(lead:any) {
+  if(!lead) return false;
+  const email=String(lead.email||"").trim().toLowerCase();
+  const source=String(lead.source||"").trim().toLowerCase();
+  return email.endsWith(".invalid")
+    || /(^|[._-])(qa|test)([._-]|$)/.test(source)
+    || /^(qa|test)([._-]|$)/.test(source);
+}
 
 function retrySeconds(attempt:number) {
   const steps=[60,300,1800,7200,21600];
@@ -754,6 +762,15 @@ Deno.serve(async (req:Request)=>{
         db.from("business_profiles").select("*").eq("organization_id",action.organization_id).single(),
         action.lead_id ? db.from("leads").select("*").eq("id",action.lead_id).eq("organization_id",action.organization_id).maybeSingle() : Promise.resolve({data:null})
       ]);
+
+      if(isNonDeliverableTestLead(lead)){
+        await finish(db,action,"completed",{
+          provider:"test_guard",
+          response_meta:{skipped:true,reason:"non_deliverable_test_lead"}
+        });
+        results.push({id:action.id,status:"completed",provider:"test_guard",skipped:true});
+        continue;
+      }
 
       if(action?.payload?.sales_sequence_id){
         const sequenceId=action.payload.sales_sequence_id;
