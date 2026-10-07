@@ -26,8 +26,8 @@ function normalizePhone(raw:string,locale:string){
 }
 
 function parseExplicitBelgianSlot(message:string){
-  const dm=message.match(/\\b(\\d{1,2})[\\/.\\-](\\d{1,2})(?:[\\/.\\-](\\d{2,4}))?\\b/);
-  const tm=message.match(/\\b(?:om\\s*)?(\\d{1,2})(?:[:.]([0-5]\\d)|\\s*(?:u|uur)(?:\\s*([0-5]\\d))?)\\b/i);
+  const dm=message.match(/\b(\d{1,2})[\/.\-](\d{1,2})(?:[\/.\-](\d{2,4}))?\b/);
+  const tm=message.match(/\b(?:om\s*)?(\d{1,2})(?:[:.]([0-5]\d)|\s*(?:u|uur)(?:\s*([0-5]\d))?)\b/i);
   if(!dm||!tm)return null;
   let year=dm[3]?Number(dm[3]):new Date().getFullYear(); if(year<100)year+=2000;
   const month=Number(dm[2]),day=Number(dm[1]),hour=Number(tm[1]),minute=Number(tm[2]||tm[3]||0);
@@ -254,7 +254,8 @@ Deno.serve(async req=>{
       }else{
         const {data:a,error:ae}=await db.from("appointments").insert({
           organization_id:p.organization_id,lead_id:leadId,status:"requested",requested_text:message,
-          timezone:String(p.locale||"").toLowerCase().includes("be")?"Europe/Brussels":"UTC"
+          timezone:String(p.locale||"").toLowerCase().includes("be")?"Europe/Brussels":"UTC",
+          ...(slot?{start_at:slot.start_at,end_at:slot.end_at}:{})
         }).select("id").single();
         if(ae)throw ae;
         appointmentId=a.id;
