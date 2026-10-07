@@ -6,7 +6,7 @@ const cors={
   "Access-Control-Allow-Methods":"POST,OPTIONS"
 };
 const out=(body:any,status=200)=>new Response(JSON.stringify(body),{
-  status,headers:{...cors,"Content-Type":"application/json"}
+  status,headers:{...cors,"Content-Type":"application/json","Cache-Control":"no-store, max-age=0","Referrer-Policy":"no-referrer"}
 });
 const clean=(v:any,max=500)=>String(v??"").trim().slice(0,max);
 
@@ -39,14 +39,18 @@ Deno.serve(async(req:Request)=>{
     if(me||!mem) return out({error:"Membership not found"},403);
     if(!["owner","admin"].includes(mem.role)) return out({error:"Owner or admin role required"},403);
 
+    const {data:orgrow}=await db.from("organizations").select("is_internal").eq("id",mem.organization_id).single();
+    if(orgrow?.is_internal===true) return out({error:"Platform Owner-account is intern en heeft geen betaald abonnement nodig.",code:"internal_account"},403);
+
     const b=await req.json();
     const plan=clean(b.plan,20).toLowerCase();
-    const links:any={
-      starter:"https://buy.stripe.com/dRm9AUdfz8NFfGu4Iu6EU07",
-      pro:"https://buy.stripe.com/eVq9AUdfz9RJgKy8YK6EU08",
-      business:"https://buy.stripe.com/eVqcN6a3n6Fx8e23Eq6EU09"
-    };
-    if(!links[plan]) return out({error:"Invalid plan"},400);
+    const {data:planRow,error:planError}=await db.from("reception_ai_plan_catalog")
+      .select("plan,public_name,monthly_cents,currency,payment_link_url,active")
+      .eq("plan",plan)
+      .eq("active",true)
+      .maybeSingle();
+    if(planError) throw planError;
+    if(!planRow||!/^https:\/\/buy\.stripe\.com\//.test(String(planRow.payment_link_url||""))) return out({error:"Invalid plan"},400);
 
     const raw=crypto.randomUUID().replace(/-/g,"")+crypto.randomUUID().replace(/-/g,"");
     const tokenHash=await sha256(raw);
@@ -67,13 +71,16 @@ Deno.serve(async(req:Request)=>{
       event_type:"billing.checkout_prepared",
       entity_type:"organization",
       entity_id:mem.organization_id,
-      payload:{plan,expires_at:expiresAt}
+      payload:{plan,public_name:planRow.public_name,monthly_cents:planRow.monthly_cents,currency:planRow.currency,expires_at:expiresAt}
     });
 
     return out({
       ok:true,
       plan,
-      checkout_url:links[plan]+"?client_reference_id="+encodeURIComponent(raw),
+      public_name:planRow.public_name,
+      monthly_cents:Number(planRow.monthly_cents||0),
+      currency:planRow.currency||"EUR",
+      checkout_url:String(planRow.payment_link_url)+"?client_reference_id="+encodeURIComponent(raw),
       expires_at:expiresAt
     });
   }catch(e){
