@@ -49,7 +49,6 @@ Deno.serve(async req=>{
     const token=String(b.widget_token||"");
     const message=String(b.message||"").trim().slice(0,2000);
     const smokeTest=b.smoke_test===true;
-    const smokeId=String(b.smoke_id||"").trim().slice(0,120);
     if(!token||!message)return json({error:"Ongeldige aanvraag"},400);
     const low=message.toLowerCase();
     const human=/medewerker|mens|persoon|bellen|bel\s+mij|contacteer/i.test(low);
@@ -68,8 +67,7 @@ Deno.serve(async req=>{
     if(allowed.length){
       if(!origin)return json({error:"Deze widget is niet toegestaan op dit domein."},403);
       let host="";try{host=new URL(origin).hostname.toLowerCase().replace(/^www\./,"")}catch{}
-      const trusted=["reception-ai-luxwash.vercel.app","reception-ai-rho.vercel.app"];
-      const ok=trusted.includes(host)||allowed.some((d:string)=>host===d.replace(/^https?:\/\//,"").replace(/\/.*$/,"").replace(/^www\./,""));
+      const ok=allowed.some((d:string)=>host===d.replace(/^https?:\/\//,"").replace(/\/.*$/,"").replace(/^www\./,""));
       if(!ok)return json({error:"Deze widget is niet toegestaan op dit domein."},403);
     }
 
@@ -119,7 +117,8 @@ Deno.serve(async req=>{
       if(quotaOk!==true)return json({error:"Daglimiet voor AI-verwerking bereikt. Neem contact op met het bedrijf."},429);
     }
 
-    await db.from("widget_rate_limits").insert({organization_id:p.organization_id,client_hash:hash});
+    const {error:rateInsertError}=await db.from("widget_rate_limits").insert({organization_id:p.organization_id,client_hash:hash});
+    if(rateInsertError)throw rateInsertError;
 
     const suppliedEmail=String(b.email||"").trim().slice(0,250)||null;
     const suppliedPhone=normalizePhone(String(b.phone||""),String(p.locale||""))||null;
@@ -162,9 +161,10 @@ Deno.serve(async req=>{
       convId=c.id;
     }
 
-    await db.from("messages").insert({
+    const {error:customerMessageError}=await db.from("messages").insert({
       organization_id:p.organization_id,conversation_id:convId,role:"customer",content:message
     });
+    if(customerMessageError)throw customerMessageError;
 
     const extractedEmail=suppliedEmail||message.match(emailRe)?.[0]?.toLowerCase()||null;
     const phoneMatch=message.match(phoneRe)?.[0]||"";
@@ -203,10 +203,11 @@ Deno.serve(async req=>{
       updates.qualification={...(lead.qualification||{}),intent:urgent?"urgent_handoff":"human_handoff",has_email:!!effectiveEmail,has_phone:!!effectivePhone,contact_extracted:!!(updates.email||updates.phone||updates.name)};
       const {data:existing}=await db.from("handoffs").select("id").eq("organization_id",p.organization_id).eq("lead_id",leadId).eq("status","open").limit(1);
       if(!existing?.length){
-        await db.from("handoffs").insert({
+        const {error:handoffError}=await db.from("handoffs").insert({
           organization_id:p.organization_id,lead_id:leadId,conversation_id:convId,
           reason:urgent?"Urgente of gevoelige aanvraag":"Bezoeker vraagt menselijke opvolging",status:"open"
         });
+        if(handoffError)throw handoffError;
       }
       leadState="handoff";
     }else if(appointment){
@@ -222,7 +223,8 @@ Deno.serve(async req=>{
         appointmentId=existingAppt[0].id;
         if(dateHintRe.test(message)){
           const requested=[existingAppt[0].requested_text,message].filter(Boolean).join(" | ").slice(0,2000);
-          await db.from("appointments").update({requested_text:requested,updated_at:new Date().toISOString()}).eq("id",appointmentId);
+          const {error:appointmentUpdateError}=await db.from("appointments").update({requested_text:requested,updated_at:new Date().toISOString()}).eq("id",appointmentId);
+          if(appointmentUpdateError)throw appointmentUpdateError;
           await db.from("workflow_actions").update({
             payload:{appointment_id:appointmentId,requested_text:requested}
           }).eq("idempotency_key","appointment:"+appointmentId+":calendar_request").eq("status","pending");
@@ -239,9 +241,10 @@ Deno.serve(async req=>{
       const {data:existingTask}=await db.from("tasks").select("id").eq("organization_id",p.organization_id)
         .eq("lead_id",leadId).eq("status","open").eq("title","Afspraakaanvraag opvolgen").limit(1);
       if(!existingTask?.length){
-        await db.from("tasks").insert({
+        const {error:taskError}=await db.from("tasks").insert({
           organization_id:p.organization_id,lead_id:leadId,title:"Afspraakaanvraag opvolgen",status:"open",priority:"high"
         });
+        if(taskError)throw taskError;
       }
       leadState="qualified";
     }else{
@@ -253,8 +256,9 @@ Deno.serve(async req=>{
     const {error:updateError}=await db.from("leads").update(updates).eq("id",leadId).eq("organization_id",p.organization_id);
     if(updateError)throw updateError;
 
-    const {data:hist}=await db.from("messages").select("role,content").eq("conversation_id",convId)
+    const {data:hist,error:historyError}=await db.from("messages").select("role,content").eq("conversation_id",convId)
       .order("created_at",{ascending:false}).limit(10);
+    if(historyError)throw historyError;
     const history=(hist||[]).reverse().map((m:any)=>({
       role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]
     }));
@@ -272,7 +276,8 @@ Deno.serve(async req=>{
       "Diensten: "+(services.join(", ")||"niet ingevuld"),
       "Openingsuren: "+JSON.stringify(p.opening_hours||{}),
       "Kwalificatievragen: "+JSON.stringify(p.qualification_questions||[]),
-      "Escalatieregels: "+JSON.stringify(p.escalation_rules||[])
+      "Escalatieregels: "+JSON.stringify(p.escalation_rules||[]),
+      "Aanvullende bedrijfsinstructies: "+(p.custom_instructions||"geen")
     ].join("\n");
 
     let reply="";
@@ -320,14 +325,15 @@ Deno.serve(async req=>{
         ?"Natuurlijk. Ik geef dit door aan een medewerker. Uw contactgegevens zijn geregistreerd."
         :"Natuurlijk. Ik geef dit door aan een medewerker. Wat is het beste telefoonnummer of e-mailadres waarop we u kunnen bereiken?";
     }else if(appointment){
-      reply="Graag. Ik kan hier geen live beschikbaarheid bevestigen. Welke dag of periode past voor u het best? Een medewerker of gekoppelde agenda bevestigt daarna het tijdstip.";
+      reply="Graag. Uw gewenste dag en tijd worden als afspraakaanvraag geregistreerd. Ik kan hier geen live beschikbaarheid bevestigen. Een medewerker of gekoppelde agenda bevestigt daarna het definitieve tijdstip.";
     }else if(!reply){
       reply="Bedankt voor uw bericht. Ik registreer uw aanvraag. Kunt u kort aangeven waarmee we u kunnen helpen?";
     }
 
-    await db.from("messages").insert({
+    const {error:assistantMessageError}=await db.from("messages").insert({
       organization_id:p.organization_id,conversation_id:convId,role:"assistant",content:reply
     });
+    if(assistantMessageError)throw assistantMessageError;
 
     return json({
       reply,
