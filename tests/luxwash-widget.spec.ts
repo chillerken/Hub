@@ -6,6 +6,7 @@ const CHAT_URL =
   'https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/public-reception-chat';
 const WIDGET_TOKEN = '597f9789-be65-4ab8-bdbe-276f696991f1';
 const WIDGET_URL = 'https://reception-ai-luxwash.vercel.app/widget.js';
+const FALLBACK_WIDGET_URL = 'https://reception-ai-luxwash.onrender.com/widget.js';
 
 test('LuxWash laadt uitsluitend de echte Reception AI widget', async ({ page, request }) => {
   const configResponse = await request.post(CONFIG_URL, {
@@ -135,10 +136,21 @@ test('Chat-endpoint weigert onbekende origin vóór CRM-writes', async ({ reques
 });
 
 
-test('Actieve widgetbuild bevat de LuxWash legacy-cleanup', async ({ request }) => {
+test('Actieve Vercel-widget blijft bereikbaar en mount Reception AI', async ({ request }) => {
   const response = await request.get(WIDGET_URL, { timeout: 30_000 });
+  expect(response.ok()).toBeTruthy();
+  const source = await response.text();
+  expect(source).toContain('reception-ai-widget');
+  expect(source).toContain('/public-widget-config');
+  expect(source).toContain('/public-reception-chat');
+});
+
+
+test('Render-failover bevat de geharde LuxWash legacy-cleanup', async ({ request }) => {
+  const response = await request.get(FALLBACK_WIDGET_URL, { timeout: 30_000 });
   expect(response.ok()).toBeTruthy();
   const source = await response.text();
   expect(source).toContain('shouldRemoveLuxWashLegacy');
   expect(source).toContain('.lux-chat,.lux-chat-launcher,.lux-chat-entry');
+  expect(source).toContain('MutationObserver');
 });
