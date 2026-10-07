@@ -1,0 +1,61 @@
+name: Reception AI Production Gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'ai-receptionist-host/**'
+      - 'tests/reception-ai-production.spec.ts'
+      - 'playwright.config.ts'
+      - '.github/workflows/reception-ai-production-gate.yml'
+  schedule:
+    - cron: "23 */6 * * *"
+
+concurrency:
+  group: reception-ai-production-gate
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pinned Playwright
+        run: npm install --no-save --package-lock=false @playwright/test@1.63.0
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Wait briefly for hosting propagation after a push
+        if: github.event_name == 'push'
+        run: sleep 20
+
+      - name: Verify custom domain, auth shell and fallback
+        env:
+          LUXWASH_BASE_URL: https://ai.luxwash.online/
+          RECEPTION_AI_BASE_URL: https://ai.luxwash.online/
+          RECEPTION_AI_FALLBACK_URL: https://reception-ai-luxwash.onrender.com/
+        run: npx playwright test tests/reception-ai-production.spec.ts --project=chromium
+
+      - name: Upload verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reception-ai-production-report
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
