@@ -6,7 +6,7 @@ Gebruik op elke klantwebsite dezelfde widget. Alleen de publieke `widget_token` 
 
 ```html
 <script
-  src="https://reception-ai-luxwash.vercel.app/widget.js"
+  src="https://YOUR-RECEPTION-AI-DOMAIN/widget.js"
   data-widget-token="PLAATS_HIER_DE_WIDGET_TOKEN"
   defer>
 </script>
@@ -18,7 +18,7 @@ Plaats de code bij voorkeur vlak voor `</body>` of via de custom-code functie va
 
 ```html
 <script
-  src="https://reception-ai-luxwash.vercel.app/widget.js"
+  src="https://YOUR-RECEPTION-AI-DOMAIN/widget.js"
   data-widget-token="..."
   data-position="right"
   data-accent="#6d5dfc"

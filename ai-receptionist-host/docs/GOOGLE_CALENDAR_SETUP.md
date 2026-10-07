@@ -36,7 +36,7 @@ Create these Vault secrets:
 
 - `reception_ai_google_client_id` → Google OAuth client ID
 - `reception_ai_google_client_secret` → Google OAuth client secret
-- `reception_ai_app_url` → `https://reception-ai-rho.vercel.app`
+- `reception_ai_app_url` → `https://YOUR-RECEPTION-AI-DOMAIN`
 
 The production database already has `reception_ai_app_url`; the OAuth client ID and secret still need real Google values.
 
