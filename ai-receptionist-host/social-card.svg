@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Reception AI</title>
+  <desc id="desc">Van websitebezoeker naar opgevolgde lead.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0f14"/>
+      <stop offset="1" stop-color="#171d25"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#d7a84d"/>
+      <stop offset="1" stop-color="#f0c66d"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" rx="36" fill="url(#bg)"/>
+  <circle cx="1040" cy="120" r="220" fill="#d7a84d" opacity=".08"/>
+  <circle cx="1130" cy="540" r="300" fill="#6d5dfc" opacity=".08"/>
+  <rect x="78" y="72" width="210" height="46" rx="23" fill="#ffffff" opacity=".07"/>
+  <text x="102" y="103" font-family="Arial,Helvetica,sans-serif" font-size="20" font-weight="700" fill="#f0c66d">AI-RECEPTIONIST</text>
+  <text x="78" y="220" font-family="Arial,Helvetica,sans-serif" font-size="74" font-weight="800" fill="#ffffff">Reception AI</text>
+  <rect x="78" y="252" width="540" height="8" rx="4" fill="url(#gold)"/>
+  <text x="78" y="340" font-family="Arial,Helvetica,sans-serif" font-size="40" font-weight="700" fill="#ffffff">Van websitebezoeker</text>
+  <text x="78" y="392" font-family="Arial,Helvetica,sans-serif" font-size="40" font-weight="700" fill="#ffffff">naar opgevolgde lead.</text>
+  <text x="78" y="474" font-family="Arial,Helvetica,sans-serif" font-size="25" fill="#c9d1dc">24/7 klantontvangst · leadkwalificatie · CRM · opvolging</text>
+  <text x="78" y="548" font-family="Arial,Helvetica,sans-serif" font-size="22" fill="#f0c66d">ai.luxwash.online</text>
+</svg>
