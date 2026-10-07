@@ -131,29 +131,41 @@ Deno.serve(async req=>{
       });
     }
 
-    let {data:invite}=await db.from("sales_onboarding_invites")
-      .select("id,token,status,expires_at")
-      .eq("sales_organization_id",ORG_ID)
-      .eq("lead_id",lead.id)
-      .eq("status","pending")
-      .gt("expires_at",now)
-      .order("created_at",{ascending:false})
-      .limit(1).maybeSingle();
+    let invite:any=null;
+    const selfServeEmail=String(lead?.email||"").trim().toLowerCase();
 
-    if(!invite){
-      const {data:newInvite,error:inviteErr}=await db.from("sales_onboarding_invites").insert({
-        sales_organization_id:ORG_ID,
-        lead_id:lead.id,
-        requested_plan:requestedPlan,
-        status:"pending",
-        expires_at:new Date(Date.now()+7*24*3600000).toISOString()
-      }).select("id,token,status,expires_at").single();
-      if(inviteErr)throw inviteErr;
-      invite=newInvite;
+    if(selfServeEmail){
+      const {data:existingInvite}=await db.from("sales_onboarding_invites")
+        .select("id,token,status,expires_at")
+        .eq("sales_organization_id",ORG_ID)
+        .eq("lead_id",lead.id)
+        .eq("status","pending")
+        .gt("expires_at",now)
+        .order("created_at",{ascending:false})
+        .limit(1).maybeSingle();
+      invite=existingInvite||null;
+
+      if(!invite){
+        const {data:newInvite,error:inviteErr}=await db.from("sales_onboarding_invites").insert({
+          sales_organization_id:ORG_ID,
+          lead_id:lead.id,
+          requested_plan:requestedPlan,
+          status:"pending",
+          expires_at:new Date(Date.now()+7*24*3600000).toISOString()
+        }).select("id,token,status,expires_at").single();
+        if(inviteErr)throw inviteErr;
+        invite=newInvite;
+      }else{
+        await db.from("sales_onboarding_invites").update({
+          requested_plan:requestedPlan,updated_at:now
+        }).eq("id",invite.id);
+      }
     }else{
       await db.from("sales_onboarding_invites").update({
-        requested_plan:requestedPlan,updated_at:now
-      }).eq("id",invite.id);
+        status:"cancelled",updated_at:now
+      }).eq("sales_organization_id",ORG_ID)
+        .eq("lead_id",lead.id)
+        .eq("status","pending");
     }
 
     await db.from("audit_events").insert({
@@ -164,11 +176,7 @@ Deno.serve(async req=>{
 
     return json({
       ok:true,
-      lead_id:lead.id,
       onboarding_token:invite?.token||null,
-      requested_plan:requestedPlan,
-      onboarding_expires_at:invite?.expires_at||null,
-      sales_stage:"demo_requested",
       message:"Aanvraag ontvangen. We nemen persoonlijk contact met u op."
     });
   }catch(e){
