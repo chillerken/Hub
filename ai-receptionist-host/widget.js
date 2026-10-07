@@ -46,6 +46,86 @@
     .toLowerCase()
     .replace(/^www\./, "");
   const shouldRemoveLuxWashLegacy = currentHost === "luxwash.online";
+  const LUXWASH_RECEIPT_LINK_URL =
+    "https://nahwlhptgdkwhjcfkhkt.supabase.co/functions/v1/luxwash-site-api/receipt-link";
+
+  // LuxWash-only, fail-open observer. It never changes the booking response:
+  // it only links the public receipt returned by ChatGPT Sites to the
+  // idempotency key already stored in the central CRM.
+  function installLuxWashReceiptObserver() {
+    if (!shouldRemoveLuxWashLegacy || window.__LUXWASH_RECEIPT_OBSERVER__) return;
+    window.__LUXWASH_RECEIPT_OBSERVER__ = true;
+
+    const originalFetch = window.fetch.bind(window);
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+    window.fetch = async function receptionAiObservedFetch(input, init) {
+      let intakeKey = "";
+      let observeBooking = false;
+
+      try {
+        const inputUrl =
+          typeof input === "string" || input instanceof URL
+            ? String(input)
+            : input && typeof input.url === "string"
+              ? input.url
+              : "";
+        const url = new URL(inputUrl, window.location.href);
+        const method = String(
+          init?.method ||
+          (typeof Request !== "undefined" && input instanceof Request ? input.method : "GET")
+        ).toUpperCase();
+
+        observeBooking =
+          url.origin === window.location.origin &&
+          url.pathname === "/api/core/request" &&
+          method === "POST";
+
+        if (observeBooking) {
+          let rawBody = init?.body;
+          if (
+            rawBody == null &&
+            typeof Request !== "undefined" &&
+            input instanceof Request
+          ) {
+            rawBody = await input.clone().text();
+          }
+          if (typeof rawBody === "string") {
+            const payload = JSON.parse(rawBody);
+            intakeKey = String(payload?.idempotency_key || "").trim().toLowerCase();
+          }
+        }
+      } catch {
+        observeBooking = false;
+      }
+
+      const response = await originalFetch(input, init);
+
+      if (observeBooking && uuidRe.test(intakeKey)) {
+        try {
+          const copy = response.clone();
+          void copy.json().then((data) => {
+            const publicReceiptId = String(data?.id || "").trim().toLowerCase();
+            if (!copy.ok || !data?.ok || !data?.stored || !uuidRe.test(publicReceiptId)) return;
+
+            void originalFetch(LUXWASH_RECEIPT_LINK_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                public_receipt_id: publicReceiptId,
+                intake_key: intakeKey
+              }),
+              keepalive: true
+            }).catch(() => {});
+          }).catch(() => {});
+        } catch {}
+      }
+
+      return response;
+    };
+  }
+
+  installLuxWashReceiptObserver();
 
   function removeLuxWashLegacy() {
     if (!shouldRemoveLuxWashLegacy) return;
