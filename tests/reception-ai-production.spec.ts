@@ -57,8 +57,11 @@ test.describe('Reception AI production verification', () => {
     const html = await response.text();
     expect(html).toContain('<h1>Van websitebezoeker naar opgevolgde lead met Reception AI.</h1>');
     expect(html).toContain('application/ld+json');
-    expect(html).toContain('€99/maand');
-    expect(html).toContain('€199/maand');
-    expect(html).toContain('vanaf €349/maand');
+    expect(html).toContain('€249/maand');
+    expect(html).toContain('€399/maand');
+    expect(html).toContain('€599/maand');
+    expect(html).toContain('Eenmalige setup &amp; onboarding: €299');
+    expect(html).toContain('Eenmalige setup &amp; onboarding: €499');
+    expect(html).toContain('Eenmalige setup &amp; onboarding: €750');
   });
 });
