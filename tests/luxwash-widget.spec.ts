@@ -6,25 +6,23 @@ const CHAT_URL =
   'https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/public-reception-chat';
 const WIDGET_TOKEN = '597f9789-be65-4ab8-bdbe-276f696991f1';
 
-test('LuxWash gebruikt één Reception AI launcher en opent de echte widget', async ({ page, request }) => {
-  // Validate real production widget configuration.
+test('LuxWash laadt uitsluitend de echte Reception AI widget', async ({ page, request }) => {
   const configResponse = await request.post(CONFIG_URL, {
     data: { widget_token: WIDGET_TOKEN },
     headers: { 'Content-Type': 'application/json' },
   });
-
   expect(configResponse.ok()).toBeTruthy();
+
   const config = await configResponse.json();
   expect(config?.error).toBeFalsy();
   expect(config?.business_name).toBeTruthy();
 
-  // Prevent a synthetic CI test from creating a real CRM lead.
+  // Keep CI out of the production CRM while exercising the full widget UI.
   await page.route(CHAT_URL, async (route) => {
     if (route.request().method() !== 'POST') {
       await route.continue();
       return;
     }
-
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -41,28 +39,25 @@ test('LuxWash gebruikt één Reception AI launcher en opent de echte widget', as
 
   await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
 
-  const directLauncher = page.locator('#reception-ai-direct-launcher');
-  await expect(directLauncher).toHaveCount(1, { timeout: 30_000 });
-  await expect(directLauncher).toBeVisible();
-
-  // No competing legacy/native assistant may remain customer-facing.
-  await expect(page.locator('.lux-chat-launcher')).toHaveCount(0, { timeout: 10_000 });
-  await expect(page.locator('.lux-chat')).toHaveCount(0, { timeout: 10_000 });
-
-  await directLauncher.click();
-
+  // The static LuxWash loader should mount Reception AI directly.
   const host = page.locator('#reception-ai-widget');
   await expect(host).toHaveCount(1, { timeout: 30_000 });
+
+  // There must be no competing old LuxWash chatbot UI.
+  await expect(page.locator('.lux-chat-launcher')).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.locator('.lux-chat')).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.locator('.lux-chat-entry')).toHaveCount(0, { timeout: 10_000 });
+
+  const launcher = host.locator('.rai-launcher');
+  await expect(launcher).toBeVisible({ timeout: 20_000 });
+  await launcher.click();
 
   const panel = host.locator('.rai-panel');
   await expect(panel).toHaveAttribute('data-open', 'true', { timeout: 15_000 });
   await expect(panel).toBeVisible();
 
-  await expect(page.locator('#reception-ai-direct-launcher')).toHaveCount(0);
-
   const input = host.locator('.rai-input');
   await expect(input).toBeEnabled();
-
   await input.fill('E2E test: werkt Reception AI?');
   await host.locator('.rai-send').click();
 
