@@ -71,26 +71,17 @@ test('LuxWash laadt uitsluitend de echte Reception AI widget', async ({ page, re
 });
 
 
-test('LuxWash echte production AI smoke test zonder CRM-vervuiling', async ({ request }) => {
-  const smokeId = 'gha-' + Date.now();
+test('Publieke smoke-bypass blijft veilig uitgeschakeld', async ({ request }) => {
   const response = await request.post(CHAT_URL, {
     data: {
       widget_token: WIDGET_TOKEN,
-      message: 'Production smoke test: antwoord uitsluitend kort dat de AI-receptionist bereikbaar is.',
+      message: 'security regression check',
       smoke_test: true,
-      smoke_id: smokeId,
+      smoke_id: 'gha-security-check',
     },
     headers: { 'Content-Type': 'application/json' },
   });
-
-  const responseText = await response.text();
-  console.log('SMOKE_HTTP', response.status(), responseText);
-  expect(response.ok()).toBeTruthy();
-  const body = JSON.parse(responseText);
-  expect(body?.smoke_test).toBe(true);
-  expect(body?.smoke_id).toBe(smokeId);
-  expect(body?.business_name).toBeTruthy();
-  expect(body?.reply?.length).toBeGreaterThan(4);
-  expect(body?.lead_id).toBeUndefined();
-  expect(body?.conversation_id).toBeUndefined();
+  const body = await response.json();
+  expect(response.status()).toBe(404);
+  expect(body?.error).toBe('Smoke test endpoint disabled');
 });
