@@ -40,7 +40,7 @@ Deno.serve(async(req:Request)=>{
     const leadId=clean(body.lead_id,80);
     if(!/^[0-9a-f-]{36}$/i.test(leadId))return J({error:"invalid_lead_id"},400);
 
-    const [{data:lead},{data:opp},{data:invite},{data:salesCfg},{data:appUrlRaw}]=await Promise.all([
+    const [{data:lead},{data:opp},{data:invite},{data:salesCfg},{data:appUrlRaw},{data:planRows}]=await Promise.all([
       db.from("leads").select("id,name,email,phone,status,score,summary,qualification,contact_consent_at")
         .eq("id",leadId).eq("organization_id",mem.organization_id).single(),
       db.from("sales_opportunities").select("*")
@@ -50,7 +50,10 @@ Deno.serve(async(req:Request)=>{
         .order("created_at",{ascending:false}).limit(1).maybeSingle(),
       db.from("sales_agent_configs").select("brand_name,tone,objective,offer,preferred_channel,active,min_score")
         .eq("organization_id",mem.organization_id).maybeSingle(),
-      db.rpc("get_platform_secret",{p_name:"reception_ai_app_url"})
+      db.rpc("get_platform_secret",{p_name:"reception_ai_app_url"}),
+      db.from("reception_ai_plan_catalog")
+        .select("plan,public_name,monthly_cents,setup_cents,currency")
+        .eq("active",true)
     ]);
     if(!lead)return J({error:"lead_not_found"},404);
 
@@ -82,10 +85,23 @@ Deno.serve(async(req:Request)=>{
     const highVolume=Number(usage.public_conversations||0)>=30&&(Number(usage.qualified_leads||0)>=5||Number(usage.appointment_requests||0)>=3||Number(usage.handoffs||0)>=3);
     const proven=String(activation?.stage||"")==="value_proven"||pilotValue?.conversion_ready===true||Number(usage.qualified_leads||0)>=2||Number(usage.appointment_requests||0)>=1;
     const recommendedPlan=explicitPlan||(highVolume?"business":proven?"pro":"starter");
+    const planCatalog:any=Object.fromEntries((planRows||[]).map((row:any)=>[String(row.plan||""),row]));
+    const priceText=(key:string,fallbackLabel:string,fallbackMonthly:number,fallbackSetup:number)=>{
+      const row=planCatalog[key]||{};
+      const monthly=Number(row.monthly_cents||fallbackMonthly)/100;
+      const setup=Number(row.setup_cents||fallbackSetup)/100;
+      return {
+        label:clean(row.public_name||fallbackLabel,80),
+        price:`€${monthly.toFixed(monthly%1?2:0)}/mnd + €${setup.toFixed(setup%1?2:0)} setup`
+      };
+    };
+    const starterPrice=priceText("starter","Start",24900,29900);
+    const growthPrice=priceText("pro","Growth",39900,49900);
+    const proPrice=priceText("business","Pro",59900,75000);
     const planMeta:any={
-      starter:{label:"Start",price:"€99/mnd",reason:"Geschikt voor een compacte receptionistflow met lead capture en meldingen."},
-      pro:{label:"Growth",price:"€199/mnd",reason:"Past beter wanneer kwalificatie, CRM en follow-up aantoonbaar waarde opleveren."},
-      business:{label:"Pro",price:"vanaf €349/mnd",reason:"Past bij hogere volumes, uitgebreidere workflows of meerdere commerciële automatiseringen."}
+      starter:{...starterPrice,reason:"Geschikt voor een compacte receptionistflow met lead capture en meldingen."},
+      pro:{...growthPrice,reason:"Past beter wanneer kwalificatie, CRM en follow-up aantoonbaar waarde opleveren."},
+      business:{...proPrice,reason:"Past bij hogere volumes, uitgebreidere workflows of meerdere commerciële automatiseringen."}
     };
     const recommendation=planMeta[recommendedPlan]||planMeta.pro;
     const billingUrl=invite?.token
