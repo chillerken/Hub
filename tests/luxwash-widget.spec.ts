@@ -5,7 +5,7 @@ const CONFIG_URL =
 const CHAT_URL =
   'https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/public-reception-chat';
 const WIDGET_TOKEN = '597f9789-be65-4ab8-bdbe-276f696991f1';
-const WIDGET_URL = 'https://reception-ai-luxwash.vercel.app/widget.js';
+const WIDGET_URL = 'https://ai.luxwash.online/widget.js';
 const FALLBACK_WIDGET_URL = 'https://reception-ai-luxwash.onrender.com/widget.js';
 
 test('LuxWash laadt uitsluitend de echte Reception AI widget', async ({ page, request }) => {
@@ -136,7 +136,7 @@ test('Chat-endpoint weigert onbekende origin vóór CRM-writes', async ({ reques
 });
 
 
-test('Actieve Vercel-widget blijft bereikbaar en mount Reception AI', async ({ request }) => {
+test('Actieve Cloudflare-widget blijft bereikbaar en mount Reception AI', async ({ request }) => {
   const response = await request.get(WIDGET_URL, { timeout: 30_000 });
   expect(response.ok()).toBeTruthy();
   const source = await response.text();
