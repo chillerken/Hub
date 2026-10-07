@@ -329,7 +329,7 @@ if(view==="clients"){
     const activeWidgets=platformClients.filter(c=>c.widget_enabled).length;
     const activePlans=platformClients.filter(c=>c.is_internal||["active","trialing"].includes(c.subscription_status)||c.plan==="trial").length;
     const customerRisk=platformClients.filter(c=>["attention","critical"].includes(String(c.customer_health_status||""))).length;
-    const widgetOrigin="https://reception-ai-luxwash.vercel.app";
+    const widgetOrigin=location.origin;
     body=`<section class="pagehead"><span class="eyebrow">PLATFORMBEHEER</span><h1>Klanten & Widgets</h1><p class="muted">Beheer alle Reception AI-klanten vanuit één overzicht. Wijzigingen lopen via een beveiligde platformbeheerfunctie; tenant-RLS blijft intact.</p></section>
     ${platformLoadError?`<div class="notice error">${esc(platformLoadError)}</div>`:""}
     <section class="grid clientsummary">
