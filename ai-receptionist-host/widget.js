@@ -46,8 +46,7 @@
     .toLowerCase()
     .replace(/^www\./, "");
   const shouldRemoveLuxWashLegacy = currentHost === "luxwash.online";
-  const LUXWASH_RECEIPT_LINK_URL =
-    "https://nahwlhptgdkwhjcfkhkt.supabase.co/functions/v1/luxwash-site-api/receipt-link";
+  const LUXWASH_RECEIPT_LINK_URL = API_BASE + "/public-receipt-link";
 
   // LuxWash-only, fail-open observer. It never changes the booking response:
   // it only links the public receipt returned by ChatGPT Sites to the
@@ -112,6 +111,7 @@
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
+                widget_token: token,
                 public_receipt_id: publicReceiptId,
                 intake_key: intakeKey
               }),
