@@ -154,3 +154,39 @@ test('Render-failover bevat de geharde LuxWash legacy-cleanup', async ({ request
   expect(source).toContain('.lux-chat,.lux-chat-launcher,.lux-chat-entry');
   expect(source).toContain('MutationObserver');
 });
+
+
+test('LuxWash boekingspagina mobiel: bereikbaar, canoniek en zonder horizontale overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const response = await page.goto('/boeken', { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  expect(response?.status()).toBe(200);
+
+  await expect(page.getByRole('heading', { name: 'Vraag je prijs aan' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Aanvraag versturen' })).toBeVisible();
+
+  const canonical = await page.locator('link[rel="canonical"]').getAttribute('href');
+  expect(canonical).toBe('https://www.luxwash.online/boeken');
+
+  const sharingImage = await page.locator('meta[property="og:image"]').getAttribute('content');
+  expect(sharingImage).toMatch(/^https:\/\/www\.luxwash\.online\//);
+
+  const dimensions = await page.evaluate(() => ({
+    viewport: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(dimensions.scrollWidth, 'De mobiele boekingspagina mag niet horizontaal scrollen')
+    .toBeLessThanOrEqual(dimensions.viewport + 2);
+
+  // This test intentionally does not submit a booking or touch customer/CRM data.
+});
+
+test('LuxWash kernpagina’s zijn live en hebben hun eigen canonical en OpenGraph image', async ({ request }) => {
+  for (const route of ['/prijzen', '/mobiele-carwash', '/meubelreiniging', '/regio-aalst', '/regio-lede', '/regio-erpe-mere']) {
+    const response = await request.get(route, { timeout: 30_000 });
+    expect(response.status(), `${route} moet HTTP 200 geven`).toBe(200);
+    const html = await response.text();
+    expect(html).toContain(`https://www.luxwash.online${route}`);
+    expect(html).toMatch(/property=["']og:image["']/);
+    expect(html).toMatch(/rel=["']canonical["']/);
+  }
+});
