@@ -9,6 +9,7 @@ on:
       - 'ai-receptionist-host/**'
       - 'tests/luxwash-widget.spec.ts'
       - 'tests/luxwash-ai-os.spec.ts'
+      - 'tests/luxwash-ai-creator-webhook.spec.ts'
       - 'playwright.config.ts'
       - '.github/workflows/luxwash-widget-e2e.yml'
   pull_request:
@@ -16,6 +17,7 @@ on:
       - main
     paths:
       - 'tests/luxwash-ai-os.spec.ts'
+      - 'tests/luxwash-ai-creator-webhook.spec.ts'
       - 'tests/luxwash-widget.spec.ts'
       - '.github/workflows/luxwash-widget-e2e.yml'
   schedule:
@@ -55,7 +57,7 @@ jobs:
       - name: Test live LuxWash Reception AI
         env:
           LUXWASH_BASE_URL: https://www.luxwash.online/
-        run: npx playwright test tests/luxwash-widget.spec.ts tests/luxwash-ai-os.spec.ts --project=chromium
+        run: npx playwright test tests/luxwash-widget.spec.ts tests/luxwash-ai-os.spec.ts tests/luxwash-ai-creator-webhook.spec.ts --project=chromium
 
       - name: Upload Playwright report
         if: always()
