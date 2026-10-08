@@ -172,7 +172,7 @@ Deno.serve(async req=>{
 
    if(["starter","pro","business"].includes(plan)&&ref){
     const refHash=await sha256Text(ref);
-    const {data:refs,error:refErr}=await db.rpc("consume_billing_checkout_ref",{p_token_hash:refHash,p_plan:plan});
+    const {data:refs,error:refErr}=await db.rpc("apply_billing_checkout_ref",{p_token_hash:refHash,p_plan:plan,p_subscription_status:checkoutStatus,p_customer_id:customer,p_subscription_id:sub});
     if(refErr)throw refErr;
     const row=Array.isArray(refs)?refs[0]:refs;
     if(row?.organization_id)resolvedOrg=String(row.organization_id);
@@ -202,12 +202,13 @@ Deno.serve(async req=>{
    }
 
    if(["starter","pro","business"].includes(plan)&&resolvedOrg){
-    await db.from("organizations").update({
+    const {error:checkoutWriteError}=await db.from("organizations").update({
       plan,
       subscription_status:checkoutStatus,
       stripe_customer_id:customer,
       stripe_subscription_id:sub
     }).eq("id",resolvedOrg);
+    if(checkoutWriteError)throw checkoutWriteError;
     if(checkoutStatus==="active"){await markSalesConverted(db,resolvedOrg,plan);await resolveCustomerSuccessPaymentRisk(db,resolvedOrg)}
     console.log(paid?"BILLING activated tenant":"BILLING checkout pending payment",resolvedOrg,plan,String(o.payment_status||"unknown"));
    }else if(["starter","pro","business"].includes(plan)){
@@ -233,7 +234,8 @@ Deno.serve(async req=>{
     for(const target of targetOrgs){
      const patch:any={subscription_status:status,stripe_subscription_id:subscriptionId};
      if(derivedPlan)patch.plan=derivedPlan;
-     const {data:updated}=await db.from("organizations").update(patch).eq("id",target.id).select("id,plan").single();
+     const {data:updated,error:subscriptionWriteError}=await db.from("organizations").update(patch).eq("id",target.id).select("id,plan").single();
+     if(subscriptionWriteError)throw subscriptionWriteError;
      if(status==="active"&&updated){await markSalesConverted(db,String(updated.id),String(updated.plan||derivedPlan||"paid"));await resolveCustomerSuccessPaymentRisk(db,String(updated.id))}
      if(["past_due","unpaid","canceled","incomplete_expired"].includes(status)&&updated)await customerSuccessPaymentRisk(db,String(updated.id),"subscription_"+status);
     }
@@ -242,18 +244,20 @@ Deno.serve(async req=>{
   if(e.type==="invoice.payment_failed"){
    const subscriptionId=invoiceSubscriptionId(o);
    if(subscriptionId){
-    const {data:updatedOrgs}=await db.from("organizations").update({subscription_status:"past_due"}).eq("stripe_subscription_id",subscriptionId).select("id");
+    const {data:updatedOrgs,error:invoiceWriteError}=await db.from("organizations").update({subscription_status:"past_due"}).eq("stripe_subscription_id",subscriptionId).select("id");
+    if(invoiceWriteError)throw invoiceWriteError;
     for(const orgRow of updatedOrgs||[])await customerSuccessPaymentRisk(db,String(orgRow.id),"invoice_payment_failed");
    }else console.log("BILLING ignored invoice.payment_failed without linked subscription",String(e.id||""));
   }
   if(e.type==="invoice.paid"){
    const subscriptionId=invoiceSubscriptionId(o);
    if(subscriptionId){
-    const {data:updatedOrgs}=await db.from("organizations").update({subscription_status:"active"}).eq("stripe_subscription_id",subscriptionId).select("id,plan");
+    const {data:updatedOrgs,error:invoiceWriteError}=await db.from("organizations").update({subscription_status:"active"}).eq("stripe_subscription_id",subscriptionId).select("id,plan");
+    if(invoiceWriteError)throw invoiceWriteError;
     for(const orgRow of updatedOrgs||[]){await markSalesConverted(db,String(orgRow.id),String(orgRow.plan||"paid"));await resolveCustomerSuccessPaymentRisk(db,String(orgRow.id))}
    }else console.log("BILLING ignored invoice.paid without linked subscription",String(e.id||""));
   }
-  if(e.id)await db.from("stripe_events").update({status:"processed",last_error:null,updated_at:new Date().toISOString()}).eq("id",String(e.id));
+  if(e.id){const {error:completeError}=await db.from("stripe_events").update({status:"processed",last_error:null,updated_at:new Date().toISOString()}).eq("id",String(e.id));if(completeError)throw completeError;}
   return new Response("ok");
  }catch(err){console.error(err);try{const e=JSON.parse(payload);if(e?.id){const url=Deno.env.get("SUPABASE_URL")!,sec=JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")||"{}").default||Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;const db=createClient(url,sec,{auth:{persistSession:false}});await db.from("stripe_events").update({status:"failed",last_error:String(err).slice(0,1000),updated_at:new Date().toISOString()}).eq("id",String(e.id));}}catch{}return new Response("error",{status:500})}
 });

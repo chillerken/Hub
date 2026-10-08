@@ -17,9 +17,39 @@ function isNonDeliverableTestLead(lead:any) {
     || /^(qa|test)([._-]|$)/.test(source);
 }
 
+function workflowDataGuard(action:any, lead:any, appointment:any, payment:any) {
+  const type=String(action?.action_type||"");
+  const customerMessages=["lead_follow_up","payment_link_send","appointment_confirmation","review_request","retention_follow_up"];
+  if(customerMessages.includes(type) && !lead?.contact_consent_at)
+    return {code:"contact_consent_required",message:"Customer contact consent missing"};
+  if(type==="retention_follow_up" && !lead?.marketing_consent_at)
+    return {code:"marketing_consent_required",message:"Retention consent missing"};
+  if(type==="calendar_request" || type==="appointment_confirmation") {
+    const start=Date.parse(String(appointment?.start_at||""));
+    const end=Date.parse(String(appointment?.end_at||""));
+    if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start)
+      return {code:"scheduling_required",message:"A valid start and later end time are required"};
+  }
+  if(type==="payment_received" && (!payment || payment.status!=="paid" || payment.lead_id!==action.lead_id))
+    return {code:"payment_not_verified",message:"A paid payment record for this lead is required"};
+  if(type==="payment_link_send" && (!payment || payment.lead_id!==action.lead_id || payment.status==="paid" ||
+      !/^https:\/\//i.test(String(payment.payment_url||"")) || payment.payment_url!==action?.payload?.payment_url))
+    return {code:"payment_link_not_verified",message:"An unpaid payment record and matching HTTPS payment URL are required"};
+  return null;
+}
+
 function retrySeconds(attempt:number) {
   const steps=[60,300,1800,7200,21600];
   return steps[Math.min(Math.max(attempt,0),steps.length-1)];
+}
+function entitlement(org:any){
+  const internal=org?.is_internal===true;
+  const trial=org?.plan==="trial"&&org?.trial_ends_at&&new Date(org.trial_ends_at).getTime()>Date.now();
+  const paid=["active","trialing"].includes(String(org?.subscription_status||""));
+  return {
+    pro:internal||trial||(paid&&["pro","business"].includes(String(org?.plan||""))),
+    business:internal||trial||(paid&&String(org?.plan||"")==="business")
+  };
 }
 
 function fmtDate(value:any, locale="nl-BE", timezone="Europe/Brussels") {
@@ -758,10 +788,36 @@ Deno.serve(async (req:Request)=>{
   const results:any[]=[];
   for(const action of actions||[]) {
     try{
-      const [{data:profile},{data:lead}]=await Promise.all([
+      const [{data:profile},{data:lead},{data:org}]=await Promise.all([
         db.from("business_profiles").select("*").eq("organization_id",action.organization_id).single(),
-        action.lead_id ? db.from("leads").select("*").eq("id",action.lead_id).eq("organization_id",action.organization_id).maybeSingle() : Promise.resolve({data:null})
+        action.lead_id ? db.from("leads").select("*").eq("id",action.lead_id).eq("organization_id",action.organization_id).maybeSingle() : Promise.resolve({data:null}),
+        db.from("organizations").select("plan,subscription_status,trial_ends_at,is_internal").eq("id",action.organization_id).maybeSingle()
       ]);
+
+      const access=entitlement(org);
+      const actionSource=String(action?.payload?.source||"");
+      const businessWorkflow=Boolean(
+        action?.payload?.sales_sequence_id ||
+        ["sales_agent","sales_sequence","sales_conversion_approved"].includes(actionSource)
+      );
+      const proWorkflow=["lead_follow_up","review_request","retention_follow_up"].includes(String(action.action_type||""));
+
+      if(businessWorkflow&&!access.business){
+        await finish(db,action,"completed",{
+          provider:"entitlement_guard",
+          response_meta:{skipped:true,reason:"business_plan_required"}
+        });
+        results.push({id:action.id,status:"completed",provider:"entitlement_guard",skipped:true,reason:"business_plan_required"});
+        continue;
+      }
+      if(proWorkflow&&!access.pro){
+        await finish(db,action,"completed",{
+          provider:"entitlement_guard",
+          response_meta:{skipped:true,reason:"pro_plan_required"}
+        });
+        results.push({id:action.id,status:"completed",provider:"entitlement_guard",skipped:true,reason:"pro_plan_required"});
+        continue;
+      }
 
       if(isNonDeliverableTestLead(lead)){
         await finish(db,action,"completed",{
@@ -807,6 +863,13 @@ Deno.serve(async (req:Request)=>{
       if(action.payload?.payment_id) {
         const {data}=await db.from("customer_payments").select("*").eq("id",action.payload.payment_id).eq("organization_id",action.organization_id).maybeSingle();
         payment=data;
+      }
+
+      const dataGuard=workflowDataGuard(action,lead,appointment,payment);
+      if(dataGuard) {
+        await finish(db,action,"blocked",{provider:"data_guard",error_code:dataGuard.code,error_message:dataGuard.message});
+        results.push({id:action.id,status:"blocked",provider:"data_guard",reason:dataGuard.code});
+        continue;
       }
 
       if(action.action_type==="payment_received") {
