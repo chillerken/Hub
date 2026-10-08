@@ -155,6 +155,16 @@ Deno.serve(async req=>{
     let convId=b.conversation_id||null;
     let lead:any=null;
 
+    // Validate the complete tenant/lead/conversation relationship before writing.
+    // A public widget token never authorizes writes to an unrelated conversation.
+    if(convId){
+      if(!leadId)return json({error:"Ongeldig gesprek"},400);
+      const {data:existingConversation,error:conversationLookupError}=await db.from("conversations")
+        .select("id").eq("id",convId).eq("lead_id",leadId)
+        .eq("organization_id",p.organization_id).maybeSingle();
+      if(conversationLookupError||!existingConversation)return json({error:"Gesprek niet gevonden"},404);
+    }
+
     if(!leadId){
       const {data:l,error}=await db.from("leads").insert({
         organization_id:p.organization_id,
@@ -306,14 +316,14 @@ Deno.serve(async req=>{
       "Kwalificatievragen: "+JSON.stringify(p.qualification_questions||[]),
       "Escalatieregels: "+JSON.stringify(p.escalation_rules||[]),
       "Aanvullende bedrijfsinstructies: "+(p.custom_instructions||"geen")
-    ].join("\\n");
+    ].join("\n");
 
     let reply="";
     const key=Deno.env.get("GEMINI_API_KEY");
     if(key&&!human&&!urgent&&!appointment){
       for(const model of ["gemini-3.5-flash-lite","gemini-3.1-flash-lite"]){
         const controller=new AbortController();
-        const timer=setTimeout(()=>controller.abort(),9000);
+        const timer=setTimeout(()=>controller.abort(),22000);
         try{
           const ai=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent",{
             method:"POST",
@@ -322,12 +332,12 @@ Deno.serve(async req=>{
             body:JSON.stringify({
               system_instruction:{parts:[{text:instructions}]},
               contents:history,
-              generationConfig:{maxOutputTokens:700,temperature:.35}
+              generationConfig:{maxOutputTokens:700,temperature:.35,thinkingConfig:{thinkingLevel:"minimal"}}
             })
           });
           if(ai.ok){
             const j=await ai.json();
-            reply=String(j?.candidates?.[0]?.content?.parts?.map((x:any)=>x.text||"").join("")||"").trim();
+            reply=String(j?.candidates?.[0]?.content?.parts?.filter((x:any)=>!x.thought).map((x:any)=>x.text||"").join("")||"").trim();
             if(reply){
               console.log("PUBLIC_AI gemini success",model);
               break;
