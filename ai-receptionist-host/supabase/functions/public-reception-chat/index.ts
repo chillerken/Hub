@@ -1,5 +1,6 @@
 import {createClient} from "https://esm.sh/@supabase/supabase-js@2.95.0";
 
+import { isAppointmentRequest } from "./intent.js";
 const cors={
   "Access-Control-Allow-Origin":"*",
   "Access-Control-Allow-Headers":"authorization, x-client-info, apikey, content-type, x-supabase-api-version",
@@ -71,12 +72,8 @@ Deno.serve(async req=>{
     const smokeTest=b.smoke_test===true;
     if(!token||!message)return json({error:"Ongeldige aanvraag"},400);
     const low=message.toLowerCase();
-    const human=/medewerker|mens|persoon|bellen|bel\s+mij|contacteer/i.test(low);
-    // Remove explicitly negated booking phrases before detecting booking intent.
-    const bookingText=low
-      .replace(/\b(?:geen|niet(?:\s+meer)?)\s+(?:(?:een|nieuwe|nu)\s+)?(?:afspraak|boek\w*|inplannen|reserver\w*)\b/g,"")
-      .replace(/\b(?:afspraak|boek\w*|inplannen|reserver\w*)\s+(?:niet|annuleren|afzeggen)\b/g,"");
-    const appointment=/afspraak|boeken|inplannen|beschikbaar|reserv|planning|tijdslot/i.test(bookingText);
+    const human=/\b(?:medewerker|mens|persoon)\b|bellen|bel\s+mij|contacteer/i.test(low);
+    const appointment=isAppointmentRequest(message);
     const urgent=/dringend|spoed|urgent|klacht|ontevreden|probleem/i.test(low);
 
     const url=Deno.env.get("SUPABASE_URL")!;
@@ -321,7 +318,7 @@ Deno.serve(async req=>{
     let reply="";
     const key=Deno.env.get("GEMINI_API_KEY");
     if(key&&!human&&!urgent&&!appointment){
-      for(const model of ["gemini-3.5-flash-lite","gemini-3.1-flash-lite"]){
+      for(const model of ["gemini-3.1-flash-lite","gemini-3.5-flash-lite"]){
         const controller=new AbortController();
         const timer=setTimeout(()=>controller.abort(),22000);
         try{
