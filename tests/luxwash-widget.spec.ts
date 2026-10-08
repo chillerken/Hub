@@ -143,6 +143,10 @@ test('Actieve Cloudflare-widget blijft bereikbaar en mount Reception AI', async 
   expect(source).toContain('reception-ai-widget');
   expect(source).toContain('/public-widget-config');
   expect(source).toContain('/public-reception-chat');
+  const tokenValidation = source.indexOf('if (!token)');
+  const initialized = source.indexOf('window.__RECEPTION_AI_WIDGET_LOADED__ = true;');
+  expect(tokenValidation, 'Validate the widget token').toBeGreaterThan(-1);
+  expect(initialized, 'Initialization must happen after validation').toBeGreaterThan(tokenValidation);
 });
 
 
