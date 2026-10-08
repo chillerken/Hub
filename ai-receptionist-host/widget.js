@@ -2,7 +2,6 @@
   "use strict";
 
   if (window.__RECEPTION_AI_WIDGET_LOADED__) return;
-  window.__RECEPTION_AI_WIDGET_LOADED__ = true;
 
   const script =
     document.currentScript ||
@@ -21,6 +20,9 @@
     console.warn("[Reception AI] data-widget-token ontbreekt.");
     return;
   }
+
+  // Mark as initialized only after the required embed configuration is valid.
+  window.__RECEPTION_AI_WIDGET_LOADED__ = true;
 
   const API_BASE = String(
     script.dataset.apiBase ||
