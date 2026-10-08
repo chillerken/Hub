@@ -22,7 +22,7 @@ on:
     - cron: "17 5 * * *"
 
 concurrency:
-  group: luxwash-reception-ai-e2e
+  group: luxwash-reception-ai-e2e-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
