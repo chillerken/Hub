@@ -8,7 +8,7 @@ const script = fs.readFileSync(path.join(__dirname, '..', 'widget.js'), 'utf8');
 
 function evaluate(windowState, scriptElement) {
   const warnings = [];
-  const context = { window: windowState, document: { currentScript: scriptElement }, console: { warn: (...args) => warnings.push(args.join(' ')) } };
+  const context = { window: windowState, document: { currentScript: scriptElement, scripts: [] }, console: { warn: (...args) => warnings.push(args.join(' ')) } };
   try { vm.runInNewContext(script, context, { timeout: 500 }); }
   catch (error) {
     // A correctly configured widget proceeds to construct browser UI.
