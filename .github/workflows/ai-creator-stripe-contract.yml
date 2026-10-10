@@ -1,0 +1,25 @@
+name: AI Creator Stripe webhook contract
+
+on:
+  pull_request:
+    paths:
+      - 'luxwash-ai-os-host/stripe-webhook/**'
+      - '.github/workflows/ai-creator-stripe-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-signature-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout reviewed source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Check signature helper syntax
+        run: node --check luxwash-ai-os-host/stripe-webhook/edge-function/verify.mjs
+      - name: Verify Stripe HMAC behavior (no live Stripe / no DB writes)
+        run: node --test luxwash-ai-os-host/stripe-webhook/edge-function/verify.test.mjs
