@@ -1,0 +1,36 @@
+name: LuxWash approval HTML on Cloudflare Pages
+on:
+  pull_request:
+    paths:
+      - 'ai-receptionist-host/luxwash-approval/**'
+      - 'ai-receptionist-host/_headers'
+      - 'ai-receptionist-host/_redirects'
+      - 'ai-receptionist-host/tests/approval-static-html.test.mjs'
+      - '.github/workflows/luxwash-approval-html.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'ai-receptionist-host/luxwash-approval/**'
+      - 'ai-receptionist-host/_headers'
+      - 'ai-receptionist-host/_redirects'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  parse-and-routing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Validate static HTML, browser JS, privacy headers and routing
+        run: node --test ai-receptionist-host/tests/approval-static-html.test.mjs
+      - name: Validate Supabase public config has Cloudflare CORS
+        run: |
+          set -euo pipefail
+          url='https://nahwlhptgdkwhjcfkhkt.supabase.co/functions/v1/luxwash-ai-approval/config'
+          code=$(curl -sS -o /dev/null -D /tmp/luxwas-cors.txt -w '%{http_code}' -H 'Origin: https://ai.luxwash.online' "$url")
+          [[ "$code" == '200' ]] || { echo "Public config unavailable: HTTP $code"; exit 1; }
+          grep -qi '^access-control-allow-origin: https://ai.luxwash.online' /tmp/luxwas-cors.txt
+          echo 'PASS: Browser can fetch public Auth configuration from Cloudflare domain.'
