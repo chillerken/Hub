@@ -1,0 +1,41 @@
+name: LuxWash review queue safety
+
+on:
+  pull_request:
+    paths:
+      - 'luxwash-ai-os-host/migrations/20261010_warm_lead_review_views.sql'
+      - 'luxwash-ai-os-host/tests/warm-lead-review-queue.pg.sql'
+      - '.github/workflows/luxwash-review-queues.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  private-review-views:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: disposable-ci-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout reviewed source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install PostgreSQL client
+        run: sudo apt-get update -qq && sudo apt-get install -y postgresql-client
+      - name: Run privacy and review safety suite
+        env:
+          PGPASSWORD: disposable-ci-only
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f luxwash-ai-os-host/tests/warm-lead-review-queue.pg.sql
