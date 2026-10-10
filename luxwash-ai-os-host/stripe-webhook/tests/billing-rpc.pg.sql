@@ -90,7 +90,27 @@ BEGIN
   SELECT public.ai_creator_webhook_record_paid(receipt) INTO inserted;
   IF inserted IS DISTINCT FROM false THEN RAISE EXCEPTION 'Exact Stripe event replay is not idempotent'; END IF;
 
-  UPDATE private.ai_creator_entitlements SET status='revoked' WHERE stripe_event_id='evt_SYNTHETIC0001';
+  RAISE NOTICE 'PASS: restricted link, amount, currency and idempotent insertion';
+END $$;
+RESET ROLE;
+
+-- Revocation is a separate admin action. The edge function's service_role
+-- intentionally has no UPDATE permission, so simulate a refund as the owner.
+UPDATE private.ai_creator_entitlements
+SET status='revoked'
+WHERE stripe_event_id='evt_SYNTHETIC0001';
+
+SET ROLE service_role;
+DO $$
+DECLARE
+  receipt jsonb := jsonb_build_object(
+     'email','synthetic@example.test',
+     'stripe_event_id','evt_SYNTHETIC0001',
+     'stripe_checkout_session_id','cs_live_SYNTHETIC0001',
+     'payment_link_id','plink_1UMJqZKMkGczYQpSPUHgo6Ij',
+     'amount_total',1900,'currency','eur');
+  inserted boolean;
+BEGIN
   SELECT public.ai_creator_webhook_record_paid(receipt) INTO inserted;
   IF inserted IS DISTINCT FROM false OR
      (SELECT status FROM private.ai_creator_entitlements WHERE stripe_event_id='evt_SYNTHETIC0001') <> 'revoked' THEN
@@ -99,6 +119,6 @@ BEGIN
   IF (SELECT count(*) FROM private.ai_creator_entitlements) <> 1 THEN
      RAISE EXCEPTION 'Duplicate entitlement records created';
   END IF;
-  RAISE NOTICE 'PASS: service-only RPC, strict link/amount/currency, replay and revoke protection';
+  RAISE NOTICE 'PASS: revoked entitlements are not reactivated by event replay';
 END $$;
 RESET ROLE;
