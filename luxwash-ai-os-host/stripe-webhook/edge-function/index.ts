@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import { parseStripeSignature, verifyStripeSignature } from "./verify.mjs";
+import { assessCreatorBetaPayment } from "./entitlement-policy.mjs";
 
 // Production deployment requires the service-role-only RPCs in the companion SQL migration.
 // Do not grant authenticated/anon access to these methods.
@@ -44,17 +45,16 @@ Deno.serve(async (request) => {
     return new Response("json", { status: 400 });
   }
 
-  if (event?.type !== "checkout.session.completed" &&
-      event?.type !== "checkout.session.async_payment_succeeded") {
+  // Verified against the live Luxdesign AI Creator Founding Beta payment link.
+  // Other signed Stripe events are acknowledged but NEVER grant this product.
+  const assessment = assessCreatorBetaPayment(event);
+  if (!assessment.eligible) {
     return new Response("ok", { status: 200 });
   }
-  const session = event?.data?.object;
-  if (!session || session.payment_status !== "paid") {
-    return new Response("ok", { status: 200 });
-  }
+  const session = assessment.session;
 
   const receipt = {
-    email: String(session.customer_details?.email || session.customer_email || "").trim().toLowerCase(),
+    email: assessment.email,
     stripe_event_id: String(event.id || ""),
     stripe_checkout_session_id: String(session.id || ""),
     stripe_payment_intent_id: session.payment_intent ? String(session.payment_intent) : null,
