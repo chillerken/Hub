@@ -1,105 +1,80 @@
--- Draft AI Creator Stripe repair. Safe to review; NOT yet applied to production.
--- Keep private tables out of exposed API schemas. Expose only service_role-only
--- SECURITY INVOKER RPCs: no public SECURITY DEFINER privilege escalation.
--- The Edge Function must verify the Stripe HMAC before calling record_paid.
--- Payment link/product/currency/price were verified read-only in Stripe on 2026-10-10.
+-- AI Creator billing repair candidate: NOT DEPLOYED TO PRODUCTION.
+-- A public service_role-only SECURITY INVOKER RPC reads private config.
+-- Signed event verification must happen in Edge Function before record_paid.
+-- Payment link product/price verified read-only against Stripe Luxdesign 2026-10-10.
+-- Expected: AI Creator Founding Beta, EUR 19 one-time payment.
 
--- The service role cannot query private.* via PostgREST directly when the
--- schema is not exposed, but a public invoker RPC may read explicitly granted
--- private relations. Grants do not make 'private' an exposed API schema.
-grant usage on schema private to service_role;
-grant select on private.ai_creator_config to service_role;
-grant select, insert on private.ai_creator_entitlements to service_role;
+GRANT USAGE ON SCHEMA private TO service_role;
+GRANT SELECT ON private.ai_creator_config TO service_role;
+GRANT SELECT, INSERT ON private.ai_creator_entitlements TO service_role;
 
-create or replace function public.ai_creator_webhook_secret()
-returns text
-language sql stable security invoker
-set search_path = ''
-as $$
-  select nullif(btrim(value),'')
-  from private.ai_creator_config
-  where key = 'stripe_webhook_secret'
-  limit 1
-$$;
-revoke all on function public.ai_creator_webhook_secret() from public, anon, authenticated;
-grant execute on function public.ai_creator_webhook_secret() to service_role;
+CREATE OR REPLACE FUNCTION public.ai_creator_webhook_secret()
+RETURNS text
+LANGUAGE sql STABLE SECURITY INVOKER
+SET search_path = ''
+AS $creator_secret$
+  SELECT NULLIF(btrim(value), '')
+  FROM private.ai_creator_config
+  WHERE key='stripe_webhook_secret'
+  LIMIT 1
+$creator_secret$;
 
-create or replace function public.ai_creator_webhook_record_paid(p_receipt jsonb)
-returns boolean
-language plpgsql security invoker
-set search_path = ''
-as $$
-declare
+REVOKE ALL ON FUNCTION public.ai_creator_webhook_secret() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.ai_creator_webhook_secret() TO service_role;
+
+CREATE OR REPLACE FUNCTION public.ai_creator_webhook_record_paid(p_receipt jsonb)
+RETURNS boolean
+LANGUAGE plpgsql SECURITY INVOKER
+SET search_path = ''
+AS $record_paid$
+DECLARE
   v_email text := lower(btrim(coalesce(p_receipt->>'email', '')));
   v_event_id text := btrim(coalesce(p_receipt->>'stripe_event_id', ''));
   v_session_id text := btrim(coalesce(p_receipt->>'stripe_checkout_session_id', ''));
+  v_payment_link text := nullif(btrim(coalesce(p_receipt->>'payment_link_id','')), '');
   v_amount bigint;
   v_currency text;
-  v_payment_link text;
   v_inserted integer;
-begin
-  if p_receipt is null or length(p_receipt::text) > 12000 then
-    raise exception 'Invalid receipt payload';
-  end if;
-  if v_email !~* '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' or length(v_email)>254 then
-    raise exception 'Invalid receipt email';
-  end if;
-  if v_event_id !~ '^evt_[A-Za-z0-9]+$' or v_session_id !~ '^cs_[A-Za-z0-9_]+$' then
-    raise exception 'Invalid Stripe identifiers';
-  end if;
-  if length(v_event_id)>140 or length(v_session_id)>255 then
-    raise exception 'Stripe identifier too long';
-  end if;
+BEGIN
+  IF p_receipt IS NULL OR length(p_receipt::text)>12000 THEN
+    RAISE EXCEPTION 'Invalid receipt payload';
+  END IF;
+  IF v_email !~* '^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$' OR length(v_email)>254 THEN
+    RAISE EXCEPTION 'Invalid receipt email';
+  END IF;
+  IF v_event_id !~ '^evt_[A-Za-z0-9]+$' OR v_session_id !~ '^cs_[A-Za-z0-9_]+$' THEN
+    RAISE EXCEPTION 'Invalid Stripe identifiers';
+  END IF;
+  IF length(v_event_id)>140 OR length(v_session_id)>255 THEN
+    RAISE EXCEPTION 'Stripe identifier too long';
+  END IF;
+
   v_amount := nullif(p_receipt->>'amount_total','')::bigint;
   v_currency := lower(nullif(btrim(coalesce(p_receipt->>'currency','')),''));
-  if (v_amount is not null and v_amount < 0) or
-     (v_currency is not null and v_currency !~ '^[a-z]{3}
-  -- Deduplicate both Stripe event and checkout session. Never re-activate a
-  -- revoked/refunded entitlement just because Stripe retried an old event.
-  insert into private.ai_creator_entitlements
+  -- Defense in depth: never grant AI Creator rights for unrelated
+  -- signed Stripe events (including Reception AI, TafelGo, ReplyLoop).
+  IF v_payment_link IS DISTINCT FROM 'plink_1UMJqZKMkGczYQpSPUHgo6Ij'
+     OR v_amount IS DISTINCT FROM 1900
+     OR v_currency IS DISTINCT FROM 'eur' THEN
+    RAISE EXCEPTION 'Unapproved AI Creator payment receipt';
+  END IF;
+
+  -- Atomic insert, no UPSERT. Duplicate event/session/email cannot
+  -- re-activate a refunded, revoked or duplicate entitlement.
+  INSERT INTO private.ai_creator_entitlements
     (email, stripe_event_id, stripe_checkout_session_id, stripe_payment_intent_id,
      stripe_customer_id, product_id, payment_link_id, amount_total, currency, status, updated_at)
-  values
+  VALUES
     (v_email, v_event_id, v_session_id,
      nullif(p_receipt->>'stripe_payment_intent_id',''),
      nullif(p_receipt->>'stripe_customer_id',''),
      'prod_VN3yN8r2Y15Pwy',
-     nullif(p_receipt->>'payment_link_id',''),
-     v_amount, v_currency, 'active', now())
-  on conflict do nothing;
-  get diagnostics v_inserted = row_count;
-  return v_inserted = 1;
-end
-$$;
-revoke all on function public.ai_creator_webhook_record_paid(jsonb) from public, anon, authenticated;
-grant execute on function public.ai_creator_webhook_record_paid(jsonb) to service_role;
-) then
-    raise exception 'Invalid receipt amount or currency';
-  end if;
-  -- Defense in depth: do not grant beta access for any unrelated Stripe
-  -- product. Verified live Stripe line item: €19, EUR, one-time payment link.
-  v_payment_link := nullif(btrim(coalesce(p_receipt->>'payment_link_id','')),'');
-  if v_payment_link is distinct from 'plink_1UMJqZKMkGczYQpSPUHgo6Ij'
-     or v_amount is distinct from 1900
-     or v_currency is distinct from 'eur' then
-    raise exception 'Unapproved AI Creator payment receipt';
-  end if;
-  -- Deduplicate both Stripe event and checkout session. Never re-activate a
-  -- revoked/refunded entitlement just because Stripe retried an old event.
-  insert into private.ai_creator_entitlements
-    (email, stripe_event_id, stripe_checkout_session_id, stripe_payment_intent_id,
-     stripe_customer_id, product_id, payment_link_id, amount_total, currency, status, updated_at)
-  values
-    (v_email, v_event_id, v_session_id,
-     nullif(p_receipt->>'stripe_payment_intent_id',''),
-     nullif(p_receipt->>'stripe_customer_id',''),
-     'prod_VN3yN8r2Y15Pwy',
-     nullif(p_receipt->>'payment_link_id',''),
-     v_amount, v_currency, 'active', now())
-  on conflict do nothing;
-  get diagnostics v_inserted = row_count;
-  return v_inserted = 1;
-end
-$$;
-revoke all on function public.ai_creator_webhook_record_paid(jsonb) from public, anon, authenticated;
-grant execute on function public.ai_creator_webhook_record_paid(jsonb) to service_role;
+     v_payment_link, v_amount, v_currency, 'active', now())
+  ON CONFLICT DO NOTHING;
+  GET DIAGNOSTICS v_inserted = ROW_COUNT;
+  RETURN v_inserted=1;
+END;
+$record_paid$;
+
+REVOKE ALL ON FUNCTION public.ai_creator_webhook_record_paid(jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.ai_creator_webhook_record_paid(jsonb) TO service_role;
