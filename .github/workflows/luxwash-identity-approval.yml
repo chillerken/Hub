@@ -37,3 +37,31 @@ jobs:
         env:
           PGPASSWORD: disposable-ci
         run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f luxwash-ai-os-host/tests/identity-bound-approval.pg.sql
+
+  live-public-endpoint-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Verify deployed public login page and configuration without authentication
+        env:
+          ROOT: https://nahwlhptgdkwhjcfkhkt.supabase.co/functions/v1/luxwash-ai-approval
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail --max-time 20 "${ROOT}/health" | jq -e '.ok == true and .sending == false' >/dev/null
+          config=$(curl --silent --show-error --fail --max-time 20 "${ROOT}/config")
+          jq -e '.url == "https://nahwlhptgdkwhjcfkhkt.supabase.co" and (.anonKey | length > 20)' <<<"${config}" >/dev/null
+          curl --silent --show-error --fail --max-time 20 "${ROOT}" | grep -q 'Veilig opvolgen'
+          echo "PASS: public login page and Supabase Auth configuration are reachable; no customer action attempted."
+      - name: Verify anonymous RPC access is denied
+        env:
+          PROJECT: https://nahwlhptgdkwhjcfkhkt.supabase.co
+        shell: bash
+        run: |
+          set -euo pipefail
+          anon=$(curl --silent --show-error --fail --max-time 20 "${PROJECT}/functions/v1/luxwash-ai-approval/config" | jq -r '.anonKey')
+          code=$(curl --silent --show-error --max-time 20 -o /dev/null -w '%{http_code}' \
+            -X POST "${PROJECT}/rest/v1/rpc/luxwash_identity_review_queue_v1" \
+            -H "apikey: ${anon}" -H 'Content-Type: application/json' -d '{}')
+          [[ "${code}" == '401' || "${code}" == '403' ]] || { echo "FAIL: anonymous RPC expected 401 or 403 but got HTTP ${code}"; exit 1; }
+          echo "PASS: anonymous review RPC denied (HTTP ${code})"
