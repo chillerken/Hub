@@ -1,9 +1,13 @@
 -- LuxWash: identity-bound approvals, separate from legacy shared-password AI OS.
 -- The public RPCs are SECURITY INVOKER only; privileged functions are private.
 -- Real user ID comes solely from the validated Supabase Auth JWT via auth.uid().
+-- A dedicated private schema prevents accidentally granting callers USAGE on
+-- unrelated private routines, some of which may have legacy PUBLIC EXECUTE.
 -- Never marks lead tasks completed or dispatches external messages.
 
-CREATE OR REPLACE FUNCTION private.luxwash_identity_guard_v1()
+CREATE SCHEMA IF NOT EXISTS luxwash_identity;
+
+CREATE OR REPLACE FUNCTION luxwash_identity.luxwash_identity_guard_v1()
 RETURNS uuid
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=''
 AS $guard$
@@ -26,7 +30,7 @@ BEGIN
 END
 $guard$;
 
-CREATE OR REPLACE FUNCTION private.luxwash_identity_review_queue_v1()
+CREATE OR REPLACE FUNCTION luxwash_identity.luxwash_identity_review_queue_v1()
 RETURNS jsonb
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=''
 AS $queue$
@@ -35,10 +39,17 @@ DECLARE
   v_warm jsonb;
   v_summary jsonb;
 BEGIN
-  v_actor := private.luxwash_identity_guard_v1();
+  v_actor := luxwash_identity.luxwash_identity_guard_v1();
 
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
     'task_id',task_id,
+    'pending_action_id',(
+      SELECT p.id FROM public.lux_ai_os_actions p
+      WHERE p.entity_type='lead' AND p.entity_id=x.lead_id::text
+        AND p.capability_code='personalized_messages'
+        AND p.execution_mode='approval' AND p.status='awaiting_approval'
+      ORDER BY p.id LIMIT 1
+    ),
     'lead_id',lead_id,
     'lead_name',lead_name,
     'company',company,
@@ -75,7 +86,7 @@ BEGIN
 END
 $queue$;
 
-CREATE OR REPLACE FUNCTION private.luxwash_identity_review_decide_v1(
+CREATE OR REPLACE FUNCTION luxwash_identity.luxwash_identity_review_decide_v1(
   p_action_id uuid,p_decision text
 )
 RETURNS jsonb
@@ -88,7 +99,7 @@ DECLARE
   v_task_count int;
   v_prior_sent int;
 BEGIN
-  v_actor := private.luxwash_identity_guard_v1();
+  v_actor := luxwash_identity.luxwash_identity_guard_v1();
   IF p_action_id IS NULL OR p_decision NOT IN ('approve','reject') THEN
     RAISE EXCEPTION 'invalid_review_decision' USING ERRCODE='22023';
   END IF;
@@ -172,7 +183,7 @@ CREATE OR REPLACE FUNCTION public.luxwash_identity_review_queue_v1()
 RETURNS jsonb
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path=''
 AS $public_queue$
-  SELECT private.luxwash_identity_review_queue_v1();
+  SELECT luxwash_identity.luxwash_identity_review_queue_v1();
 $public_queue$;
 
 CREATE OR REPLACE FUNCTION public.luxwash_identity_review_decide_v1(
@@ -181,18 +192,18 @@ CREATE OR REPLACE FUNCTION public.luxwash_identity_review_decide_v1(
 RETURNS jsonb
 LANGUAGE sql VOLATILE SECURITY INVOKER SET search_path=''
 AS $public_decide$
-  SELECT private.luxwash_identity_review_decide_v1(p_action_id,p_decision);
+  SELECT luxwash_identity.luxwash_identity_review_decide_v1(p_action_id,p_decision);
 $public_decide$;
 
-REVOKE ALL ON FUNCTION private.luxwash_identity_guard_v1() FROM PUBLIC,anon,authenticated,service_role;
-REVOKE ALL ON FUNCTION private.luxwash_identity_review_queue_v1() FROM PUBLIC,anon,authenticated,service_role;
-REVOKE ALL ON FUNCTION private.luxwash_identity_review_decide_v1(uuid,text) FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION luxwash_identity.luxwash_identity_guard_v1() FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION luxwash_identity.luxwash_identity_review_queue_v1() FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION luxwash_identity.luxwash_identity_review_decide_v1(uuid,text) FROM PUBLIC,anon,authenticated,service_role;
 REVOKE ALL ON FUNCTION public.luxwash_identity_review_queue_v1() FROM PUBLIC,anon,authenticated,service_role;
 REVOKE ALL ON FUNCTION public.luxwash_identity_review_decide_v1(uuid,text) FROM PUBLIC,anon,authenticated,service_role;
 
-GRANT USAGE ON SCHEMA private TO authenticated;
-GRANT EXECUTE ON FUNCTION private.luxwash_identity_guard_v1() TO authenticated;
-GRANT EXECUTE ON FUNCTION private.luxwash_identity_review_queue_v1() TO authenticated;
-GRANT EXECUTE ON FUNCTION private.luxwash_identity_review_decide_v1(uuid,text) TO authenticated;
+GRANT USAGE ON SCHEMA luxwash_identity TO authenticated;
+GRANT EXECUTE ON FUNCTION luxwash_identity.luxwash_identity_guard_v1() TO authenticated;
+GRANT EXECUTE ON FUNCTION luxwash_identity.luxwash_identity_review_queue_v1() TO authenticated;
+GRANT EXECUTE ON FUNCTION luxwash_identity.luxwash_identity_review_decide_v1(uuid,text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.luxwash_identity_review_queue_v1() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.luxwash_identity_review_decide_v1(uuid,text) TO authenticated;
