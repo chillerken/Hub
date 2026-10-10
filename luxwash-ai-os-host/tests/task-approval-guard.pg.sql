@@ -33,11 +33,11 @@ BEGIN
     ('WHATSAPP_PRICE_REQUEST','{}',10);
   -- Real classification can process just one explicitly safe type.
   SELECT public.luxwash_process_next_ai_task() INTO result;
-  IF result->>'processed' <> 'true' OR result->>'task_type' <> 'WHATSAPP_FLEET_CARE' THEN
-    RAISE EXCEPTION 'Expected one safe classification, got %', result;
+  IF result->>'processed' <> 'true' OR result->>'task_type' <> 'WHATSAPP_PRICE_REQUEST' THEN
+    RAISE EXCEPTION 'Expected first safe classification, got %', result;
   END IF;
   SELECT public.luxwash_process_next_ai_task() INTO result;
-  IF result->>'processed' <> 'true' OR result->>'task_type' <> 'WHATSAPP_PRICE_REQUEST' THEN
+  IF result->>'processed' <> 'true' OR result->>'task_type' <> 'WHATSAPP_FLEET_CARE' THEN
     RAISE EXCEPTION 'Expected second safe classification, got %', result;
   END IF;
   SELECT public.luxwash_process_next_ai_task() INTO result;
