@@ -17,3 +17,10 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   X-Frame-Options: DENY
+
+/luxwash-approval/*
+  Cache-Control: no-store
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://nahwlhptgdkwhjcfkhkt.supabase.co; form-action 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  X-Robots-Tag: noindex, nofollow
