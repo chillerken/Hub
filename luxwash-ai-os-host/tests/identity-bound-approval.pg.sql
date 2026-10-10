@@ -100,14 +100,7 @@ BEGIN
   IF (v->>'action_status')<>'approved' OR v->>'external_dispatch'<>'false' THEN
     RAISE EXCEPTION 'Approval state incorrect';
   END IF;
-  IF (SELECT approved_by FROM public.lux_ai_os_actions WHERE id='20000000-0000-4000-8000-000000000001')
-    <> '00000000-0000-4000-8000-000000000001'::uuid THEN
-    RAISE EXCEPTION 'Actor was not bound to JWT identity';
-  END IF;
-  IF (SELECT count(*) FROM public.luxwash_ai_tasks WHERE status='pending')<>4 OR
-     (SELECT count(*) FROM public.sales_message_drafts)<>1 THEN
-    RAISE EXCEPTION 'Unexpected provider-side effect';
-  END IF;
+  -- Verify privileged storage after RESET ROLE; authenticated has no direct table access.
   failed:=false;
   BEGIN PERFORM public.luxwash_identity_review_decide_v1('20000000-0000-4000-8000-000000000001','approve');
   EXCEPTION WHEN check_violation THEN failed:=true; END;
@@ -144,3 +137,16 @@ BEGIN
 END $$;
 RESET ROLE;
 SELECT count(*) AS synthetic_approvals FROM public.lux_ai_os_actions WHERE approved_by IS NOT NULL;
+
+DO $$
+BEGIN
+  IF (SELECT approved_by FROM public.lux_ai_os_actions WHERE id='20000000-0000-4000-8000-000000000001')
+    <> '00000000-0000-4000-8000-000000000001'::uuid THEN
+    RAISE EXCEPTION 'Actor was not bound to JWT identity';
+  END IF;
+  IF (SELECT count(*) FROM public.luxwash_ai_tasks WHERE status='pending')<>4 OR
+     (SELECT count(*) FROM public.sales_message_drafts)<>1 THEN
+    RAISE EXCEPTION 'Unexpected provider-side effect';
+  END IF;
+  RAISE NOTICE 'PASS: identity-bound actor, cross-role denials, duplicate prevention and no external dispatch';
+END $$;
