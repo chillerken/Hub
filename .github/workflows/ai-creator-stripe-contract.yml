@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'luxwash-ai-os-host/stripe-webhook/**'
+      - 'luxwash-ai-os-host/sales/**'
       - '.github/workflows/ai-creator-stripe-contract.yml'
   workflow_dispatch:
 
@@ -23,3 +24,5 @@ jobs:
         run: node --check luxwash-ai-os-host/stripe-webhook/edge-function/verify.mjs
       - name: Verify Stripe HMAC behavior (no live Stripe / no DB writes)
         run: node --test luxwash-ai-os-host/stripe-webhook/edge-function/verify.test.mjs
+      - name: Verify sales lifecycle (fake contacts, no sending)
+        run: node --test luxwash-ai-os-host/sales/followup-lifecycle.test.mjs
