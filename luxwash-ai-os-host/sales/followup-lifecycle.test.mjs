@@ -1,0 +1,15 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {STATES,evaluateFollowup,acknowledgeDispatch} from "./followup-lifecycle.mjs";
+const ready={status:STATES.PENDING,consent_confirmed:true,opted_out:false,channel:"email",recipient:"fake@example.test",message:"Test only",approved_by:"reviewer",idempotency_key:"test-001",scheduled_for:"2026-10-06T08:00:00.000Z"};
+const now=new Date("2026-10-10T12:00:00.000Z");
+test("blocked opt-out cannot be approved",()=>assert.deepEqual(evaluateFollowup({...ready,opted_out:true},now),{status:STATES.BLOCKED,reason:"opted_out"}));
+test("unknown contact basis requires review",()=>assert.equal(evaluateFollowup({...ready,consent_confirmed:false},now).status,STATES.REVIEW));
+test("duplicate blocks automatic release",()=>assert.equal(evaluateFollowup({...ready,duplicate_found:true},now).status,STATES.REVIEW));
+test("missing approval never passes",()=>assert.equal(evaluateFollowup({...ready,approved_by:null},now).status,STATES.REVIEW));
+test("future schedule remains pending",()=>assert.equal(evaluateFollowup({...ready,scheduled_for:"2026-10-11T12:00:00.000Z"},now).status,STATES.PENDING));
+test("validated request can be approved without sending",()=>assert.equal(evaluateFollowup(ready,now).status,STATES.APPROVED));
+test("no receipt never completes",()=>assert.equal(acknowledgeDispatch({...ready,status:STATES.DISPATCHING},null).status,STATES.FAILED));
+test("wrong idempotency key never completes",()=>assert.equal(acknowledgeDispatch({...ready,status:STATES.DISPATCHING},{confirmed:true,idempotency_key:"other",provider_message_id:"abc"}).status,STATES.FAILED));
+test("unconfirmed provider response never completes",()=>assert.equal(acknowledgeDispatch({...ready,status:STATES.DISPATCHING},{confirmed:false,idempotency_key:"test-001",provider_message_id:"abc"}).status,STATES.FAILED));
+test("confirmed provider receipt is required to mark sent",()=>assert.equal(acknowledgeDispatch({...ready,status:STATES.DISPATCHING},{confirmed:true,idempotency_key:"test-001",provider_message_id:"fake-001"}).status,STATES.SENT));
