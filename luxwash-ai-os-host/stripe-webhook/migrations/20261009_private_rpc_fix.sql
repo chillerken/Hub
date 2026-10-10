@@ -1,8 +1,19 @@
--- AI Creator Stripe: keep private tables private; expose only service_role-only RPCs.
--- Payment entitlements are inserted only after signature verification in the Edge Function.
+-- Draft AI Creator Stripe repair. Safe to review; NOT yet applied to production.
+-- Keep private tables out of exposed API schemas. Expose only service_role-only
+-- SECURITY INVOKER RPCs: no public SECURITY DEFINER privilege escalation.
+-- The Edge Function must verify the Stripe HMAC before calling record_paid.
+-- Before production release also confirm the Stripe payment link/product allowlist.
+
+-- The service role cannot query private.* via PostgREST directly when the
+-- schema is not exposed, but a public invoker RPC may read explicitly granted
+-- private relations. Grants do not make 'private' an exposed API schema.
+grant usage on schema private to service_role;
+grant select on private.ai_creator_config to service_role;
+grant select, insert on private.ai_creator_entitlements to service_role;
+
 create or replace function public.ai_creator_webhook_secret()
 returns text
-language sql stable security definer
+language sql stable security invoker
 set search_path = ''
 as $$
   select nullif(btrim(value),'')
@@ -15,7 +26,7 @@ grant execute on function public.ai_creator_webhook_secret() to service_role;
 
 create or replace function public.ai_creator_webhook_record_paid(p_receipt jsonb)
 returns boolean
-language plpgsql security definer
+language plpgsql security invoker
 set search_path = ''
 as $$
 declare
@@ -44,8 +55,8 @@ begin
      (v_currency is not null and v_currency !~ '^[a-z]{3}$') then
     raise exception 'Invalid receipt amount or currency';
   end if;
-  -- Deduplicate both event-id and checkout-session-id.
-  -- DO NOTHING also prevents replay from reactivating revoked/refunded access.
+  -- Deduplicate both Stripe event and checkout session. Never re-activate a
+  -- revoked/refunded entitlement just because Stripe retried an old event.
   insert into private.ai_creator_entitlements
     (email, stripe_event_id, stripe_checkout_session_id, stripe_payment_intent_id,
      stripe_customer_id, product_id, payment_link_id, amount_total, currency, status, updated_at)
