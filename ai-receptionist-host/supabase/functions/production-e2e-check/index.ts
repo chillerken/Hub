@@ -12,7 +12,7 @@ async function commercialReadiness(req:Request, body:any) {
  if(authError||valid!==true)return json({error:"Unauthorized"},401);
  const id=crypto.randomUUID(),email="qa-commercial-"+id+"@example.invalid",password=crypto.randomUUID()+"Aa1!";
  const receipt:any={test_id:id,billing_payment_executed:false,external_messages_sent:false};
- let userId:string|null=null,orgId:string|null=null,cleanup=true,errorMessage="";
+ let userId:string|null=null,orgId:string|null=null,secondUserId:string|null=null,secondOrgId:string|null=null,cleanup=true,errorMessage="";
  const check=(ok:any,name:string)=>{receipt[name]=!!ok;if(!ok)throw new Error(name+" failed");};
  const checked=async(p:PromiseLike<any>)=>{const r=await p;if(r.error)throw r.error;return r.data;};
  try{
@@ -46,6 +46,38 @@ async function commercialReadiness(req:Request, body:any) {
   check(wrong.status===403,"widget_domain_restriction");
   const a=await call("public-reception-chat",{widget_token:profile.widget_token,email,contact_consent:false,message:"Welke diensten bieden jullie aan? Dit is een technische test."});
   check(a.status===200&&!!a.data.reply&&a.data.ai_status==="generated","real_ai_response");
+  // Prove isolation using a second disposable tenant with independent settings.
+  const secondEmail="qa-isolation-"+id+"@example.invalid";
+  const secondPassword=crypto.randomUUID()+"Bb2!";
+  const secondCreated=await db.auth.admin.createUser({
+   email:secondEmail,password:secondPassword,email_confirm:true,
+   user_metadata:{business_name:"QA Reception isolation "+id}
+  });
+  if(secondCreated.error)throw secondCreated.error;
+  secondUserId=secondCreated.data.user!.id;
+  const secondMember=await checked(db.from("memberships").select("organization_id,role").eq("user_id",secondUserId).eq("active",true).single());
+  secondOrgId=secondMember.organization_id;
+  check(secondOrgId!==orgId&&secondMember.role==="owner","second_independent_tenant_created");
+  const secondDb=createClient(url,pub,{auth:{persistSession:false}});
+  const secondSigned=await secondDb.auth.signInWithPassword({email:secondEmail,password:secondPassword});
+  if(secondSigned.error)throw secondSigned.error;
+  const secondVisible=await checked(secondDb.from("organizations").select("id"));
+  check(secondVisible.length===1&&secondVisible[0].id===secondOrgId,"two_tenant_read_isolation");
+  const foreignLead=await checked(secondDb.from("leads").select("id").eq("id",a.data.lead_id).maybeSingle());
+  check(foreignLead===null,"cross_tenant_lead_read_denied");
+  const unwantedUpdate=await checked(secondDb.from("business_profiles").update({widget_greeting:"UNAUTHORIZED QA UPDATE"}).eq("organization_id",orgId).select("organization_id"));
+  check(Array.isArray(unwantedUpdate)&&unwantedUpdate.length===0,"cross_tenant_configuration_update_denied");
+  const secondProfile=await checked(secondDb.from("business_profiles").update({
+   business_name:"QA Reception isolation "+id,receptionist_name:"Quinn",widget_enabled:true,
+   automation_enabled:false,widget_allowed_domains:["readiness.example.invalid"]
+  }).eq("organization_id",secondOrgId).select("widget_token,receptionist_name").single());
+  check(secondProfile.receptionist_name==="Quinn"&&secondProfile.widget_token!==profile.widget_token,"per_tenant_settings_distinct");
+  const confused=await call("public-reception-chat",{
+   widget_token:secondProfile.widget_token,lead_id:a.data.lead_id,
+   conversation_id:a.data.conversation_id,message:"Ik wil een afspraak boeken."
+  });
+  check(confused.status===404,"public_widget_cross_tenant_conversation_denied");
+  await secondDb.auth.signOut();
   const ids={widget_token:profile.widget_token,lead_id:a.data.lead_id,conversation_id:a.data.conversation_id};
   const b=await call("public-reception-chat",{...ids,message:"Ik wil een afspraak aanvragen op maandag om 13 uur."});
   check(b.status===200&&!!b.data.appointment_id,"appointment_request_created");
@@ -54,11 +86,40 @@ async function commercialReadiness(req:Request, body:any) {
   const d=await call("public-reception-chat",{...ids,message:"Ik wil met een medewerker spreken."});
   check(d.status===200&&!!d.data.reply,"human_handoff_response");
   const appointments=await checked(userDb.from("appointments").select("id,status").eq("lead_id",a.data.lead_id));
-  check(appointments.length===1&&appointments[0].status!=="confirmed","appointment_deduped_without_invented_confirmation");
+  check(appointments.length===1&&appointments[0].status==="requested","appointment_deduped_without_invented_confirmation");
+   // An isolated QA tenant, automation disabled: test the actual operator endpoint
+   // without sending emails, WhatsApp messages, creating calendar events or billing.
+   const foreign=await call("operations-admin",{action:"confirm_appointment",appointment_id:crypto.randomUUID()},true);
+   check(foreign.status===404,"operator_cannot_confirm_unknown_appointment");
+   const start=new Date(Date.now()+3*24*60*60*1000);
+   const finish=new Date(start.getTime()+60*60*1000);
+   const proposed=await call("operations-admin",{
+    action:"schedule_appointment",appointment_id:appointments[0].id,
+    start_at:start.toISOString(),end_at:finish.toISOString(),
+    timezone:"Europe/Brussels",status:"proposed"
+   },true);
+   check(proposed.status===200&&proposed.data.appointment?.status==="proposed","human_proposal_saved");
+   const approved=await call("operations-admin",{action:"confirm_appointment",appointment_id:appointments[0].id},true);
+   check(approved.status===200&&approved.data.appointment?.status==="confirmed","human_confirmation_saved");
+   const confirmedRows=await checked(userDb.from("appointments").select("id,status,start_at,end_at").eq("id",appointments[0].id));
+   check(confirmedRows.length===1&&confirmedRows[0].status==="confirmed","confirmed_state_visible_to_tenant");
+   const audit=await checked(userDb.from("audit_events").select("id").eq("organization_id",orgId).eq("entity_id",appointments[0].id).eq("event_type","appointment.confirmed"));
+   check(audit.length>0,"operator_confirmation_audited");
+   const followupTasks=await checked(userDb.from("tasks").select("title,status").eq("lead_id",a.data.lead_id));
+   check(followupTasks.some((task:any)=>task.title==="Afspraakaanvraag opvolgen"),"internal_followup_task_present");
   const handoffs=await checked(userDb.from("handoffs").select("id").eq("lead_id",a.data.lead_id));
   check(handoffs.length===1,"handoff_recorded");
   const messages=await checked(userDb.from("messages").select("role").eq("conversation_id",a.data.conversation_id));
   check(messages.filter((x:any)=>x.role==="customer").length===4&&messages.filter((x:any)=>x.role==="assistant").length===4,"crm_conversation_persisted");
+   // A visitor's new request must never rewrite an approved appointment.
+   const later=await call("public-reception-chat",{...ids,
+    message:"Ik wil graag een nieuwe afspraak aanvragen op woensdag om 14 uur."
+   });
+   check(later.status===200&&later.data.appointment_id&&later.data.appointment_id!==appointments[0].id,"confirmed_appointment_immutable_to_visitor");
+   const unchanged=await checked(userDb.from("appointments").select("id,status,start_at,end_at").eq("id",appointments[0].id).single());
+   check(unchanged.status==="confirmed"&&unchanged.start_at===confirmedRows[0].start_at&&unchanged.end_at===confirmedRows[0].end_at,"confirmed_slot_unchanged_after_new_request");
+   const newRequest=await checked(userDb.from("appointments").select("id,status").eq("id",later.data.appointment_id).single());
+   check(newRequest.status==="requested","new_public_request_needs_separate_human_approval");
   const noConsent=await call("public-contact-capture",{...ids,name:"QA Contact",email,contact_consent:false});
   check(noConsent.status===409,"contact_consent_required");
   const billing=await call("billing-link",{plan:"starter"},true);
@@ -71,6 +132,13 @@ async function commercialReadiness(req:Request, body:any) {
   await userDb.auth.signOut();
  }catch(e){errorMessage=String((e as any)?.message||e).slice(0,1000);}
  finally{
+  if(secondOrgId){
+   const deletion=await db.from("organizations").delete().eq("id",secondOrgId).eq("name","QA Reception isolation "+id);
+   if(deletion.error)cleanup=false;
+   const remaining=await db.from("organizations").select("id").eq("id",secondOrgId);
+   if(remaining.error||remaining.data?.length)cleanup=false;
+  }
+  if(secondUserId){const deletion=await db.auth.admin.deleteUser(secondUserId);if(deletion.error)cleanup=false;}
   if(orgId){
    const deletion=await db.from("organizations").delete().eq("id",orgId).eq("name","QA Reception readiness "+id);
    if(deletion.error)cleanup=false;

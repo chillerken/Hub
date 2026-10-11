@@ -10,6 +10,38 @@ const out=(body:any,status=200)=>new Response(JSON.stringify(body),{
 });
 const clean=(v:any,max=1000)=>String(v??"").trim().slice(0,max);
 
+// Never dispatch a Calendar sync for an unapproved appointment. Called ONLY
+// after an authenticated owner/admin sets the appointment to confirmed.
+// A failure is reported for manual review; it does not falsely undo approval.
+async function releaseCalendarAfterOperatorConfirmation(db:any,org:string,appointment:any) {
+  const {data:profile,error:profileError}=await db.from("business_profiles")
+    .select("automation_enabled").eq("organization_id",org).maybeSingle();
+  if(profileError)return "manual_review";
+  if(!profile?.automation_enabled)return "disabled";
+  const key="appointment:"+appointment.id+":calendar_request";
+  const {data:existing,error:lookupError}=await db.from("workflow_actions")
+    .select("id,status").eq("organization_id",org).eq("idempotency_key",key).maybeSingle();
+  if(lookupError)return "manual_review";
+  const payload={
+    appointment_id:appointment.id,requested_text:appointment.requested_text,
+    start_at:appointment.start_at,end_at:appointment.end_at,location:appointment.location
+  };
+  if(existing){
+    if(!["blocked","failed","skipped"].includes(existing.status))return "already_recorded";
+    const {error}=await db.from("workflow_actions").update({
+      status:"pending",scheduled_at:new Date().toISOString(),attempts:0,
+      last_error:null,locked_at:null,locked_by:null,payload,updated_at:new Date().toISOString()
+    }).eq("id",existing.id).eq("organization_id",org).in("status",["blocked","failed","skipped"]);
+    return error?"manual_review":"queued";
+  }
+  const {error}=await db.from("workflow_actions").insert({
+    organization_id:org,lead_id:appointment.lead_id,action_type:"calendar_request",
+    channel:"calendar",status:"pending",priority:"high",idempotency_key:key,payload
+  });
+  return error?(error.code==="23505"?"already_recorded":"manual_review"):"queued";
+}
+
+
 Deno.serve(async(req:Request)=>{
   if(req.method==="OPTIONS") return new Response("ok",{headers:cors});
   if(req.method!=="POST") return out({error:"Method not allowed"},405);
@@ -121,7 +153,9 @@ Deno.serve(async(req:Request)=>{
         entity_type:"appointment",entity_id:appointmentId,
         payload:{start_at:updated.start_at,end_at:updated.end_at,timezone:updated.timezone,location:updated.location,status:updated.status}
       });
-      return out({ok:true,appointment:updated});
+      const calendarSyncStatus=status==="confirmed"
+        ?await releaseCalendarAfterOperatorConfirmation(db,org,updated):"awaiting_human_confirmation";
+      return out({ok:true,appointment:updated,calendar_sync_status:calendarSyncStatus});
     }
 
     if(action==="confirm_appointment"){
@@ -129,8 +163,10 @@ Deno.serve(async(req:Request)=>{
       const {data:current,error:ce}=await db.from("appointments").select("*")
         .eq("id",appointmentId).eq("organization_id",org).single();
       if(ce||!current) return out({error:"Appointment not found"},404);
-      if(!current.start_at||!current.end_at) return out({error:"Set an exact start and end time first"},409);
+      if(!current.start_at||!current.end_at || !(Date.parse(current.end_at)>Date.parse(current.start_at)))
+        return out({error:"Set a valid exact start and end time first"},409);
       if(["completed","cancelled"].includes(current.status)) return out({error:"Closed appointment cannot be confirmed"},409);
+      if(current.status==="confirmed")return out({ok:true,appointment:current,already_confirmed:true,calendar_sync_status:"already_confirmed"});
       const {data:updated,error}=await db.from("appointments")
         .update({status:"confirmed",updated_at:new Date().toISOString()})
         .eq("id",appointmentId).eq("organization_id",org)
@@ -141,7 +177,8 @@ Deno.serve(async(req:Request)=>{
         entity_type:"appointment",entity_id:appointmentId,
         payload:{start_at:updated.start_at,end_at:updated.end_at}
       });
-      return out({ok:true,appointment:updated});
+      const calendarSyncStatus=await releaseCalendarAfterOperatorConfirmation(db,org,updated);
+      return out({ok:true,appointment:updated,calendar_sync_status:calendarSyncStatus});
     }
 
     if(action==="complete_appointment"){

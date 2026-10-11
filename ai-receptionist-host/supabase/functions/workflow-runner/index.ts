@@ -24,6 +24,10 @@ function workflowDataGuard(action:any, lead:any, appointment:any, payment:any) {
     return {code:"contact_consent_required",message:"Customer contact consent missing"};
   if(type==="retention_follow_up" && !lead?.marketing_consent_at)
     return {code:"marketing_consent_required",message:"Retention consent missing"};
+  // A parsed date is only a request. Never create or synchronize a calendar
+  // booking until a real authenticated operator has confirmed this appointment.
+  if(type==="calendar_request" && appointment?.status!=="confirmed")
+    return {code:"human_confirmation_required",message:"Calendar booking requires explicit operator confirmation"};
   if(type==="calendar_request" || type==="appointment_confirmation") {
     const start=Date.parse(String(appointment?.start_at||""));
     const end=Date.parse(String(appointment?.end_at||""));
@@ -159,6 +163,17 @@ async function credential(db:any,integration:any,orgId:string) {
   return data || null;
 }
 
+// Resend rejects a reused key with a different payload (e.g. a rescheduled
+// appointment). Version the provider idempotency key by the exact outbound
+// content while preserving stable keys for retries of the same logical message.
+async function emailIdempotencyKey(action:any,recipient:string,sender:string,subject:string,body:string) {
+  const input=new TextEncoder().encode(JSON.stringify([
+    action.idempotency_key,action.organization_id,recipient,sender,subject,body
+  ]));
+  const digest=await crypto.subtle.digest("SHA-256",input);
+  return "rai-email-"+Array.from(new Uint8Array(digest)).map(n=>n.toString(16).padStart(2,"0")).join("");
+}
+
 async function sendResend(db:any,action:any,integration:any,lead:any,profile:any,appointment:any) {
   const secret=await credential(db,integration,action.organization_id);
   if(!secret) return {outcome:"blocked",provider:"resend",error_code:"credential_missing",error_message:"Email integration credential missing"};
@@ -184,6 +199,8 @@ async function sendResend(db:any,action:any,integration:any,lead:any,profile:any
   }
 
   const m=actionMessage(action,lead,{...profile,review_url:cfg.review_url},appointment);
+  const sender=fromName ? `${fromName} <${fromEmail}>` : fromEmail;
+  const deliveryKey=await emailIdempotencyKey(action,to,sender,m.subject,m.text);
   let resp:Response;
   try{
     resp=await fetch("https://api.resend.com/emails",{
@@ -191,10 +208,10 @@ async function sendResend(db:any,action:any,integration:any,lead:any,profile:any
       headers:{
         "Authorization":`Bearer ${secret}`,
         "Content-Type":"application/json",
-        "Idempotency-Key":action.idempotency_key
+        "Idempotency-Key":deliveryKey
       },
       body:JSON.stringify({
-        from:fromName ? `${fromName} <${fromEmail}>` : fromEmail,
+        from:sender,
         to:[to],
         subject:m.subject,
         text:m.text,
@@ -206,15 +223,33 @@ async function sendResend(db:any,action:any,integration:any,lead:any,profile:any
       })
     });
   }catch(e){
-    return {outcome:"retry",provider:"resend",error_code:"network_error",error_message:String(e),retry_after_seconds:retrySeconds(action.attempts)};
+    // A timeout/connection reset can occur AFTER the provider accepted the email.
+    // Never auto-retry an unknown delivery; operator must reconcile first.
+    return {outcome:"blocked",provider:"resend",error_code:"delivery_unknown",
+      error_message:"Email delivery status is unknown after a network error. Manual reconciliation required before retry. Detail: "+clean(String(e),350)};
   }
 
   let body:any={};
   try{ body=await resp.json(); }catch{}
-  if(resp.ok) return {outcome:"completed",provider:"resend",provider_reference:body?.id||null,http_status:resp.status,response_meta:{accepted:true}};
-  if(resp.status===429 || resp.status>=500) {
+  if(resp.ok){
+    const providerId=clean(body?.id||"",500);
+    if(!providerId) return {outcome:"blocked",provider:"resend",http_status:resp.status,error_code:"delivery_unknown",
+      error_message:"Email provider accepted request but no message reference was returned. Delivery status is unknown; reconcile manually."};
+    return {outcome:"completed",provider:"resend",provider_reference:providerId,http_status:resp.status,response_meta:{accepted:true,delivered:false}};
+  }
+  if(resp.status===409 && String(body?.name||body?.error||"")==="concurrent_idempotent_requests"){
+    // Resend explicitly allows retrying this conflict with the SAME content key.
+    return {outcome:"retry",provider:"resend",http_status:409,error_code:"concurrent_idempotent_requests",
+      error_message:"Another identical provider request is in progress; retry with unchanged key.",
+      retry_after_seconds:retrySeconds(action.attempts)};
+  }
+  if(resp.status===429) {
     const retryHeader=Number(resp.headers.get("retry-after")||0);
-    return {outcome:"retry",provider:"resend",http_status:resp.status,error_code:"provider_retryable",error_message:clean(body?.message||body?.error||resp.statusText,1000),retry_after_seconds:retryHeader>0?retryHeader:retrySeconds(action.attempts)};
+    return {outcome:"retry",provider:"resend",http_status:resp.status,error_code:"rate_limited",error_message:clean(body?.message||body?.error||resp.statusText,1000),retry_after_seconds:retryHeader>0?retryHeader:retrySeconds(action.attempts)};
+  }
+  if(resp.status>=500){
+    return {outcome:"blocked",provider:"resend",http_status:resp.status,error_code:"delivery_unknown",
+      error_message:"Email provider returned a server error after send attempt. Delivery status is unknown; manual reconciliation required."};
   }
   return {outcome:"failed",provider:"resend",http_status:resp.status,error_code:"provider_rejected",error_message:clean(body?.message||body?.error||resp.statusText,1000)};
 }
