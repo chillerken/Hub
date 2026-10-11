@@ -45,7 +45,7 @@ function post(messages,token='user-owner-jwt'){return {method:'POST',headers:{'C
 const health=await run('/api/health');
 assert.equal(health.status,200);
 const h=await health.json();
-assert.equal(h.version,'1.3.8');assert.equal(h.aiConfigured,true);assert.equal(h.auth,'reception-ai-login');
+assert.equal(h.version,'1.3.9');assert.equal(h.aiConfigured,true);assert.equal(h.auth,'reception-ai-login');
 assert.equal((await run('/api/chat')).status,405);
 assert.equal((await run('/api/chat',{method:'POST',body:'{}'})).status,401);
 assert.equal((await run('/api/chat',post([{role:'user',content:'Dag JARVIS'}],'wrong-jwt'))).status,401);
@@ -68,7 +68,7 @@ assert.ok(html.includes('AI niet aangemeld'));
 assert.ok(html.includes('AI getest en actief'));
 assert.ok(html.includes('requestAI(messages,context)'));
 assert.ok(!html.includes('● Lokaal'));
-assert.ok(html.includes('PERSONAL OS · V1.3.8'));
+assert.ok(html.includes('PERSONAL OS · V1.3.9 · GOD MODE'));
 assert.ok(html.includes('id="lwCrmComms"'));
 assert.ok(html.includes('id="lwWhatsapp"'));
 assert.ok(html.includes('id="lwEmails"'));
@@ -91,7 +91,7 @@ assert.ok(!html.includes('id="saveKey"'));
 assert.ok(!html.includes('Persoonlijke AI-toegangscode'));
 for(const [,js] of html.matchAll(/<script>([\s\S]*?)<\/script>/g))new Script(js,{filename:'jarvis-inline.js'});
 assert.ok(page.headers.get('Content-Security-Policy').includes('ndecxbsrxspkuxjsbndq.supabase.co'));
-for(const [path,substring] of [['/manifest.webmanifest','JARVIS Personal OS'],['/sw.js','jarvis-personal-v138'],['/icon.svg','<svg']]){
+for(const [path,substring] of [['/manifest.webmanifest','JARVIS Personal OS'],['/sw.js','jarvis-personal-v139'],['/icon.svg','<svg']]){
   const r=await run(path);assert.equal(r.status,200);assert.ok((await r.text()).includes(substring));
 }
 // Both dates must read the right tenant and not hallucinate appointments.
