@@ -194,3 +194,26 @@ test("unmatched unpaid Checkout does not claim a completed payment",async()=>{
   assert.equal(f.byId(ORG_A).plan,"trial");
   assert.equal(f.tables.stripe_events.find(e=>e.id==="evt_unpaid_orphan")?.status,"processed");
 });
+
+
+test("paid Checkout with invalid plan metadata requires review instead of fake activation",async()=>{
+  const f=fixture();
+  const invalidPlan=checkout("evt_invalid_plan","unknown_ref","sub_unknown","cus_unknown","unlisted_plan");
+  const result=await f.deliver(invalidPlan);
+  assert.equal(result.status,503);
+  const tracked=f.tables.stripe_events.find(e=>e.id==="evt_invalid_plan");
+  assert.equal(tracked?.status,"failed");
+  assert.match(tracked?.last_error||"",/paid_checkout_unlinked/);
+  assert.equal(f.byId(ORG_A).plan,"trial");
+  assert.equal(f.byId(ORG_B).plan,"trial");
+});
+
+test("asynchronous confirmed payment without a tenant remains retryable",async()=>{
+  const f=fixture();
+  const asyncPaid=checkout("evt_async_paid","expired_ref","sub_async","cus_async","starter","unpaid");
+  asyncPaid.type="checkout.session.async_payment_succeeded";
+  const res=await f.deliver(asyncPaid);
+  assert.equal(res.status,503);
+  assert.equal(f.tables.stripe_events.find(e=>e.id==="evt_async_paid")?.status,"failed");
+  assert.equal(f.byId(ORG_A).stripe_subscription_id,null);
+});
