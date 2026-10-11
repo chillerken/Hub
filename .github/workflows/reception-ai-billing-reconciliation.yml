@@ -1,0 +1,84 @@
+name: Reception AI Read-Only Billing Reconciliation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ai-receptionist-host/supabase/functions/billing-reconciliation-review/**'
+      - 'ai-receptionist-host/supabase/migrations/20261011060000_readonly_checkout_reference_review.sql'
+      - 'tests/reception-billing-reconciliation-review.test.mjs'
+      - 'tests/reception-billing-reconciliation-review.pg.sql'
+      - '.github/workflows/reception-ai-billing-reconciliation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'ai-receptionist-host/supabase/functions/billing-reconciliation-review/**'
+      - 'ai-receptionist-host/supabase/migrations/20261011060000_readonly_checkout_reference_review.sql'
+      - 'tests/reception-billing-reconciliation-review.test.mjs'
+      - 'tests/reception-billing-reconciliation-review.pg.sql'
+      - '.github/workflows/reception-ai-billing-reconciliation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safe-readonly-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated_test_password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: isolated_test_password
+      PGDATABASE: postgres
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test read-only Stripe incident evidence and authorization
+        run: node --test tests/reception-billing-reconciliation-review.test.mjs
+      - name: Check operator endpoint TypeScript syntax
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts typescript@5.8.2
+          node --input-type=module -e '
+          import ts from "typescript";
+          import fs from "node:fs";
+          const file="ai-receptionist-host/supabase/functions/billing-reconciliation-review/index.ts";
+          const ast=ts.createSourceFile(file,fs.readFileSync(file,"utf8"),ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);
+          if(ast.parseDiagnostics.length){
+            console.error(ts.formatDiagnosticsWithColorAndContext(ast.parseDiagnostics,{
+              getCanonicalFileName: x=>x,
+              getCurrentDirectory: ()=>process.cwd(),
+              getNewLine: ()=>"\n"
+            }));
+            process.exitCode=1;
+          }
+          '
+      - name: Install PostgreSQL client if missing
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Test service-role-only reference lookup on isolated PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f tests/reception-billing-reconciliation-review.pg.sql
