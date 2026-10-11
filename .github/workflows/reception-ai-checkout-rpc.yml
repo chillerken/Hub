@@ -6,6 +6,7 @@ on:
     paths:
       - 'ai-receptionist-host/supabase/migrations/20261011030000_align_billing_checkout_reference_max_72h.sql'
       - 'tests/reception-checkout-ref-ttl.pg.sql'
+      - 'docs/reception-ai-checkout-rpc-rollback-4h.sql'
       - 'tests/reception-checkout-reference-lifetime.test.mjs'
       - 'ai-receptionist-host/supabase/functions/billing-link/checkout-reference-lifetime.js'
       - '.github/workflows/reception-ai-checkout-rpc.yml'
@@ -14,6 +15,7 @@ on:
     paths:
       - 'ai-receptionist-host/supabase/migrations/20261011030000_align_billing_checkout_reference_max_72h.sql'
       - 'tests/reception-checkout-ref-ttl.pg.sql'
+      - 'docs/reception-ai-checkout-rpc-rollback-4h.sql'
       - 'tests/reception-checkout-reference-lifetime.test.mjs'
       - 'ai-receptionist-host/supabase/functions/billing-link/checkout-reference-lifetime.js'
       - '.github/workflows/reception-ai-checkout-rpc.yml'
@@ -58,5 +60,9 @@ jobs:
           fi
       - name: Validate 72-hour Supabase RPC against disposable PostgreSQL
         run: psql -v ON_ERROR_STOP=1 -f tests/reception-checkout-ref-ttl.pg.sql
+      - name: Validate forward and rollback SQL are distinct
+        run: |
+          grep -Fq "now()+interval '72 hours'" ai-receptionist-host/supabase/migrations/20261011030000_align_billing_checkout_reference_max_72h.sql
+          grep -Fq "now()+interval '4 hours'" docs/reception-ai-checkout-rpc-rollback-4h.sql
       - name: Check 72-hour JavaScript checkout policy
         run: node --test tests/reception-checkout-reference-lifetime.test.mjs
