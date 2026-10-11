@@ -79,6 +79,15 @@ async function commercialReadiness(req:Request, body:any) {
   check(handoffs.length===1,"handoff_recorded");
   const messages=await checked(userDb.from("messages").select("role").eq("conversation_id",a.data.conversation_id));
   check(messages.filter((x:any)=>x.role==="customer").length===4&&messages.filter((x:any)=>x.role==="assistant").length===4,"crm_conversation_persisted");
+   // A visitor's new request must never rewrite an approved appointment.
+   const later=await call("public-reception-chat",{...ids,
+    message:"Ik wil graag een nieuwe afspraak aanvragen op woensdag om 14 uur."
+   });
+   check(later.status===200&&later.data.appointment_id&&later.data.appointment_id!==appointments[0].id,"confirmed_appointment_immutable_to_visitor");
+   const unchanged=await checked(userDb.from("appointments").select("id,status,start_at,end_at").eq("id",appointments[0].id).single());
+   check(unchanged.status==="confirmed"&&unchanged.start_at===confirmedRows[0].start_at&&unchanged.end_at===confirmedRows[0].end_at,"confirmed_slot_unchanged_after_new_request");
+   const newRequest=await checked(userDb.from("appointments").select("id,status").eq("id",later.data.appointment_id).single());
+   check(newRequest.status==="requested","new_public_request_needs_separate_human_approval");
   const noConsent=await call("public-contact-capture",{...ids,name:"QA Contact",email,contact_consent:false});
   check(noConsent.status===409,"contact_consent_required");
   const billing=await call("billing-link",{plan:"starter"},true);
