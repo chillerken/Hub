@@ -24,6 +24,10 @@ function workflowDataGuard(action:any, lead:any, appointment:any, payment:any) {
     return {code:"contact_consent_required",message:"Customer contact consent missing"};
   if(type==="retention_follow_up" && !lead?.marketing_consent_at)
     return {code:"marketing_consent_required",message:"Retention consent missing"};
+  // A parsed date is only a request. Never create or synchronize a calendar
+  // booking until a real authenticated operator has confirmed this appointment.
+  if(type==="calendar_request" && appointment?.status!=="confirmed")
+    return {code:"human_confirmation_required",message:"Calendar booking requires explicit operator confirmation"};
   if(type==="calendar_request" || type==="appointment_confirmation") {
     const start=Date.parse(String(appointment?.start_at||""));
     const end=Date.parse(String(appointment?.end_at||""));
