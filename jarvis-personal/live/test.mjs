@@ -9,7 +9,7 @@ const dayFmt=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Brussels',year:'n
 const localToday=dayFmt.format(new Date());
 const todayStart=new Date(Date.parse(localToday+'T12:00:00Z'));
 const tomorrowStart=new Date(todayStart.getTime()+86400000);
-const appointment=(start,description)=>({id:description,lead_id:leadId,status:'confirmed',organization_id:org,start_at:start.toISOString(),end_at:new Date(start.getTime()+7200000).toISOString(),location:'Voorbeeldstraat 1',requested_text:description});
+const appointment=(start,description)=>({id:description,lead_id:leadId,status:'confirmed',organization_id:org,start_at:start.toISOString(),end_at:new Date(start.getTime()+7200000).toISOString(),location:'Locatie '+description,requested_text:description});
 globalThis.fetch=async (input,opts={})=>{
   const u=new URL(input), token=opts.headers?.Authorization;
   assert.equal(u.hostname,'ndecxbsrxspkuxjsbndq.supabase.co');
