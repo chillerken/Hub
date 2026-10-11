@@ -2,6 +2,13 @@
 -- This is the database commit phase ONLY. A future platform-operator endpoint must
 -- first verify CURRENT Stripe session/event/subscription via authenticated Stripe GET.
 -- No raw checkout reference, email, secret, refund or charge is stored here.
+-- Cross-tenant consistency must hold even for TWO concurrent Stripe/webhook
+-- transactions (a SELECT-only conflict check cannot prevent write skew).
+-- Migration requires separate approval and a duplicate precheck in staging.
+CREATE UNIQUE INDEX IF NOT EXISTS organizations_unique_stripe_subscription_id
+  ON public.organizations (stripe_subscription_id)
+  WHERE stripe_subscription_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS private.billing_recovery_audit (
   stripe_event_id text PRIMARY KEY,
   stripe_session_id text NOT NULL,
