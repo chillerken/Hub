@@ -6,12 +6,16 @@ on:
     paths:
       - 'ai-receptionist-host/supabase/migrations/20261011093000_atomic_paid_checkout_recovery.sql'
       - 'tests/reception-atomic-recovery.pg.sql'
+      - 'ai-receptionist-host/supabase/functions/billing-reconciliation-commit/**'
+      - 'tests/reception-operator-recovery.test.mjs'
       - '.github/workflows/reception-ai-atomic-recovery.yml'
   push:
     branches: [main]
     paths:
       - 'ai-receptionist-host/supabase/migrations/20261011093000_atomic_paid_checkout_recovery.sql'
       - 'tests/reception-atomic-recovery.pg.sql'
+      - 'ai-receptionist-host/supabase/functions/billing-reconciliation-commit/**'
+      - 'tests/reception-operator-recovery.test.mjs'
       - '.github/workflows/reception-ai-atomic-recovery.yml'
   workflow_dispatch:
 
@@ -46,6 +50,30 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test operator consent and fresh Stripe proof
+        run: node --test tests/reception-operator-recovery.test.mjs
+      - name: Validate recovery endpoint TypeScript syntax
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts typescript@5.8.2
+          node --input-type=module -e '
+          import ts from "typescript";
+          import fs from "node:fs";
+          const file="ai-receptionist-host/supabase/functions/billing-reconciliation-commit/index.ts";
+          const source=fs.readFileSync(file,"utf8");
+          const tree=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);
+          if(tree.parseDiagnostics.length) {
+            console.error(ts.formatDiagnosticsWithColorAndContext(tree.parseDiagnostics,{
+              getCanonicalFileName:x=>x,
+              getCurrentDirectory:()=>process.cwd(),
+              getNewLine:()=>String.fromCharCode(10)
+            }));
+            process.exitCode=1;
+          }
+          '
       - name: Install PostgreSQL client
         run: |
           if ! command -v psql >/dev/null 2>&1; then
