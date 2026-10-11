@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
+import { webcrypto } from "node:crypto";
 
 const A="10000000-0000-4000-8000-000000000001";
 const B="10000000-0000-4000-8000-000000000002";
@@ -36,7 +37,7 @@ function harness({response={ok:true,id:"email_accepted_fixture"},httpStatus=200,
  };
  const context={
   exports:{},console:{error(){},log(){},warn(){}},Date,Intl,Number,String,JSON,Set,Array,
-  Request,Response,Headers,URL,crypto:globalThis.crypto,
+  Request,Response,Headers,URL,TextEncoder,Uint8Array,crypto:webcrypto,
   fetch:mockFetch,globalThis:null,
   Deno:{env:{get(){return undefined;}},serve(fn){assert.equal(typeof fn,"function");}},
   require(name){
@@ -78,7 +79,7 @@ test("real Resend adapter returns a traceable accepted receipt and tenant brandi
  assert.equal(result.provider_reference,"email_accepted_fixture");
  assert.equal(result.response_meta.delivered,false,"Provider accept is not inbox delivery");
  assert.equal(h.requests.length,1);
- assert.equal(h.requests[0].headers["Idempotency-Key"],x.action.idempotency_key);
+ assert.match(h.requests[0].headers["Idempotency-Key"],/^rai-email-[a-f0-9]{64}$/);
  assert.deepEqual(Array.from(h.requests[0].body.to),["a@example.test"]);
  assert.match(h.requests[0].body.subject,/Afspraak bevestigd – Garage A/);
  await h.hooks.finish(h.db,x.action,result.outcome,result);
@@ -86,7 +87,7 @@ test("real Resend adapter returns a traceable accepted receipt and tenant brandi
  assert.equal(h.finishes[0].p_outcome,"completed");
 });
 
-test("provider-level idempotency deduplicates repeated HTTP requests by exact action key",async()=>{
+test("provider-level idempotency deduplicates exact repeated email content",async()=>{
  const h=harness(),x=h.make();
  const one=await h.hooks.sendResend(h.db,x.action,x.integration,x.lead,x.profile,x.appointment);
  const two=await h.hooks.sendResend(h.db,x.action,x.integration,x.lead,x.profile,x.appointment);
@@ -152,5 +153,22 @@ test("rate-limit response is retryable with the same idempotency key",async()=>{
  assert.equal(out.outcome,"retry");
  assert.equal(out.error_code,"rate_limited");
  assert.ok(out.retry_after_seconds>0);
- assert.equal(h.requests[0].headers["Idempotency-Key"],x.action.idempotency_key);
+ assert.match(h.requests[0].headers["Idempotency-Key"],/^rai-email-[a-f0-9]{64}$/);
+});
+
+test("rescheduling changes the provider key without breaking retry deduplication",async()=>{
+ const h=harness(),x=h.make();
+ const first=await h.hooks.sendResend(h.db,x.action,x.integration,x.lead,x.profile,x.appointment);
+ const oldKey=h.requests[0].headers["Idempotency-Key"];
+ assert.equal(first.outcome,"completed");
+ const rescheduled={...x.appointment,start_at:"2026-11-19T14:00:00Z",end_at:"2026-11-19T15:00:00Z"};
+ const changedAction={...x.action,payload:{...x.action.payload,rescheduled:true}};
+ const next=await h.hooks.sendResend(h.db,changedAction,x.integration,x.lead,x.profile,rescheduled);
+ const newKey=h.requests[1].headers["Idempotency-Key"];
+ assert.equal(next.outcome,"completed");
+ assert.notEqual(oldKey,newKey,"Different message content requires a new provider key");
+ assert.equal(h.acceptedUnique(),2);
+ await h.hooks.sendResend(h.db,changedAction,x.integration,x.lead,x.profile,rescheduled);
+ assert.equal(h.requests[2].headers["Idempotency-Key"],newKey);
+ assert.equal(h.acceptedUnique(),2,"Same reschedule retry remains deduplicated");
 });
