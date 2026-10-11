@@ -1,0 +1,68 @@
+name: Reception AI Checkout RPC Contract
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ai-receptionist-host/supabase/migrations/20261011030000_align_billing_checkout_reference_max_72h.sql'
+      - 'tests/reception-checkout-ref-ttl.pg.sql'
+      - 'docs/reception-ai-checkout-rpc-rollback-4h.sql'
+      - 'tests/reception-checkout-reference-lifetime.test.mjs'
+      - 'ai-receptionist-host/supabase/functions/billing-link/checkout-reference-lifetime.js'
+      - '.github/workflows/reception-ai-checkout-rpc.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'ai-receptionist-host/supabase/migrations/20261011030000_align_billing_checkout_reference_max_72h.sql'
+      - 'tests/reception-checkout-ref-ttl.pg.sql'
+      - 'docs/reception-ai-checkout-rpc-rollback-4h.sql'
+      - 'tests/reception-checkout-reference-lifetime.test.mjs'
+      - 'ai-receptionist-host/supabase/functions/billing-link/checkout-reference-lifetime.js'
+      - '.github/workflows/reception-ai-checkout-rpc.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checkout-rpc-ttl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: local_fixture_password_only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: local_fixture_password_only
+      PGDATABASE: postgres
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install PostgreSQL client if missing
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Validate 72-hour Supabase RPC against disposable PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f tests/reception-checkout-ref-ttl.pg.sql
+      - name: Validate forward and rollback SQL are distinct
+        run: |
+          grep -Fq "now()+interval '72 hours'" ai-receptionist-host/supabase/migrations/20261011030000_align_billing_checkout_reference_max_72h.sql
+          grep -Fq "now()+interval '4 hours'" docs/reception-ai-checkout-rpc-rollback-4h.sql
+      - name: Check 72-hour JavaScript checkout policy
+        run: node --test tests/reception-checkout-reference-lifetime.test.mjs
