@@ -73,3 +73,21 @@ The current Supabase security advisor still reports:
 - `auth_leaked_password_protection`: https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection
 
 **No-sale gate remains active.** Still required: a disposable real Supabase deployment and complete HTTP-to-SQL-to-worker test; delivery event/receipt from a test mailbox using real provider credentials; confirmation retry/replay inspection; cleanup evidence; advisor remediation/acceptance; operator review and sign-off. No merge, real emails, payment, customer booking or production deployment was performed during this validation.
+
+
+## 7. Disposable PostgreSQL-backed integrated chain and real RLS tests
+
+**Evidence:** [GitHub Actions run 38154989384](https://github.com/chillerken/Hub/actions/runs/38154989384), commit a814f9845d3d255c25ccc42ad3e93ac8286130c4. All three CI jobs succeeded. No production changes, external sends, actual recipients or payment activity.
+
+New PostgreSQL 16 local integration, one joined end-to-end test:
+1. Actual public-reception-chat TypeScript HTTP handler stores a synthetic lead, conversation, visitor and assistant messages, requested appointment and one follow-up task in real PostgreSQL. The actual SQL trigger creates zero calendar/confirmation actions before approval.
+2. Actual operations-admin HTTP handler enforces mocked user identity, real tenant-scoped database lookups and explicit approval. Foreign tenant and non-admin viewer are rejected. Correct owner confirmation persists an audit event and causes the real SQL trigger to enqueue exactly one calendar action and one confirmation action.
+3. Actual workflow-runner HTTP handler validates a synthetic runner secret and claims actual PostgreSQL workflow actions. It executes the genuine Resend adapter against an in-process transport sink, persists a synthetic message reference and reports provider-accepted status; the absent Google Calendar integration is blocked. Repeated worker invocations do not resend.
+4. Both independent synthetic tenants execute the booking workflow; widget origin isolation, cross-tenant conversation isolation, and operator tenant isolation pass.
+5. A lead without consent is denied an outbound confirmation. A subsequent approved reschedule generates a new content-specific provider idempotency key and one updated message with no repeat send.
+
+The same ephemeral PostgreSQL environment then executes 15 passing SQL RLS assertions: reads stay within the tenant, unauthorized lead and company-profile writes affect zero rows, a tenant owner may change only their own settings, a viewer cannot change tenant settings, and authenticated clients cannot update appointments or enqueue outbound provider actions directly. RLS policies and membership functions were reconstructed from read-only production metadata.
+
+**Non-proven boundaries:** These tests use actual PostgreSQL triggers and actual HTTP handler code, but Supabase Auth, the PostgREST Data API and the Edge runtime are represented by an isolated adapter; the provider sink only simulates Resend API acceptance, never external delivery. The test does not prove a full hosted Supabase or real customer communication chain.
+
+Commercial release remains **BLOCKED**. A fully isolated actual Supabase stack with Auth/PostgREST/Edge, provider delivery event/receipt, retry/replay review, real rights verification, Supabase adviser remediation and operator sign-off are still mandatory. Keep PR #37 draft, unmerged and undeployed to production.
