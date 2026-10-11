@@ -4,11 +4,6 @@ const send=(o,s=200)=>new Response(JSON.stringify(o),{status:s,headers:{'Content
 export default {async fetch(req,env){const u=new URL(req.url);
 
 if(u.pathname==='/api/health')return send({ok:true,version:'1.3.3',aiConfigured:!!env.AI,auth:'reception-ai-login'});
-if(u.pathname==='/api/diagnostics/net-check'){
-if(req.method!=='GET')return send({error:'Method not allowed'},405);
-try{const r=await fetch('https://ndecxbsrxspkuxjsbndq.supabase.co/auth/v1/settings',{method:'GET',headers:{'Cache-Control':'no-store'},redirect:'manual'});return send({reachedUpstream:true,status:r.status,contentType:r.headers.get('content-type')||''})}
-catch(e){return send({reachedUpstream:false,errorName:String(e?.name||'Error').slice(0,80),errorMessage:String(e?.message||'').slice(0,250)})}
-}
 if(u.pathname==='/api/chat'){
 if(req.method!=='POST')return send({error:'Gebruik POST'},405);
 if(!env.AI)return send({error:'AI niet geconfigureerd'},503);
