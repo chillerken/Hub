@@ -23,7 +23,7 @@ rows=await membership.json();
 }catch(e){return send({error:'Reception AI-aanmelding tijdelijk niet bereikbaar'},503)}
 if(!Array.isArray(rows)||!rows.some(x=>x?.user_id===user.id&&x.organization_id===ORG_ID&&x.active===true&&['owner','admin'].includes(x.role)))return send({error:'Geen LuxWash-beheerdersrechten'},403);
 if(Number(req.headers.get('content-length')||0)>12000)return send({error:'Te groot'},413);
-let d;try{const raw=await req.text();if(raw.length>12000)throw Error();d=JSON.parse(raw)}catch{return send({error:'Ongeldige JSON'},400)}
+let d;try{const raw=await req.text();if(raw.length>12000)return send({error:'Te groot'},413);d=JSON.parse(raw)}catch{return send({error:'Ongeldige JSON'},400)}
 if(!Array.isArray(d.messages))return send({error:'Berichten ontbreken'},400);
 const messages=d.messages.slice(-8).filter(m=>m&&['assistant','user'].includes(m.role)&&typeof m.content==='string').map(m=>({role:m.role,content:m.content.slice(0,1500)}));
 if(!messages.length||messages[messages.length-1].role!=='user')return send({error:'Laatste bericht ontbreekt'},400);
