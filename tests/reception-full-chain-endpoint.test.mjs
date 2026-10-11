@@ -39,6 +39,7 @@ function setup(){
   audit_events:[],workflow_actions:[],widget_rate_limits:[],reception_ai_plan_catalog:[]
  };
  const writes=[];
+ let simulatePublicUpdateRace=false;
  class Query {
   constructor(name,user=null){this.name=name;this.user=user;this.predicates=[];this.sort=null;this.cap=null;this.pending=null;this.selection=null;this.countOpt=null;}
   select(fields="*",options={}){this.selection=fields;this.countOpt=options;return this;}
@@ -58,6 +59,13 @@ function setup(){
   }
   execute(){
    if(!data[this.name])throw Error("Unexpected table "+this.name);
+   if(this.name==="appointments" && this.pending?.type==="update" &&
+      this.pending.value?.requested_text && simulatePublicUpdateRace){
+      // Realistic concurrent operator approval between visitor SELECT and UPDATE.
+      simulatePublicUpdateRace=false;
+      const row=data.appointments.find(r=>r.status==="requested");
+      if(row)row.status="confirmed";
+   }
    let result=data[this.name].filter(row=>this.allowed(row)&&this.predicates.every(fn=>fn(row)));
    if(this.pending?.type==="insert"){
     const inserts=Array.isArray(this.pending.value)?this.pending.value:[this.pending.value];
@@ -132,7 +140,7 @@ function setup(){
   }));
   return {status:response.status,data:await response.json()};
  }
- return{data,writes,
+ return{data,writes,simulatePublicUpdateRaceOnce(){simulatePublicUpdateRace=true;},
   chat:(body,origin)=>post(chat,body,origin),
   admin:(action,token)=>post(admin,action,"https://alpha.example.invalid",token)
  };
@@ -235,4 +243,21 @@ test("malformed status and unauthenticated operations never confirm",async()=>{
  assert.equal(missingSlot.status,409);
  assert.equal(f.data.appointments[0].status,"requested");
  assert.equal(f.data.workflow_actions.length,0);
+});
+
+test("concurrent human approval cannot be overwritten or reported as a successful revision",async()=>{
+ const f=setup();
+ const first=await f.chat({
+   widget_token:"widget-A",message:"Ik wil een afspraak maken op 17/11/2026 om 14u00"
+ });
+ assert.equal(first.status,200);
+ assert.equal(f.data.appointments[0].status,"requested");
+ f.simulatePublicUpdateRaceOnce();
+ const change=await f.chat({
+   widget_token:"widget-A",lead_id:first.data.lead_id,conversation_id:first.data.conversation_id,
+   message:"Ik wil de afspraak wijzigen naar 19/11/2026 om 15u00"
+ });
+ assert.equal(change.status,409,JSON.stringify(change.data));
+ assert.equal(f.data.appointments[0].status,"confirmed");
+ assert.ok(!f.data.appointments[0].requested_text.includes("19/11/2026"));
 });
