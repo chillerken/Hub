@@ -258,8 +258,16 @@ Deno.serve(async req=>{
           const requested=[existingAppt[0].requested_text,message].filter(Boolean).join(" | ").slice(0,2000);
           const appointmentPatch:any={requested_text:requested,updated_at:new Date().toISOString()};
           if(slot){appointmentPatch.start_at=slot.start_at;appointmentPatch.end_at=slot.end_at;appointmentPatch.timezone=slot.timezone;}
-          const {error:appointmentUpdateError}=await db.from("appointments").update(appointmentPatch).eq("id",appointmentId).eq("organization_id",p.organization_id).in("status",VISITOR_EDITABLE_BOOKING_STATUSES);
+          const {data:updatedAppointments,error:appointmentUpdateError}=await db.from("appointments")
+            .update(appointmentPatch).eq("id",appointmentId)
+            .eq("organization_id",p.organization_id).in("status",VISITOR_EDITABLE_BOOKING_STATUSES)
+            .select("id");
           if(appointmentUpdateError)throw appointmentUpdateError;
+          // Another operator may have confirmed the slot after our initial read.
+          // Never claim this visitor changed it if the guarded update affected no rows.
+          if(!updatedAppointments?.length)return json({
+            error:"Deze aanvraag is intussen gewijzigd. Dien een nieuwe aanvraag in."
+          },409);
           await db.from("workflow_actions").update({
             payload:{appointment_id:appointmentId,requested_text:requested}
           }).eq("idempotency_key","appointment:"+appointmentId+":calendar_request").eq("status","pending");
