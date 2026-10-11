@@ -6,12 +6,14 @@ on:
     paths:
       - 'ai-receptionist-host/supabase/functions/stripe-webhook/**'
       - 'tests/reception-billing-event-guard.test.mjs'
+      - 'tests/reception-stripe-webhook-sandbox.test.mjs'
       - '.github/workflows/reception-ai-billing-guard.yml'
   pull_request:
     branches: [main]
     paths:
       - 'ai-receptionist-host/supabase/functions/stripe-webhook/**'
       - 'tests/reception-billing-event-guard.test.mjs'
+      - 'tests/reception-stripe-webhook-sandbox.test.mjs'
       - '.github/workflows/reception-ai-billing-guard.yml'
   workflow_dispatch:
 
@@ -51,3 +53,5 @@ jobs:
             process.exitCode = 1;
           }
           '
+      - name: Run signed Stripe webhook simulation (no external APIs)
+        run: node --test tests/reception-stripe-webhook-sandbox.test.mjs
