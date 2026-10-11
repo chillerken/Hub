@@ -50,3 +50,9 @@ De functie `billing-reconciliation-commit` is intussen toegevoegd als **standaar
 De HTTP-functie kan bij een eventuele release alleen worden gedeployed met **alle vier bestanden**: `index.ts`, `commit-core.js`, `review-core.js` en `reconciliation-assessment.js`. De lookup-RPC uit PR #35 en de recovery-RPC uit deze PR zijn beide vereiste databaseafhankelijkheden. Geen enkele SQL-migratie of Edge Function in deze PR is in productie toegepast.
 
 **Cruciaal:** een deploy naar productie is pas verantwoord na een geslaagde test in Stripe-testmodus met een geïsoleerde Supabase-omgeving, een verificatie van operatorrechten en afzonderlijke expliciete vrijgave van de schrijffunctie. De huidige geïsoleerde CI bewijst niet dat de echte Stripe-integratie end-to-end werkt.
+
+## Concurrente abonnementen — unieke databankbinding
+
+Een gewone `SELECT ... WHERE stripe_subscription_id=...` is onvoldoende wanneer twee transacties tegelijk verschillende klantorganisaties bijwerken. De voorgestelde migratie maakt daarom **ook** de unieke partial index `organizations_unique_stripe_subscription_id`, zodat één Stripe-abonnements-ID nooit bij twee organisaties kan worden opgeslagen. De tijdelijke PostgreSQL-test probeert bewust een tweede organisatie met dezelfde subscription-ID bij te werken en verwacht dat PostgreSQL dit weigert.
+
+De huidige productiedatabase bevatte bij de alleen-lezen controle **0 organisaties met een gekoppelde subscription-ID** en geen dubbele bindingen. De index is alsnog een productionele schemawijziging en vereist onafhankelijke review, een gecontroleerde testomgeving, migratiebackup en uitdrukkelijke vrijgave. Bij een rollback mag de bescherming tegen dubbele abonnementen niet zonder afzonderlijke beoordeling worden verwijderd.
