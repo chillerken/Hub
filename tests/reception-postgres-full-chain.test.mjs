@@ -24,7 +24,7 @@ const persons={
 };
 const allowedTables=new Set(["organizations","business_profiles","memberships","leads","conversations",
  "messages","tasks","handoffs","appointments","workflow_actions","tenant_integrations",
- "audit_events","widget_rate_limits"]);
+ "audit_events","widget_rate_limits","reception_ai_plan_catalog"]);
 function col(v){
  if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(v))throw Error("Unsafe test SQL identifier");
  return '"'+v+'"';
