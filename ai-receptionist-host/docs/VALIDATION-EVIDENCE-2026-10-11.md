@@ -91,3 +91,24 @@ The same ephemeral PostgreSQL environment then executes 15 passing SQL RLS asser
 **Non-proven boundaries:** These tests use actual PostgreSQL triggers and actual HTTP handler code, but Supabase Auth, the PostgREST Data API and the Edge runtime are represented by an isolated adapter; the provider sink only simulates Resend API acceptance, never external delivery. The test does not prove a full hosted Supabase or real customer communication chain.
 
 Commercial release remains **BLOCKED**. A fully isolated actual Supabase stack with Auth/PostgREST/Edge, provider delivery event/receipt, retry/replay review, real rights verification, Supabase adviser remediation and operator sign-off are still mandatory. Keep PR #37 draft, unmerged and undeployed to production.
+
+
+## 8. Actual local Supabase Auth + PostgREST + Edge (2026-10-11)
+
+**Successful CI proof:** [GitHub Actions run 38156146579](https://github.com/chillerken/Hub/actions/runs/38156146579), code commit acacab6c5f752f32c9b31be1bdac03d869fd0a3c. **4/4 jobs passed**, including the previously absent local Supabase real Auth/API/Edge integration.
+
+GitHub Actions launched an isolated, disposable local Supabase CLI stack with authentic GoTrue/Auth, PostgREST, Kong, Edge runtime and PostgreSQL containers. This job downloaded the local CLI, initialized a new *unlinked* project and generated credentials locally. It did not create or access an additional Supabase cloud project.
+
+It then provisioned three synthetic local Auth users belonging to two distinct organizations, with separate owner and viewer roles. Using real Supabase Auth signup/admin creation and password sign-in, it proved that:
+- Tenant A and B only read their own organizations and business profiles through actual authenticated PostgREST; anonymous access receives a PostgreSQL permission error or zero rows.
+- Cross-tenant business profile updates are rejected and an ordinary viewer cannot change business settings, while the actual owner can change their own settings.
+- Regular authenticated users cannot directly update appointments or insert outbound workflow actions.
+- The real locally hosted public-reception-chat Edge Function enforces origin allowlists and persists lead, messages, task and requested appointment using the actual Supabase Data API. A requested appointment generates no outbound workflow actions.
+- The real locally hosted operations-admin Edge Function denies a different tenant and a viewer from confirming the appointment. It permits the correct authorized owner to confirm, records one operator audit event, and creates one calendar plus one confirmation action using the actual PostgreSQL trigger.
+- A second public request creates a new pending appointment without modifying the confirmed slot. A second organization's widget remains correctly isolated, including cross-tenant conversation hijack prevention.
+
+All associated Node assertions passed. After the test, GitHub Actions stopped the temporary Supabase containers with --no-backup. The first two development iterations failed due to inaccurate test-fixture expectations, not the production code: the fresh local schema carried broader default write grants than production, and anonymous access correctly returned HTTP/SQL permission denied rather than an empty list. These were fixed in the test-only RLS setup and test assertions; the successful last run is the evidence.
+
+**Important limitations**: Supabase was running the actual services locally, rather than being a production-hosted Supabase project. The booking Edge Functions, Auth and Data API are now authentically exercised. The workflow-runner + Resend connector + Calendar integration path remains proven only with a separate real PostgreSQL and simulated transport sink. No actual email was sent or delivered in this exercise; an accepted fake-provider receipt is not an inbox delivery event. Real provider integration, delivery event/receipt, end-to-end replay, production hardening and release sign-off remain mandatory.
+
+The two previously reported production Supabase security advisor warnings remain open. Production remains unchanged, PR #37 stays draft and NOT APPROVED FOR SALE.
