@@ -7,6 +7,7 @@ on:
       - 'ai-receptionist-host/supabase/functions/billing-reconciliation-review/**'
       - 'ai-receptionist-host/supabase/migrations/20261011060000_readonly_checkout_reference_review.sql'
       - 'tests/reception-billing-reconciliation-review.test.mjs'
+      - 'tests/reception-billing-reconciliation-endpoint.test.mjs'
       - 'tests/reception-billing-reconciliation-review.pg.sql'
       - '.github/workflows/reception-ai-billing-reconciliation.yml'
   push:
@@ -15,6 +16,7 @@ on:
       - 'ai-receptionist-host/supabase/functions/billing-reconciliation-review/**'
       - 'ai-receptionist-host/supabase/migrations/20261011060000_readonly_checkout_reference_review.sql'
       - 'tests/reception-billing-reconciliation-review.test.mjs'
+      - 'tests/reception-billing-reconciliation-endpoint.test.mjs'
       - 'tests/reception-billing-reconciliation-review.pg.sql'
       - '.github/workflows/reception-ai-billing-reconciliation.yml'
   workflow_dispatch:
@@ -74,6 +76,8 @@ jobs:
             process.exitCode=1;
           }
           '
+      - name: Exercise real operator endpoint with mocked Stripe and Supabase
+        run: node --test tests/reception-billing-reconciliation-endpoint.test.mjs
       - name: Install PostgreSQL client if missing
         run: |
           if ! command -v psql >/dev/null 2>&1; then
