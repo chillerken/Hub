@@ -54,7 +54,27 @@ async function commercialReadiness(req:Request, body:any) {
   const d=await call("public-reception-chat",{...ids,message:"Ik wil met een medewerker spreken."});
   check(d.status===200&&!!d.data.reply,"human_handoff_response");
   const appointments=await checked(userDb.from("appointments").select("id,status").eq("lead_id",a.data.lead_id));
-  check(appointments.length===1&&appointments[0].status!=="confirmed","appointment_deduped_without_invented_confirmation");
+  check(appointments.length===1&&appointments[0].status==="requested","appointment_deduped_without_invented_confirmation");
+   // An isolated QA tenant, automation disabled: test the actual operator endpoint
+   // without sending emails, WhatsApp messages, creating calendar events or billing.
+   const foreign=await call("operations-admin",{action:"confirm_appointment",appointment_id:crypto.randomUUID()},true);
+   check(foreign.status===404,"operator_cannot_confirm_unknown_appointment");
+   const start=new Date(Date.now()+3*24*60*60*1000);
+   const finish=new Date(start.getTime()+60*60*1000);
+   const proposed=await call("operations-admin",{
+    action:"schedule_appointment",appointment_id:appointments[0].id,
+    start_at:start.toISOString(),end_at:finish.toISOString(),
+    timezone:"Europe/Brussels",status:"proposed"
+   },true);
+   check(proposed.status===200&&proposed.data.appointment?.status==="proposed","human_proposal_saved");
+   const approved=await call("operations-admin",{action:"confirm_appointment",appointment_id:appointments[0].id},true);
+   check(approved.status===200&&approved.data.appointment?.status==="confirmed","human_confirmation_saved");
+   const confirmedRows=await checked(userDb.from("appointments").select("id,status,start_at,end_at").eq("id",appointments[0].id));
+   check(confirmedRows.length===1&&confirmedRows[0].status==="confirmed","confirmed_state_visible_to_tenant");
+   const audit=await checked(userDb.from("audit_events").select("id").eq("organization_id",orgId).eq("entity_id",appointments[0].id).eq("event_type","appointment.confirmed"));
+   check(audit.length>0,"operator_confirmation_audited");
+   const followupTasks=await checked(userDb.from("tasks").select("title,status").eq("lead_id",a.data.lead_id));
+   check(followupTasks.some((task:any)=>task.title==="Afspraakaanvraag opvolgen"),"internal_followup_task_present");
   const handoffs=await checked(userDb.from("handoffs").select("id").eq("lead_id",a.data.lead_id));
   check(handoffs.length===1,"handoff_recorded");
   const messages=await checked(userDb.from("messages").select("role").eq("conversation_id",a.data.conversation_id));
