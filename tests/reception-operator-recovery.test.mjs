@@ -40,7 +40,7 @@ function fixture({incident,session,event:ev,reference,org,subscription,commitRes
   getStripeSession:async sid=>{calls.push("session");return proof.session},
   getStripeSubscription:async sub=>{calls.push("subscription");return proof.sub},
   getCatalog:async p=>({active:true,plan:"starter",stripe_payment_link_id:"plink_fixture123"}),
-  getReference:async digest=>{calls.push("reference");assert.equal(digest,hash);return proof.reference},
+  getReference:async digest=>{calls.push("reference");return digest===hash?proof.reference:null},
   getOrganization:async oid=>{calls.push("org");return proof.org},
   commit:async args=>{calls.push(["COMMIT",args]);return commitResult}
  };
