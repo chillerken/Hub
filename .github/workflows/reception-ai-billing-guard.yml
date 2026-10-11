@@ -7,6 +7,8 @@ on:
       - 'ai-receptionist-host/supabase/functions/stripe-webhook/**'
       - 'tests/reception-billing-event-guard.test.mjs'
       - 'tests/reception-stripe-webhook-sandbox.test.mjs'
+      - 'ai-receptionist-host/supabase/functions/billing-link/**'
+      - 'tests/reception-checkout-reference-lifetime.test.mjs'
       - '.github/workflows/reception-ai-billing-guard.yml'
   pull_request:
     branches: [main]
@@ -14,6 +16,8 @@ on:
       - 'ai-receptionist-host/supabase/functions/stripe-webhook/**'
       - 'tests/reception-billing-event-guard.test.mjs'
       - 'tests/reception-stripe-webhook-sandbox.test.mjs'
+      - 'ai-receptionist-host/supabase/functions/billing-link/**'
+      - 'tests/reception-checkout-reference-lifetime.test.mjs'
       - '.github/workflows/reception-ai-billing-guard.yml'
   workflow_dispatch:
 
@@ -55,3 +59,22 @@ jobs:
           '
       - name: Run signed Stripe webhook simulation (no external APIs)
         run: node --test tests/reception-stripe-webhook-sandbox.test.mjs
+      - name: Check billing-link TypeScript syntax
+        run: |
+          node --input-type=module -e '
+          import ts from "typescript";
+          import fs from "node:fs";
+          const file="ai-receptionist-host/supabase/functions/billing-link/index.ts";
+          const source=fs.readFileSync(file,"utf8");
+          const ast=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);
+          if (ast.parseDiagnostics.length){
+            console.error(ts.formatDiagnosticsWithColorAndContext(ast.parseDiagnostics,{
+              getCanonicalFileName: x=>x,
+              getCurrentDirectory: ()=>process.cwd(),
+              getNewLine: ()=>"\\n"
+            }));
+            process.exitCode=1;
+          }
+          '
+      - name: Test checkout reference lifetime
+        run: node --test tests/reception-checkout-reference-lifetime.test.mjs
