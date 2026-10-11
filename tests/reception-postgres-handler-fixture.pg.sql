@@ -70,3 +70,6 @@ create table public.tenant_integrations (
 create trigger trg_appointment_lifecycle_actions
 after insert or update of status,start_at,end_at,location on public.appointments
 for each row execute function public.enqueue_appointment_lifecycle_actions();
+
+create table public.reception_ai_plan_catalog (plan text primary key, active boolean, daily_ai_limit integer);
+insert into public.reception_ai_plan_catalog(plan,active,daily_ai_limit) values ('business',true,500);
