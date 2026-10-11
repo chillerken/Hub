@@ -10,6 +10,7 @@ on:
       - 'ai-receptionist-host/supabase/functions/production-e2e-check/**'
       - 'ai-receptionist-host/docs/COMMERCIAL-RELEASE-GATE.md'
       - 'tests/reception-ai-commercial-booking-gate.test.mjs'
+      - 'tests/reception-full-chain-endpoint.test.mjs'
       - '.github/workflows/reception-ai-commercial-booking-gate.yml'
   push:
     branches: [main]
@@ -20,6 +21,7 @@ on:
       - 'ai-receptionist-host/supabase/functions/production-e2e-check/**'
       - 'ai-receptionist-host/docs/COMMERCIAL-RELEASE-GATE.md'
       - 'tests/reception-ai-commercial-booking-gate.test.mjs'
+      - 'tests/reception-full-chain-endpoint.test.mjs'
       - '.github/workflows/reception-ai-commercial-booking-gate.yml'
   workflow_dispatch:
 
@@ -34,5 +36,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - name: Verify booking and tenant safety contracts
-        run: node --test tests/reception-ai-commercial-booking-gate.test.mjs
+      - name: Install pinned TypeScript transpiler for real-handler VM tests
+        run: npm install --no-save --package-lock=false --ignore-scripts typescript@5.8.2
+      - name: Verify real HTTP handlers and tenant safety
+        run: node --test tests/reception-ai-commercial-booking-gate.test.mjs tests/reception-full-chain-endpoint.test.mjs
