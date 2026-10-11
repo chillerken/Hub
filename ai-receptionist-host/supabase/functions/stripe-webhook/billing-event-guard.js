@@ -14,3 +14,11 @@ export function shouldApplySubscriptionStatus(currentStatus, incomingStatus, sam
   }
   return true;
 }
+
+// Customer-ID fallback may initialize a tenant once, or reaffirm the same subscription.
+// A different existing subscription must be changed only by a tenant-bound checkout reference.
+export function canAssociateSubscription(existingSubscriptionId, incomingSubscriptionId) {
+  const incoming = String(incomingSubscriptionId || "").trim();
+  const existing = String(existingSubscriptionId || "").trim();
+  return Boolean(incoming && (!existing || existing === incoming));
+}
