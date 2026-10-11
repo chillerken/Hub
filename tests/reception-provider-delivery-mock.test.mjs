@@ -33,7 +33,7 @@ function harness({response={ok:true,id:"email_accepted_fixture"},httpStatus=200,
    }
    return {ok:true,status:httpStatus,headers:new Headers(),async json(){return {id:acceptedByKey.get(key)};}};
   }
-  return {ok:false,status:httpStatus,statusText:"test failure",headers:new Headers(),async json(){return{message:"synthetic provider error"}}};
+  return {ok:false,status:httpStatus,statusText:"test failure",headers:new Headers(),async json(){return{name:response.errorName||"provider_error",message:"synthetic provider error"}}};
  };
  const context={
   exports:{},console:{error(){},log(){},warn(){}},Date,Intl,Number,String,JSON,Set,Array,
@@ -171,4 +171,18 @@ test("rescheduling changes the provider key without breaking retry deduplication
  await h.hooks.sendResend(h.db,changedAction,x.integration,x.lead,x.profile,rescheduled);
  assert.equal(h.requests[2].headers["Idempotency-Key"],newKey);
  assert.equal(h.acceptedUnique(),2,"Same reschedule retry remains deduplicated");
+});
+
+test("only Resend concurrent-idempotency 409 can retry; changed-payload 409 must fail",async()=>{
+ // Independent harness using an explicit provider error code.
+ const concurrent=harness({response:{ok:false,errorName:"concurrent_idempotent_requests"},httpStatus:409});
+ const once=concurrent.make();
+ const retry=await concurrent.hooks.sendResend(concurrent.db,once.action,once.integration,once.lead,once.profile,once.appointment);
+ assert.equal(retry.outcome,"retry");
+ assert.equal(retry.error_code,"concurrent_idempotent_requests");
+ const changed=harness({response:{ok:false,errorName:"invalid_idempotent_request"},httpStatus:409});
+ const twice=changed.make();
+ const bad=await changed.hooks.sendResend(changed.db,twice.action,twice.integration,twice.lead,twice.profile,twice.appointment);
+ assert.equal(bad.outcome,"failed");
+ assert.equal(bad.error_code,"provider_rejected");
 });
