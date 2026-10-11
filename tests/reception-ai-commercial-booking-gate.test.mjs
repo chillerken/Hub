@@ -57,7 +57,7 @@ test("only an authenticated tenant owner/admin can confirm with exact times", ()
   assert.match(operator, /event_type:"appointment.confirmed"/);
 });
 
-test("isolated REAL-API readiness sequence proves operator approval without external sends", () => {
+test("source declares isolated API readiness checks; this test does not execute them", () => {
   assert.match(readiness, /automation_enabled:false/);
   for (const step of [
     "tenant_read_isolation",
