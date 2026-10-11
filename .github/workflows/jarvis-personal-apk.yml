@@ -29,6 +29,8 @@ jobs:
            p.parent.mkdir(parents=True,exist_ok=True)
            p.write_text(contents,encoding='utf-8')
           PY
+      - name: Test live Worker without network
+        run: node jarvis-personal/live/test.mjs
       - name: Build APK
         working-directory: jarvis-personal/android
         run: gradle :app:assembleDebug --no-daemon
@@ -37,3 +39,11 @@ jobs:
         with:
           name: jarvis-personal-debug-apk
           path: jarvis-personal/android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Upload exact source used for build
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-personal-v11-source
+          path: |
+            jarvis-personal/android/
+            jarvis-personal/live/worker.js
+            jarvis-personal/live/test.mjs
