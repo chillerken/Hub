@@ -237,6 +237,12 @@ async function sendResend(db:any,action:any,integration:any,lead:any,profile:any
       error_message:"Email provider accepted request but no message reference was returned. Delivery status is unknown; reconcile manually."};
     return {outcome:"completed",provider:"resend",provider_reference:providerId,http_status:resp.status,response_meta:{accepted:true,delivered:false}};
   }
+  if(resp.status===409 && String(body?.name||body?.error||"")==="concurrent_idempotent_requests"){
+    // Resend explicitly allows retrying this conflict with the SAME content key.
+    return {outcome:"retry",provider:"resend",http_status:409,error_code:"concurrent_idempotent_requests",
+      error_message:"Another identical provider request is in progress; retry with unchanged key.",
+      retry_after_seconds:retrySeconds(action.attempts)};
+  }
   if(resp.status===429) {
     const retryHeader=Number(resp.headers.get("retry-after")||0);
     return {outcome:"retry",provider:"resend",http_status:resp.status,error_code:"rate_limited",error_message:clean(body?.message||body?.error||resp.statusText,1000),retry_after_seconds:retryHeader>0?retryHeader:retrySeconds(action.attempts)};
