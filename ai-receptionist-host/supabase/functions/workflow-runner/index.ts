@@ -163,6 +163,17 @@ async function credential(db:any,integration:any,orgId:string) {
   return data || null;
 }
 
+// Resend rejects a reused key with a different payload (e.g. a rescheduled
+// appointment). Version the provider idempotency key by the exact outbound
+// content while preserving stable keys for retries of the same logical message.
+async function emailIdempotencyKey(action:any,recipient:string,sender:string,subject:string,body:string) {
+  const input=new TextEncoder().encode(JSON.stringify([
+    action.idempotency_key,action.organization_id,recipient,sender,subject,body
+  ]));
+  const digest=await crypto.subtle.digest("SHA-256",input);
+  return "rai-email-"+Array.from(new Uint8Array(digest)).map(n=>n.toString(16).padStart(2,"0")).join("");
+}
+
 async function sendResend(db:any,action:any,integration:any,lead:any,profile:any,appointment:any) {
   const secret=await credential(db,integration,action.organization_id);
   if(!secret) return {outcome:"blocked",provider:"resend",error_code:"credential_missing",error_message:"Email integration credential missing"};
@@ -188,6 +199,8 @@ async function sendResend(db:any,action:any,integration:any,lead:any,profile:any
   }
 
   const m=actionMessage(action,lead,{...profile,review_url:cfg.review_url},appointment);
+  const sender=fromName ? `${fromName} <${fromEmail}>` : fromEmail;
+  const deliveryKey=await emailIdempotencyKey(action,to,sender,m.subject,m.text);
   let resp:Response;
   try{
     resp=await fetch("https://api.resend.com/emails",{
@@ -195,10 +208,10 @@ async function sendResend(db:any,action:any,integration:any,lead:any,profile:any
       headers:{
         "Authorization":`Bearer ${secret}`,
         "Content-Type":"application/json",
-        "Idempotency-Key":action.idempotency_key
+        "Idempotency-Key":deliveryKey
       },
       body:JSON.stringify({
-        from:fromName ? `${fromName} <${fromEmail}>` : fromEmail,
+        from:sender,
         to:[to],
         subject:m.subject,
         text:m.text,
