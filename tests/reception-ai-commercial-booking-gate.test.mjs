@@ -28,7 +28,9 @@ test("public booking is always a REQUEST, never an operator confirmation", () =>
 
 test("both PUBLIC query and PUBLIC update exclude confirmed appointments", () => {
   assert.match(chat, /\.in\("status",VISITOR_EDITABLE_BOOKING_STATUSES\)\.order\("created_at"/);
-  assert.match(chat, /\\.update\\(appointmentPatch\\)[\\s\\S]*?\\.eq\\("id",appointmentId\\)[\\s\\S]*?\\.eq\\("organization_id",p.organization_id\\)[\\s\\S]*?\\.in\\("status",VISITOR_EDITABLE_BOOKING_STATUSES\\)/);
+  assert.ok(chat.includes('.update(appointmentPatch)'), "Visitor update present");
+  assert.ok(chat.includes('.eq("id",appointmentId)'), "Visitor appointment identity guarded");
+  assert.ok(chat.includes('.eq("organization_id",p.organization_id).in("status",VISITOR_EDITABLE_BOOKING_STATUSES)'), "Visitor tenant and status guards present");
   assert.ok(chat.includes('if(!updatedAppointments?.length)return json('), "Concurrent approval must fail closed");
   assert.ok(chat.includes('.select("id");'), "Guarded update must return affected row IDs");
   assert.equal((chat.match(/\.in\("status",VISITOR_EDITABLE_BOOKING_STATUSES\)/g) || []).length, 2);
