@@ -39,7 +39,11 @@ globalThis.fetch=async (input,opts={})=>{
   }
   throw Error('Unexpected auth path');
 };
-const env={AI:{async run(model,options){modelCalls++;assert.ok(model.includes('llama'));assert.equal(options.messages.at(-1).content,'Dag JARVIS');return {response:'Dag! AI antwoordt.'};}}};
+const env={AI:{async run(model,options){modelCalls++;assert.ok(model.includes('llama'));assert.equal(options.messages.at(-1).content,'Dag JARVIS');
+assert.ok(options.messages[0].content.includes('JARVIS GOD MODE'));
+assert.ok(options.messages[0].content.includes('EERST WAARHEID'));
+assert.ok(options.messages[0].content.includes('www.luxwash.online/prijzen'));
+return {response:'Dag! AI antwoordt.'};}}};
 const run=(path,options)=>worker.fetch(new Request('https://jarvis-test.example'+path,options),env);
 function post(messages,token='user-owner-jwt'){return {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({messages})};}
 const health=await run('/api/health');
