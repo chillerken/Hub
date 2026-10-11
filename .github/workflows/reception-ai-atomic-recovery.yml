@@ -59,10 +59,11 @@ jobs:
       - name: Test operator consent and fresh Stripe proof
         run: node --test tests/reception-operator-recovery.test.mjs
       - name: Exercise authenticated recovery endpoint with isolated Stripe/Supabase
-        run: node --test tests/reception-operator-recovery-endpoint.test.mjs
-      - name: Validate recovery endpoint TypeScript syntax
         run: |
           npm install --no-save --package-lock=false --ignore-scripts typescript@5.8.2
+          node --test tests/reception-operator-recovery-endpoint.test.mjs
+      - name: Validate recovery endpoint TypeScript syntax
+        run: |
           node --input-type=module -e '
           import ts from "typescript";
           import fs from "node:fs";
