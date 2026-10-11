@@ -1,0 +1,45 @@
+name: Reception AI Booking Intent Regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ai-receptionist-host/supabase/functions/public-reception-chat/intent.js'
+      - 'ai-receptionist-host/access.js'
+      - 'ai-receptionist-host/widget.js'
+      - 'tests/reception-booking-intent.test.mjs'
+      - 'tests/reception-commercial-access.test.mjs'
+      - 'ai-receptionist-host/tests/widget-bootstrap-regression.test.cjs'
+      - '.github/workflows/reception-ai-booking-intent.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ai-receptionist-host/supabase/functions/public-reception-chat/intent.js'
+      - 'ai-receptionist-host/access.js'
+      - 'ai-receptionist-host/widget.js'
+      - 'tests/reception-booking-intent.test.mjs'
+      - 'tests/reception-commercial-access.test.mjs'
+      - 'ai-receptionist-host/tests/widget-bootstrap-regression.test.cjs'
+      - '.github/workflows/reception-ai-booking-intent.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  booking-intent-and-widget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Check Node version
+        run: node --version
+      - name: Test booking intent, commercial access and widget bootstrap
+        run: |
+          node --test \
+            tests/reception-booking-intent.test.mjs \
+            tests/reception-commercial-access.test.mjs \
+            ai-receptionist-host/tests/widget-bootstrap-regression.test.cjs
