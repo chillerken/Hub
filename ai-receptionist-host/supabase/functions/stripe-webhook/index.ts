@@ -218,8 +218,7 @@ Deno.serve(async req=>{
     if(checkoutStatus==="active"){await markSalesConverted(db,resolvedOrg,plan);await resolveCustomerSuccessPaymentRisk(db,resolvedOrg)}
     console.log(paid?"BILLING activated tenant":"BILLING checkout pending payment",resolvedOrg,plan,String(o.payment_status||"unknown"));
     }
-   }else if(["starter","pro","business"].includes(plan)){
-    if(paid){
+   }else if(paid){
       // A signed, paid Checkout must never be acknowledged as processed when
       // tenant activation could not be associated with a trusted reference.
       // Persist only a machine-readable reason, not customer PII or tokens.
@@ -233,7 +232,7 @@ Deno.serve(async req=>{
       if(unlinkedError)throw unlinkedError;
       console.warn("BILLING paid checkout unlinked; investigate Stripe event",eid);
       return new Response("paid checkout requires reconciliation",{status:503});
-    }
+   }else if(["starter","pro","business"].includes(plan)){
     console.warn("BILLING checkout not linked to an authorized tenant",String(e.id||""),plan);
    }
   }
