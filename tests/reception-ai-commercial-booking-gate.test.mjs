@@ -14,6 +14,7 @@ const read = (path) => readFileSync(resolve(root, path), "utf8");
 const chat = read("ai-receptionist-host/supabase/functions/public-reception-chat/index.ts");
 const operator = read("ai-receptionist-host/supabase/functions/operations-admin/index.ts");
 const readiness = read("ai-receptionist-host/supabase/functions/production-e2e-check/index.ts");
+const runner = read("ai-receptionist-host/supabase/functions/workflow-runner/index.ts");
 
 test("public booking is always a REQUEST, never an operator confirmation", () => {
   assert.deepEqual([...VISITOR_EDITABLE_BOOKING_STATUSES], ["requested", "proposed"]);
@@ -71,4 +72,13 @@ test("isolated REAL-API readiness sequence proves operator approval without exte
   ]) assert.ok(readiness.includes(step), "missing live-readiness assertion " + step);
   assert.match(readiness, /external_messages_sent:false/);
   assert.match(readiness, /if\(orgId\)\{/);
+});
+
+test("Calendar dispatch is blocked until explicit human confirmation", () => {
+  assert.match(runner, /type==="calendar_request" && appointment\\?\\.status!=="confirmed"/);
+  assert.match(runner, /human_confirmation_required/);
+  assert.match(operator, /releaseCalendarAfterOperatorConfirmation\\(db,org,updated\\)/);
+  assert.match(operator, /status==="confirmed"\\s*\\?await releaseCalendarAfterOperatorConfirmation/);
+  assert.match(operator, /\\["blocked","failed","skipped"\\]/);
+  assert.match(operator, /\\.eq\\("organization_id",org\\)\\.eq\\("idempotency_key",key\\)/);
 });
