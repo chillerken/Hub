@@ -110,6 +110,7 @@ function client(key,options={}){
  };
 }
 const sink=[];
+const errors=[];
 function load(slug){
  const source=readFileSync("ai-receptionist-host/supabase/functions/"+slug+"/index.ts","utf8");
  const js=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,
@@ -118,7 +119,7 @@ function load(slug){
  const ctx={
   exports:{},Date,Intl,URL,Request,Response,Headers,AbortController,
   TextEncoder,Uint8Array,crypto:webcrypto,setTimeout,clearTimeout,
-  console:{error(){},log(){},warn(){}},
+  console:{error(...args){errors.push(args.map(x=>x?.message||String(x)).join(" | ").slice(0,1200));},log(){},warn(){}},
   Deno:{env:{get:k=>({
    SUPABASE_URL:"https://local.invalid",SUPABASE_ANON_KEY:"anon",
    SUPABASE_SERVICE_ROLE_KEY:"service",SUPABASE_SECRET_KEYS:'{"default":"service"}'
@@ -184,7 +185,7 @@ test("real PostgreSQL triggers + real HTTP handlers + synthetic provider for two
 
   const a=await chat({widget_token:"widget-A",name:"Synthetic A",email:"a@example.test",
    contact_consent:true,message:"Ik wil een afspraak maken op "+date+" om 14u00"});
-  assert.equal(a.status,200,JSON.stringify(a.body));
+  assert.equal(a.status,200,JSON.stringify(a.body)+"; handler diagnostics: "+errors.join(" | "));
   assert.ok(a.body.appointment_id);
   assert.equal((await get("leads",A)).length,1);
   assert.equal((await get("messages",A)).length,2);
