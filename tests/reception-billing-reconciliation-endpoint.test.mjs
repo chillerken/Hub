@@ -80,6 +80,7 @@ function fixture({disabled=false,operator=true,validToken=true,failedIncident=tr
    return {ok:true,async json(){return obj}};
   },
   require(name){
+   if(name==="jsr:@supabase/functions-js/edge-runtime.d.ts")return {};
    if(name==="https://esm.sh/@supabase/supabase-js@2.95.0")return{
     createClient(_url,key){
       if(key==="sb_publishable_fixture")return {auth:{async getUser(){return validToken?{data:{user:{id:"user_operator"}},error:null}:{data:{user:null},error:{message:"invalid"}}}}};
