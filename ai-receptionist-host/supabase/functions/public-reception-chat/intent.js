@@ -6,5 +6,9 @@ export function isAppointmentRequest(message) {
  const bookingText=low
   .replace(/\b(?:geen|niet(?:\s+meer)?)\s+(?:(?:een|nieuwe|nu)\s+)?(?:afspraak|boek\w*|inplannen|reserver\w*)\b/g,"")
   .replace(/\b(?:afspraak|boek\w*|inplannen|reserver\w*)\s+(?:niet|annuleren|afzeggen)\b/g,"");
- return /afspraak|boeken|inplannen|beschikbaar|reserv|planning|tijdslot/i.test(bookingText);
+ // A generic support or staffing question is not a booking request.
+ const bookingTerms=/\bafspraak\b|\bboeken\b|\binplannen\b|\breserv\w*\b|\btijdslot\b/i;
+ if(bookingTerms.test(bookingText))return true;
+ const supportContext=/\b(?:klantenservice|helpdesk|support|ondersteuning|personeel|team)\b|\bbeschikbaar\s+voor\s+(?:vragen|hulp)\b/i;
+ return /\bbeschikbaar\b/i.test(bookingText)&&!supportContext.test(low);
 }
