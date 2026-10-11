@@ -159,3 +159,61 @@ test("real handler: signed tenant checkout, retries, renewals and cancellation (
   assert.equal(f.byId(ORG_B).stripe_subscription_id,null);
   assert.ok(f.tables.stripe_events.length>=9);
 });
+
+
+test("signed paid Checkout without a tenant is not silently marked processed",async()=>{
+  const f=fixture();
+  const orphan=checkout("evt_orphan_paid","missing_or_expired_ref","sub_unlinked","cus_unlinked");
+  const first=await f.deliver(orphan);
+  assert.equal(first.status,503,"Stripe must retry unmatched paid Checkout");
+  assert.equal(f.byId(ORG_A).subscription_status,"trialing");
+  assert.equal(f.byId(ORG_B).subscription_status,"trialing");
+  assert.equal(f.tables.stripe_events.find(e=>e.id==="evt_orphan_paid")?.status,"failed");
+  assert.match(f.tables.stripe_events.find(e=>e.id==="evt_orphan_paid")?.last_error||"",/paid_checkout_unlinked/);
+  const second=await f.deliver(orphan);
+  assert.equal(second.status,503);
+  assert.equal(f.tables.stripe_events.find(e=>e.id==="evt_orphan_paid")?.attempts,2);
+  assert.equal(f.tables.stripe_events.find(e=>e.id==="evt_orphan_paid")?.status,"failed");
+  // Simulate resolution of a trusted reference inside the test fixture only.
+  // Real expired reference recovery still needs separate operator reconciliation.
+  await f.bindReference("missing_or_expired_ref","starter");
+  const recovered=await f.deliver(orphan);
+  assert.equal(recovered.status,200);
+  assert.equal(f.byId(ORG_A).subscription_status,"active");
+  assert.equal(f.byId(ORG_A).stripe_subscription_id,"sub_unlinked");
+  assert.equal(f.byId(ORG_B).stripe_subscription_id,null);
+  assert.equal(f.tables.stripe_events.find(e=>e.id==="evt_orphan_paid")?.status,"processed");
+  assert.equal(f.tables.stripe_events.find(e=>e.id==="evt_orphan_paid")?.attempts,3);
+});
+
+test("unmatched unpaid Checkout does not claim a completed payment",async()=>{
+  const f=fixture();
+  const pending=checkout("evt_unpaid_orphan","unknown_ref","sub_pending","cus_pending","starter","unpaid");
+  const res=await f.deliver(pending);
+  assert.equal(res.status,200);
+  assert.equal(f.byId(ORG_A).plan,"trial");
+  assert.equal(f.tables.stripe_events.find(e=>e.id==="evt_unpaid_orphan")?.status,"processed");
+});
+
+
+test("paid Checkout with invalid plan metadata requires review instead of fake activation",async()=>{
+  const f=fixture();
+  const invalidPlan=checkout("evt_invalid_plan","unknown_ref","sub_unknown","cus_unknown","unlisted_plan");
+  const result=await f.deliver(invalidPlan);
+  assert.equal(result.status,503);
+  const tracked=f.tables.stripe_events.find(e=>e.id==="evt_invalid_plan");
+  assert.equal(tracked?.status,"failed");
+  assert.match(tracked?.last_error||"",/paid_checkout_unlinked/);
+  assert.equal(f.byId(ORG_A).plan,"trial");
+  assert.equal(f.byId(ORG_B).plan,"trial");
+});
+
+test("asynchronous confirmed payment without a tenant remains retryable",async()=>{
+  const f=fixture();
+  const asyncPaid=checkout("evt_async_paid","expired_ref","sub_async","cus_async","starter","unpaid");
+  asyncPaid.type="checkout.session.async_payment_succeeded";
+  const res=await f.deliver(asyncPaid);
+  assert.equal(res.status,503);
+  assert.equal(f.tables.stripe_events.find(e=>e.id==="evt_async_paid")?.status,"failed");
+  assert.equal(f.byId(ORG_A).stripe_subscription_id,null);
+});
