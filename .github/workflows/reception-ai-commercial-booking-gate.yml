@@ -16,6 +16,8 @@ on:
       - 'tests/reception-postgres-full-chain.test.mjs'
       - 'tests/reception-postgres-handler-fixture.pg.sql'
       - 'tests/reception-postgres-tenant-rls.pg.sql'
+      - 'tests/reception-supabase-local-rls.pg.sql'
+      - 'tests/reception-supabase-local-auth-api.test.mjs'
       - 'tests/reception-appointment-lifecycle-schema.pg.sql'
       - 'tests/reception-appointment-lifecycle.pg.sql'
       - 'ai-receptionist-host/supabase/migrations/20261011180000_require_human_confirmation_before_calendar_sync.sql'
@@ -35,6 +37,8 @@ on:
       - 'tests/reception-postgres-full-chain.test.mjs'
       - 'tests/reception-postgres-handler-fixture.pg.sql'
       - 'tests/reception-postgres-tenant-rls.pg.sql'
+      - 'tests/reception-supabase-local-rls.pg.sql'
+      - 'tests/reception-supabase-local-auth-api.test.mjs'
       - 'tests/reception-appointment-lifecycle-schema.pg.sql'
       - 'tests/reception-appointment-lifecycle.pg.sql'
       - 'ai-receptionist-host/supabase/migrations/20261011180000_require_human_confirmation_before_calendar_sync.sql'
@@ -147,3 +151,72 @@ jobs:
         run: node --test tests/reception-postgres-full-chain.test.mjs
       - name: Reject cross-tenant database writes using actual PostgreSQL RLS
         run: psql -v ON_ERROR_STOP=1 -f tests/reception-postgres-tenant-rls.pg.sql
+
+  supabase-local-real-auth-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    env:
+      RECEPTION_CI_ISOLATED: 'yes'
+    steps:
+      - name: Checkout PR revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Supabase local CLI (no connected cloud project)
+        uses: supabase/setup-cli@v3
+        with:
+          version: 2.84.2
+      - name: Verify local CLI commands and initialize standalone test stack
+        run: |
+          supabase --version
+          supabase init --help
+          supabase start --help
+          supabase functions serve --help
+          supabase init
+      - name: Start ephemeral Auth, PostgREST, Kong, Edge and Postgres
+        run: |
+          supabase start -x realtime,storage-api,imgproxy,postgres-meta,studio,mailpit,logflare,vector,supavisor
+      - name: Prepare isolated local database and staging-only RLS policies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+          supabase status -o env > /tmp/reception-ci-local.env
+          set -a
+          source /tmp/reception-ci-local.env
+          set +a
+          test -n "$DB_URL" && test -n "$API_URL"
+          test -n "$ANON_KEY" && test -n "$SERVICE_ROLE_KEY"
+          case "$API_URL" in
+            http://127.0.0.1:54321|http://localhost:54321) ;;
+            *) echo "Refusing nonlocal API"; exit 1 ;;
+          esac
+          echo "::add-mask::$ANON_KEY"
+          echo "::add-mask::$SERVICE_ROLE_KEY"
+          printf 'API_URL=%s\nANON_KEY=%s\nSERVICE_ROLE_KEY=%s\n' "$API_URL" "$ANON_KEY" "$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f tests/reception-appointment-lifecycle-schema.pg.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f ai-receptionist-host/supabase/migrations/20261011180000_require_human_confirmation_before_calendar_sync.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f tests/reception-postgres-handler-fixture.pg.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f tests/reception-supabase-local-rls.pg.sql
+      - name: Install local API client and make Edge function sources available
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts @supabase/supabase-js@2.95.0
+          mkdir -p supabase/functions
+          cp -R ai-receptionist-host/supabase/functions/public-reception-chat supabase/functions/
+          cp -R ai-receptionist-host/supabase/functions/operations-admin supabase/functions/
+      - name: Launch local Deno Edge Functions (no provider secrets)
+        run: |
+          nohup supabase functions serve --no-verify-jwt > /tmp/reception-ci-edge.log 2>&1 </dev/null &
+          echo $! > /tmp/reception-ci-edge.pid
+      - name: Test actual Auth, PostgREST and Edge booking security
+        run: node --test tests/reception-supabase-local-auth-api.test.mjs
+      - name: Print sanitized failure diagnostics
+        if: failure()
+        run: |
+          tail -n 100 /tmp/reception-ci-edge.log 2>/dev/null | sed -E 's/(eyJ[A-Za-z0-9_-]{50,})/[MASKED]/g' || true
+      - name: Stop and destroy temporary Supabase instance
+        if: always()
+        run: supabase stop --no-backup || true
