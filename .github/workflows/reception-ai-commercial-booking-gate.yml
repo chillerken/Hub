@@ -11,6 +11,7 @@ on:
       - 'ai-receptionist-host/docs/COMMERCIAL-RELEASE-GATE.md'
       - 'tests/reception-ai-commercial-booking-gate.test.mjs'
       - 'tests/reception-full-chain-endpoint.test.mjs'
+      - 'tests/reception-provider-delivery-mock.test.mjs'
       - 'tests/reception-appointment-lifecycle-schema.pg.sql'
       - 'tests/reception-appointment-lifecycle.pg.sql'
       - 'ai-receptionist-host/supabase/migrations/20261011180000_require_human_confirmation_before_calendar_sync.sql'
@@ -25,6 +26,7 @@ on:
       - 'ai-receptionist-host/docs/COMMERCIAL-RELEASE-GATE.md'
       - 'tests/reception-ai-commercial-booking-gate.test.mjs'
       - 'tests/reception-full-chain-endpoint.test.mjs'
+      - 'tests/reception-provider-delivery-mock.test.mjs'
       - 'tests/reception-appointment-lifecycle-schema.pg.sql'
       - 'tests/reception-appointment-lifecycle.pg.sql'
       - 'ai-receptionist-host/supabase/migrations/20261011180000_require_human_confirmation_before_calendar_sync.sql'
@@ -45,7 +47,7 @@ jobs:
       - name: Install pinned TypeScript transpiler for real-handler VM tests
         run: npm install --no-save --package-lock=false --ignore-scripts typescript@5.8.2
       - name: Verify real HTTP handlers and tenant safety
-        run: node --test tests/reception-ai-commercial-booking-gate.test.mjs tests/reception-full-chain-endpoint.test.mjs
+        run: node --test tests/reception-ai-commercial-booking-gate.test.mjs tests/reception-full-chain-endpoint.test.mjs tests/reception-provider-delivery-mock.test.mjs
 
   postgres-trigger-lifecycle:
     runs-on: ubuntu-latest
