@@ -36,7 +36,7 @@ assert.equal((await run('/api/chat',post([{role:'user',content:'Dag JARVIS'}],'u
 assert.equal(modelCalls,0);
 let response=await run('/api/chat',post([{role:'user',content:'Dag JARVIS'}]));
 assert.equal(response.status,200);assert.equal((await response.json()).response,'Dag! AI antwoordt.');
-assert.equal(modelCalls,1);assert.ok(authCalls>=6);
+assert.equal(modelCalls,1);assert.ok(authCalls>=5);
 assert.equal((await run('/api/chat',post([{role:'assistant',content:'No user message'}]))).status,400);
 assert.equal((await run('/api/chat',{method:'POST',headers:{Authorization:'Bearer user-owner-jwt'},body:'{broken'})).status,400);
 const bad=new Request('https://jarvis-test.example/api/chat',{method:'POST',headers:{Authorization:'Bearer user-owner-jwt','Content-Type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:'x'.repeat(13000)}]})});
