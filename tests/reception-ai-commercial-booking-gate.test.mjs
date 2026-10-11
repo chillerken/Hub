@@ -61,6 +61,15 @@ test("isolated REAL-API readiness sequence proves operator approval without exte
   assert.match(readiness, /automation_enabled:false/);
   for (const step of [
     "tenant_read_isolation",
+    "second_independent_tenant_created",
+    "two_tenant_read_isolation",
+    "cross_tenant_lead_read_denied",
+    "cross_tenant_configuration_update_denied",
+    "per_tenant_settings_distinct",
+    "public_widget_cross_tenant_conversation_denied",
+    "confirmed_appointment_immutable_to_visitor",
+    "confirmed_slot_unchanged_after_new_request",
+    "new_public_request_needs_separate_human_approval",
     "appointment_request_created",
     "appointment_deduped_without_invented_confirmation",
     "operator_cannot_confirm_unknown_appointment",
