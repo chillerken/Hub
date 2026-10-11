@@ -8,7 +8,8 @@ globalThis.fetch=async (input,opts={})=>{
   const u=new URL(input), token=opts.headers?.Authorization;
   assert.equal(u.hostname,'ndecxbsrxspkuxjsbndq.supabase.co');
   assert.ok(opts.headers?.apikey?.startsWith('sb_publishable_'));
-  assert.equal(opts.cache,'no-store');
+  assert.equal(opts.cache,undefined,'Legacy Cloudflare compatibility does not implement fetch cache option');
+  assert.equal(opts.headers['Cache-Control'],'no-store');
   authCalls++;
   if(u.pathname==='/auth/v1/user'){
     if(token==='Bearer user-owner-jwt')return Response.json({id:userId});
@@ -28,7 +29,7 @@ function post(messages,token='user-owner-jwt'){return {method:'POST',headers:{'C
 const health=await run('/api/health');
 assert.equal(health.status,200);
 const h=await health.json();
-assert.equal(h.version,'1.3.1');assert.equal(h.aiConfigured,true);assert.equal(h.auth,'reception-ai-login');
+assert.equal(h.version,'1.3.2');assert.equal(h.aiConfigured,true);assert.equal(h.auth,'reception-ai-login');
 assert.equal((await run('/api/chat')).status,405);
 assert.equal((await run('/api/chat',{method:'POST',body:'{}'})).status,401);
 assert.equal((await run('/api/chat',post([{role:'user',content:'Dag JARVIS'}],'wrong-jwt'))).status,401);
@@ -51,7 +52,10 @@ assert.ok(html.includes('AI niet aangemeld'));
 assert.ok(html.includes('AI getest en actief'));
 assert.ok(html.includes('requestAI(messages,context)'));
 assert.ok(!html.includes('● Lokaal'));
-assert.ok(html.includes('PERSONAL OS · V1.3.1'));
+assert.ok(html.includes('PERSONAL OS · V1.3.2'));
+assert.ok(html.includes('AUTH_UPSTREAM_UNREACHABLE')===false);
+assert.ok((await (await run('/api/chat',post([{role:'user',content:'Dag JARVIS'}]))).json()).response.includes('Dag!'));
+
 
 assert.ok(html.includes('id="lwReceptionLogin"'));
 assert.ok(html.includes('id="lwTomorrow"'));
@@ -64,4 +68,4 @@ for(const [path,substring] of [['/manifest.webmanifest','JARVIS Personal OS'],['
   const r=await run(path);assert.equal(r.status,200);assert.ok((await r.text()).includes(substring));
 }
 assert.equal((await run('/missing')).status,404);
-console.log('JARVIS v1.3.1 tests OK: JWT auth, admin membership, denied access, AI response, invalid inputs, front-end JS syntax, PWA routes.');
+console.log('JARVIS v1.3.2 tests OK: JWT auth, admin membership, denied access, AI response, invalid inputs, front-end JS syntax, PWA routes.');
