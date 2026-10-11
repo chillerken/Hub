@@ -8,6 +8,7 @@ on:
       - 'ai-receptionist-host/supabase/functions/operations-admin/**'
       - 'ai-receptionist-host/supabase/functions/workflow-runner/**'
       - 'ai-receptionist-host/supabase/functions/production-e2e-check/**'
+      - 'ai-receptionist-host/docs/COMMERCIAL-RELEASE-GATE.md'
       - 'tests/reception-ai-commercial-booking-gate.test.mjs'
       - '.github/workflows/reception-ai-commercial-booking-gate.yml'
   push:
@@ -17,6 +18,7 @@ on:
       - 'ai-receptionist-host/supabase/functions/operations-admin/**'
       - 'ai-receptionist-host/supabase/functions/workflow-runner/**'
       - 'ai-receptionist-host/supabase/functions/production-e2e-check/**'
+      - 'ai-receptionist-host/docs/COMMERCIAL-RELEASE-GATE.md'
       - 'tests/reception-ai-commercial-booking-gate.test.mjs'
       - '.github/workflows/reception-ai-commercial-booking-gate.yml'
   workflow_dispatch:
