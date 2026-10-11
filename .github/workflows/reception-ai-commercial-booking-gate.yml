@@ -15,6 +15,7 @@ on:
       - 'tests/reception-provider-delivery-mock.test.mjs'
       - 'tests/reception-postgres-full-chain.test.mjs'
       - 'tests/reception-postgres-handler-fixture.pg.sql'
+      - 'tests/reception-postgres-tenant-rls.pg.sql'
       - 'tests/reception-appointment-lifecycle-schema.pg.sql'
       - 'tests/reception-appointment-lifecycle.pg.sql'
       - 'ai-receptionist-host/supabase/migrations/20261011180000_require_human_confirmation_before_calendar_sync.sql'
@@ -33,6 +34,7 @@ on:
       - 'tests/reception-provider-delivery-mock.test.mjs'
       - 'tests/reception-postgres-full-chain.test.mjs'
       - 'tests/reception-postgres-handler-fixture.pg.sql'
+      - 'tests/reception-postgres-tenant-rls.pg.sql'
       - 'tests/reception-appointment-lifecycle-schema.pg.sql'
       - 'tests/reception-appointment-lifecycle.pg.sql'
       - 'ai-receptionist-host/supabase/migrations/20261011180000_require_human_confirmation_before_calendar_sync.sql'
@@ -143,3 +145,5 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f tests/reception-postgres-handler-fixture.pg.sql
       - name: Execute real handlers and worker against disposable Postgres and fake provider
         run: node --test tests/reception-postgres-full-chain.test.mjs
+      - name: Reject cross-tenant database writes using actual PostgreSQL RLS
+        run: psql -v ON_ERROR_STOP=1 -f tests/reception-postgres-tenant-rls.pg.sql
