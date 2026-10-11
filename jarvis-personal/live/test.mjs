@@ -19,7 +19,7 @@ const health=await call('/api/health');
 assert.equal(health.status,200);
 const json=await health.json();
 assert.equal(json.ok,true);
-assert.equal(json.version,'1.1.0');
+assert.equal(json.version,'1.2.0');
 assert.equal(json.aiConfigured,true);
 const withoutKey=await call('/api/health',undefined,{AI:env.AI});
 assert.equal((await withoutKey.json()).aiConfigured,false);
@@ -34,10 +34,15 @@ const root=await call('/');
 assert.equal(root.status,200);
 const html=await root.text();
 assert.ok(html.includes('taskDue'));
+assert.ok(html.includes('id="lwReceptionLogin"'));
+assert.ok(html.includes('id="lwCrmLogin"'));
+assert.ok(html.includes('Beveiligde toegang via je bestaande Supabase-accounts'));
+assert.ok(root.headers.get('Content-Security-Policy')?.includes('https://ndecxbsrxspkuxjsbndq.supabase.co'));
+assert.ok(root.headers.get('Content-Security-Policy')?.includes('https://nahwlhptgdkwhjcfkhkt.supabase.co'));
 assert.ok(html.includes('Herinneringen werken zolang JARVIS geopend is'));
 assert.ok(root.headers.get('Content-Security-Policy')?.includes("frame-src 'none'"));
 for(const [path,content] of [['/manifest.webmanifest','JARVIS Personal OS'],['/sw.js','jarvis-personal-v11'],['/icon.svg','<svg']]){
   const res=await call(path);assert.equal(res.status,200);assert.ok((await res.text()).includes(content));
 }
 assert.equal((await call('/does-not-exist')).status,404);
-console.log('JARVIS v1.1: 13 route/auth/validation/offline tests geslaagd.');
+console.log('JARVIS v1.2: 18 route/auth/validation/offline tests geslaagd.');
