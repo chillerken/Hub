@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
+import { INVOICE_UPDATABLE_STATUSES, shouldApplySubscriptionStatus } from "./billing-event-guard.js";
 const hex=(b:ArrayBuffer)=>Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join("");
 async function sha256Text(value:string){
  return hex(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value)));
@@ -202,6 +203,11 @@ Deno.serve(async req=>{
    }
 
    if(["starter","pro","business"].includes(plan)&&resolvedOrg){
+    const {data:checkoutOrg,error:checkoutOrgError}=await db.from("organizations").select("stripe_subscription_id,subscription_status").eq("id",resolvedOrg).single();
+    if(checkoutOrgError)throw checkoutOrgError;
+    if(!shouldApplySubscriptionStatus(checkoutOrg?.subscription_status,checkoutStatus,String(checkoutOrg?.stripe_subscription_id||"")===sub)){
+      console.warn("BILLING ignored stale checkout event for terminal subscription",String(e.id||""));
+    }else{
     const {error:checkoutWriteError}=await db.from("organizations").update({
       plan,
       subscription_status:checkoutStatus,
@@ -211,6 +217,7 @@ Deno.serve(async req=>{
     if(checkoutWriteError)throw checkoutWriteError;
     if(checkoutStatus==="active"){await markSalesConverted(db,resolvedOrg,plan);await resolveCustomerSuccessPaymentRisk(db,resolvedOrg)}
     console.log(paid?"BILLING activated tenant":"BILLING checkout pending payment",resolvedOrg,plan,String(o.payment_status||"unknown"));
+    }
    }else if(["starter","pro","business"].includes(plan)){
     console.warn("BILLING checkout not linked to an authorized tenant",String(e.id||""),plan);
    }
@@ -221,17 +228,21 @@ Deno.serve(async req=>{
    const derivedPlan=planFromSubscription(o);
    let targetOrgs:any[]=[];
    if(subscriptionId){
-    const {data:bySub}=await db.from("organizations").select("id,plan,stripe_subscription_id").eq("stripe_subscription_id",subscriptionId);
+    const {data:bySub}=await db.from("organizations").select("id,plan,stripe_subscription_id,subscription_status").eq("stripe_subscription_id",subscriptionId);
     targetOrgs=bySub||[];
    }
    if(!targetOrgs.length&&customer&&isReceptionAiApp(o?.metadata?.app)&&derivedPlan){
-    const {data:byCustomer}=await db.from("organizations").select("id,plan,stripe_subscription_id").eq("stripe_customer_id",customer);
+    const {data:byCustomer}=await db.from("organizations").select("id,plan,stripe_subscription_id,subscription_status").eq("stripe_customer_id",customer);
     targetOrgs=byCustomer||[];
    }
    if(!targetOrgs.length){
     console.log("BILLING ignored unrelated subscription event",String(e.id||""),subscriptionId||"no_subscription_id");
    }else{
     for(const target of targetOrgs){
+     if(!shouldApplySubscriptionStatus(target.subscription_status,status,String(target.stripe_subscription_id||"")===subscriptionId)){
+       console.warn("BILLING ignored stale subscription event for terminal subscription",String(e.id||""));
+       continue;
+     }
      const patch:any={subscription_status:status,stripe_subscription_id:subscriptionId};
      if(derivedPlan)patch.plan=derivedPlan;
      const {data:updated,error:subscriptionWriteError}=await db.from("organizations").update(patch).eq("id",target.id).select("id,plan").single();
@@ -244,7 +255,7 @@ Deno.serve(async req=>{
   if(e.type==="invoice.payment_failed"){
    const subscriptionId=invoiceSubscriptionId(o);
    if(subscriptionId){
-    const {data:updatedOrgs,error:invoiceWriteError}=await db.from("organizations").update({subscription_status:"past_due"}).eq("stripe_subscription_id",subscriptionId).select("id");
+    const {data:updatedOrgs,error:invoiceWriteError}=await db.from("organizations").update({subscription_status:"past_due"}).eq("stripe_subscription_id",subscriptionId).in("subscription_status",INVOICE_UPDATABLE_STATUSES).select("id");
     if(invoiceWriteError)throw invoiceWriteError;
     for(const orgRow of updatedOrgs||[])await customerSuccessPaymentRisk(db,String(orgRow.id),"invoice_payment_failed");
    }else console.log("BILLING ignored invoice.payment_failed without linked subscription",String(e.id||""));
@@ -252,7 +263,7 @@ Deno.serve(async req=>{
   if(e.type==="invoice.paid"){
    const subscriptionId=invoiceSubscriptionId(o);
    if(subscriptionId){
-    const {data:updatedOrgs,error:invoiceWriteError}=await db.from("organizations").update({subscription_status:"active"}).eq("stripe_subscription_id",subscriptionId).select("id,plan");
+    const {data:updatedOrgs,error:invoiceWriteError}=await db.from("organizations").update({subscription_status:"active"}).eq("stripe_subscription_id",subscriptionId).in("subscription_status",INVOICE_UPDATABLE_STATUSES).select("id,plan");
     if(invoiceWriteError)throw invoiceWriteError;
     for(const orgRow of updatedOrgs||[]){await markSalesConverted(db,String(orgRow.id),String(orgRow.plan||"paid"));await resolveCustomerSuccessPaymentRisk(db,String(orgRow.id))}
    }else console.log("BILLING ignored invoice.paid without linked subscription",String(e.id||""));
