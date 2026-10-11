@@ -127,6 +127,23 @@ BEGIN
  SELECT count(*) INTO audit_count FROM private.billing_recovery_audit;
  IF audit_count<>1 THEN RAISE EXCEPTION 'audit is missing'; END IF;
 
+ -- A simultaneous webhook writing the SAME subscription on another tenant
+ -- must be stopped by the database unique index, not only by app-level checks.
+ IF NOT EXISTS(SELECT 1 FROM pg_indexes
+   WHERE schemaname='public' AND tablename='organizations'
+     AND indexname='organizations_unique_stripe_subscription_id') THEN
+   RAISE EXCEPTION 'cross-tenant unique index not deployed';
+ END IF;
+ error:='';
+ BEGIN
+   UPDATE public.organizations SET stripe_subscription_id='sub_fixture123'
+   WHERE id=other;
+ EXCEPTION WHEN unique_violation THEN error:='unique_violation'; END;
+ IF error<>'unique_violation' THEN RAISE EXCEPTION 'DB allowed duplicate subscriptions: %',error; END IF;
+ IF EXISTS(SELECT 1 FROM public.organizations WHERE id=other AND stripe_subscription_id IS NOT NULL) THEN
+   RAISE EXCEPTION 'duplicate subscription update not rolled back';
+ END IF;
+
  -- Explicit exact repetition must be idempotent (never second audit row).
  x:=public.commit_paid_checkout_recovery('evt_fixture123456789',
    'cs_test_fixture123456789',repeat('a',64),org,op,'starter','cus_fixture123','sub_fixture123');
