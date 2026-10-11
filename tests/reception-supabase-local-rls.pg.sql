@@ -14,6 +14,10 @@ returns boolean language sql stable set search_path to '' as $$
    and m.active=true and m.role in ('owner','admin'));
 $$;
 grant execute on function public.is_org_member(uuid),public.is_org_admin(uuid) to authenticated;
+-- Supabase local default public-schema grants are intentionally broader than
+-- hardened production table grants. Remove defaults first to reproduce access.
+revoke all on all tables in schema public from anon,authenticated;
+revoke all on all sequences in schema public from anon,authenticated;
 grant usage on schema public to anon,authenticated,service_role;
 grant select on public.memberships,public.organizations,public.business_profiles,
  public.leads,public.conversations,public.messages,public.appointments,
