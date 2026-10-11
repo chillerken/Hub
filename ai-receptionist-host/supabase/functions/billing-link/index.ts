@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
+import { checkoutReferenceExpiresAt } from "./checkout-reference-lifetime.js";
 
 const cors={
   "Access-Control-Allow-Origin":"*",
@@ -54,7 +55,7 @@ Deno.serve(async(req:Request)=>{
 
     const raw=crypto.randomUUID().replace(/-/g,"")+crypto.randomUUID().replace(/-/g,"");
     const tokenHash=await sha256(raw);
-    const expiresAt=new Date(Date.now()+2*60*60*1000).toISOString();
+    const expiresAt=checkoutReferenceExpiresAt();
 
     const {error:re}=await db.rpc("create_billing_checkout_ref",{
       p_token_hash:tokenHash,
