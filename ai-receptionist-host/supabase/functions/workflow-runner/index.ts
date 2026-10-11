@@ -210,15 +210,27 @@ async function sendResend(db:any,action:any,integration:any,lead:any,profile:any
       })
     });
   }catch(e){
-    return {outcome:"retry",provider:"resend",error_code:"network_error",error_message:String(e),retry_after_seconds:retrySeconds(action.attempts)};
+    // A timeout/connection reset can occur AFTER the provider accepted the email.
+    // Never auto-retry an unknown delivery; operator must reconcile first.
+    return {outcome:"blocked",provider:"resend",error_code:"delivery_unknown",
+      error_message:"Email delivery status is unknown after a network error. Manual reconciliation required before retry. Detail: "+clean(String(e),350)};
   }
 
   let body:any={};
   try{ body=await resp.json(); }catch{}
-  if(resp.ok) return {outcome:"completed",provider:"resend",provider_reference:body?.id||null,http_status:resp.status,response_meta:{accepted:true}};
-  if(resp.status===429 || resp.status>=500) {
+  if(resp.ok){
+    const providerId=clean(body?.id||"",500);
+    if(!providerId) return {outcome:"blocked",provider:"resend",http_status:resp.status,error_code:"delivery_unknown",
+      error_message:"Email provider accepted request but no message reference was returned. Delivery status is unknown; reconcile manually."};
+    return {outcome:"completed",provider:"resend",provider_reference:providerId,http_status:resp.status,response_meta:{accepted:true,delivered:false}};
+  }
+  if(resp.status===429) {
     const retryHeader=Number(resp.headers.get("retry-after")||0);
-    return {outcome:"retry",provider:"resend",http_status:resp.status,error_code:"provider_retryable",error_message:clean(body?.message||body?.error||resp.statusText,1000),retry_after_seconds:retryHeader>0?retryHeader:retrySeconds(action.attempts)};
+    return {outcome:"retry",provider:"resend",http_status:resp.status,error_code:"rate_limited",error_message:clean(body?.message||body?.error||resp.statusText,1000),retry_after_seconds:retryHeader>0?retryHeader:retrySeconds(action.attempts)};
+  }
+  if(resp.status>=500){
+    return {outcome:"blocked",provider:"resend",http_status:resp.status,error_code:"delivery_unknown",
+      error_message:"Email provider returned a server error after send attempt. Delivery status is unknown; manual reconciliation required."};
   }
   return {outcome:"failed",provider:"resend",http_status:resp.status,error_code:"provider_rejected",error_message:clean(body?.message||body?.error||resp.statusText,1000)};
 }
