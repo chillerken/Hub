@@ -1,6 +1,7 @@
 import {createClient} from "https://esm.sh/@supabase/supabase-js@2.95.0";
 
 import { isAppointmentRequest } from "./intent.js";
+import { VISITOR_EDITABLE_BOOKING_STATUSES, appointmentRequestReply } from "./booking-guard.mjs";
 const cors={
   "Access-Control-Allow-Origin":"*",
   "Access-Control-Allow-Headers":"authorization, x-client-info, apikey, content-type, x-supabase-api-version",
@@ -250,14 +251,14 @@ Deno.serve(async req=>{
       const slot=parseExplicitBelgianSlot(message);
       const {data:existingAppt}=await db.from("appointments").select("id,requested_text,status,start_at,end_at")
         .eq("organization_id",p.organization_id).eq("lead_id",leadId)
-        .in("status",["requested","proposed"]).order("created_at",{ascending:false}).limit(1);
+        .in("status",VISITOR_EDITABLE_BOOKING_STATUSES).order("created_at",{ascending:false}).limit(1);
       if(existingAppt?.[0]){
         appointmentId=existingAppt[0].id;
         if(dateHintRe.test(message)){
           const requested=[existingAppt[0].requested_text,message].filter(Boolean).join(" | ").slice(0,2000);
           const appointmentPatch:any={requested_text:requested,updated_at:new Date().toISOString()};
           if(slot){appointmentPatch.start_at=slot.start_at;appointmentPatch.end_at=slot.end_at;appointmentPatch.timezone=slot.timezone;}
-          const {error:appointmentUpdateError}=await db.from("appointments").update(appointmentPatch).eq("id",appointmentId).eq("organization_id",p.organization_id).in("status",["requested","proposed"]);
+          const {error:appointmentUpdateError}=await db.from("appointments").update(appointmentPatch).eq("id",appointmentId).eq("organization_id",p.organization_id).in("status",VISITOR_EDITABLE_BOOKING_STATUSES);
           if(appointmentUpdateError)throw appointmentUpdateError;
           await db.from("workflow_actions").update({
             payload:{appointment_id:appointmentId,requested_text:requested}
@@ -361,9 +362,7 @@ Deno.serve(async req=>{
         ?"Natuurlijk. Ik geef dit door aan een medewerker. Uw contactgegevens zijn geregistreerd."
         :"Natuurlijk. Ik geef dit door aan een medewerker. Wat is het beste telefoonnummer of e-mailadres waarop we u kunnen bereiken?";
     }else if(appointment){
-      reply=hasContact
-        ?"Graag. Uw gewenste dag en tijd zijn als afspraakaanvraag geregistreerd, nog niet bevestigd. Een bevoegde medewerker bevestigt persoonlijk het definitieve tijdstip."
-        :"Graag. Ik registreer dit als afspraakaanvraag, nog niet als bevestigde afspraak. Welk telefoonnummer of e-mailadres mogen we gebruiken om u hierover te contacteren?";
+      reply=appointmentRequestReply(hasContact);
     }else if(!reply){
       reply="De AI-assistent is tijdelijk niet beschikbaar. Uw bericht is wel geregistreerd. Probeer later opnieuw of gebruik de contactgegevens op onze website.";
     }
