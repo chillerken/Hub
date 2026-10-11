@@ -26,6 +26,7 @@ Do not reuse LuxWash branding, pricing or provider secrets for another tenant.
 
 - [x] Existing multi-tenant schema and separate per-tenant settings are present (read-only production inspection).
 - [x] Contract-level CI regression for public mutable statuses, operator rights, tenant scoping and human-before-calendar rule, in draft PR.
+- [x] Verify integrated local CI: 21 Node regressions, 16 PostgreSQL lifecycle assertions, one combined real-handler/PostgreSQL/worker flow and 15 reconstructed RLS privilege assertions (run 38154989384; final-commit CI still required).
 - [ ] Verify clean CI for the **latest** PR commit (evidence: exact SHA + GitHub Actions run).
 - [ ] Execute isolated live API test on a safe non-customer environment; retain run timestamp, receipt, test ID and evidence of cleanup. Check all five workflow phases, including human audit.
 - [ ] Prove **two real disposable tenants** cannot read or update each other's data or link a conversation from the other tenant.
@@ -38,6 +39,6 @@ Do not reuse LuxWash branding, pricing or provider secrets for another tenant.
 
 ## Proof boundaries / release control
 
-Source/CI tests establish code contracts, **not** end-to-end production behavior. The `production-e2e-check` readiness routine is staged in this PR but is not proof until deployed to an isolated environment, invoked with test-run credentials and backed by a successful receipt. It intentionally disables outbound automations, so it **cannot** prove a real provider delivery. Outbound follow-up must be separately exercised using sandbox sinks and synthetic recipients.
+Source/CI tests establish code contracts, **not** end-to-end production behavior. The joined PostgreSQL/HTTP/worker CI uses real database and SQL-trigger logic with mocked Supabase Auth/PostgREST and a fake provider sink; it cannot substitute for live Supabase staging or delivered provider receipts. The `production-e2e-check` readiness routine is staged in this PR but is not proof until deployed to an isolated environment, invoked with test-run credentials and backed by a successful receipt. It intentionally disables outbound automations, so it **cannot** prove a real provider delivery. Outbound follow-up must be separately exercised using sandbox sinks and synthetic recipients.
 
 **DO NOT** merge, deploy to existing customer production, activate billing/subscriptions, send real customer communications, or market Reception AI as working/commercially ready until every unchecked item is independently verified. Preserve rollback for any future authorized release.
