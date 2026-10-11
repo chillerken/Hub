@@ -88,7 +88,10 @@ test("real local Supabase Auth + PostgREST + Edge: two tenants, human booking an
  const oa=check(await a.from("organizations").select("id"),"tenant A read org");
  assert.deepEqual(oa.map(o=>o.id),[A]);
  assert.deepEqual(check(await b.from("organizations").select("id"),"tenant B read org").map(o=>o.id),[B]);
- assert.deepEqual(check(await visitor().from("organizations").select("id"),"anon org"),[]);
+ const anonymous=await visitor().from("organizations").select("id");
+ assert.ok(anonymous.error?.code==="42501" ||
+   (!anonymous.error && anonymous.data.length===0),
+   "Anonymous access must be denied or return no rows");
  assert.deepEqual(check(await a.from("business_profiles").select("business_name"),"A profile")
   .map(x=>x.business_name),["Garage A"]);
  assert.deepEqual(check(await b.from("business_profiles").select("business_name"),"B profile")
