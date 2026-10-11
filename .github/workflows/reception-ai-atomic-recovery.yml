@@ -8,6 +8,7 @@ on:
       - 'tests/reception-atomic-recovery.pg.sql'
       - 'ai-receptionist-host/supabase/functions/billing-reconciliation-commit/**'
       - 'tests/reception-operator-recovery.test.mjs'
+      - 'tests/reception-operator-recovery-endpoint.test.mjs'
       - '.github/workflows/reception-ai-atomic-recovery.yml'
   push:
     branches: [main]
@@ -16,6 +17,7 @@ on:
       - 'tests/reception-atomic-recovery.pg.sql'
       - 'ai-receptionist-host/supabase/functions/billing-reconciliation-commit/**'
       - 'tests/reception-operator-recovery.test.mjs'
+      - 'tests/reception-operator-recovery-endpoint.test.mjs'
       - '.github/workflows/reception-ai-atomic-recovery.yml'
   workflow_dispatch:
 
@@ -56,6 +58,8 @@ jobs:
           node-version: '22'
       - name: Test operator consent and fresh Stripe proof
         run: node --test tests/reception-operator-recovery.test.mjs
+      - name: Exercise authenticated recovery endpoint with isolated Stripe/Supabase
+        run: node --test tests/reception-operator-recovery-endpoint.test.mjs
       - name: Validate recovery endpoint TypeScript syntax
         run: |
           npm install --no-save --package-lock=false --ignore-scripts typescript@5.8.2
