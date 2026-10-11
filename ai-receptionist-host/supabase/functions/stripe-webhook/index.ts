@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
-import { INVOICE_UPDATABLE_STATUSES, shouldApplySubscriptionStatus } from "./billing-event-guard.js";
+import { INVOICE_UPDATABLE_STATUSES, shouldApplySubscriptionStatus, canAssociateSubscription } from "./billing-event-guard.js";
 const hex=(b:ArrayBuffer)=>Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join("");
 async function sha256Text(value:string){
  return hex(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value)));
@@ -198,8 +198,8 @@ Deno.serve(async req=>{
     if(bySub?.id)resolvedOrg=String(bySub.id);
    }
    if(!resolvedOrg && customer){
-    const {data:byCustomer}=await db.from("organizations").select("id").eq("stripe_customer_id",customer).maybeSingle();
-    if(byCustomer?.id)resolvedOrg=String(byCustomer.id);
+    const {data:byCustomer}=await db.from("organizations").select("id,stripe_subscription_id").eq("stripe_customer_id",customer).maybeSingle();
+    if(byCustomer?.id && canAssociateSubscription(byCustomer.stripe_subscription_id,sub))resolvedOrg=String(byCustomer.id);
    }
 
    if(["starter","pro","business"].includes(plan)&&resolvedOrg){
@@ -233,12 +233,16 @@ Deno.serve(async req=>{
    }
    if(!targetOrgs.length&&customer&&isReceptionAiApp(o?.metadata?.app)&&derivedPlan){
     const {data:byCustomer}=await db.from("organizations").select("id,plan,stripe_subscription_id,subscription_status").eq("stripe_customer_id",customer);
-    targetOrgs=byCustomer||[];
+    targetOrgs=(byCustomer||[]).filter((target:any)=>canAssociateSubscription(target.stripe_subscription_id,subscriptionId));
    }
    if(!targetOrgs.length){
     console.log("BILLING ignored unrelated subscription event",String(e.id||""),subscriptionId||"no_subscription_id");
    }else{
     for(const target of targetOrgs){
+     if(!canAssociateSubscription(target.stripe_subscription_id,subscriptionId)){
+       console.warn("BILLING ignored subscription event with mismatched subscription ID",String(e.id||""));
+       continue;
+     }
      if(!shouldApplySubscriptionStatus(target.subscription_status,status,String(target.stripe_subscription_id||"")===subscriptionId)){
        console.warn("BILLING ignored stale subscription event for terminal subscription",String(e.id||""));
        continue;
