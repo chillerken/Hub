@@ -35,3 +35,18 @@ De test `tests/reception-atomic-recovery.pg.sql` voert de **werkelijke SQL** uit
 - Eenduidig incidentonderzoek en opvolging wanneer de originele referentie is gewist.
 
 **Geen echte betalingen, activaties, boekingen of berichten uitgevoerd in deze ontwikkelfase.**
+
+## Aanvulling: afzonderlijke operator-HTTP-functie in dezelfde PR
+
+De functie `billing-reconciliation-commit` is intussen toegevoegd als **standaard uitgeschakelde broncode**. Zij hergebruikt de geteste Stripe-bewijscontrole van PR #35 en voert uitsluitend na onderstaande beveiligingspoorten de nieuwe PostgreSQL-RPC uit:
+
+- `verify_jwt=true` bij eventuele deployment, aanvullende server-side `auth.getUser` controle en actieve owner-/adminrol van een interne platformorganisatie;
+- `BILLING_RECOVERY_ENABLED=true` als afzonderlijke kill-switch, standaard afwezig/uit;
+- expliciete aanvraagwaarde `I_APPROVE_PAID_CHECKOUT_RECOVERY` én een opgegeven, overeenkomende `expected_organization_id`;
+- originele Stripe Event, betaalde Checkout Session, actieve commerciële Payment Link en actuele Stripe Subscription van dezelfde customer, opnieuw server-side opgehaald via Stripe GET;
+- verlopen, nog aanwezige en ongebruikte oorspronkelijke referentie waarvan de SHA-256-hash en de organisatietoewijzing volledig kloppen;
+- atomische SQL-commit met aparte operatorcontrole, exact incident, abonnementconflicten, audit en idempotentie.
+
+De HTTP-functie kan bij een eventuele release alleen worden gedeployed met **alle vier bestanden**: `index.ts`, `commit-core.js`, `review-core.js` en `reconciliation-assessment.js`. De lookup-RPC uit PR #35 en de recovery-RPC uit deze PR zijn beide vereiste databaseafhankelijkheden. Geen enkele SQL-migratie of Edge Function in deze PR is in productie toegepast.
+
+**Cruciaal:** een deploy naar productie is pas verantwoord na een geslaagde test in Stripe-testmodus met een geïsoleerde Supabase-omgeving, een verificatie van operatorrechten en afzonderlijke expliciete vrijgave van de schrijffunctie. De huidige geïsoleerde CI bewijst niet dat de echte Stripe-integratie end-to-end werkt.
