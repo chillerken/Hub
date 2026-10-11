@@ -53,7 +53,7 @@ test("only an authenticated tenant owner/admin can confirm with exact times", ()
   assert.match(operator, /\["owner","admin"\]\.includes\(mem.role\)/);
   assert.match(operator, /if\(action==="confirm_appointment"\)/);
   assert.match(operator, /\.eq\("id",appointmentId\)\.eq\("organization_id",org\)\.single\(\)/);
-  assert.match(operator, /if\(!current.start_at\|\|!current.end_at\)/);
+  assert.ok(operator.includes("if(!current.start_at||!current.end_at || !(Date.parse(current.end_at)>Date.parse(current.start_at)))"));
   assert.match(operator, /event_type:"appointment.confirmed"/);
 });
 
