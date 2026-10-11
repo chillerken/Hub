@@ -48,3 +48,28 @@ This does not establish delivery of a newly confirmed appointment for both tenan
 - [ ] Re-run CI on the final, reviewed commit; operator sign-off before merge or deployment.
 
 Until these pass, do **not** merge PR #37, deploy it into live client traffic, claim a proven end-to-end delivery chain, or market Reception AI as commercially validated.
+
+
+## 5. Additional isolated proof on 2026-10-11 (PostgreSQL + provider adapter)
+
+**CI evidence:** [run 38153611343](https://github.com/chillerken/Hub/actions/runs/38153611343), tested code commit `0d058033951f9c30fd960e15a7a26cb3bed945c8`, both jobs succeeded.
+
+- **21/21 Node tests passed** using real transpiled Reception AI HTTP handlers and the actual Resend adapter, with all Supabase/provider calls routed to synthetic isolated fixtures.
+- **16/16 PostgreSQL 16 lifecycle assertions passed** against the staged `enqueue_appointment_lifecycle_actions` PL/pgSQL function. No live Supabase migration occurred.
+- The SQL function now queues calendar and confirmation workflow actions **only after appointment status is `confirmed`**, with idempotent reschedules/cancellations and tenant-scoped action keys. A public request with a fully parsed timestamp creates **zero** calendar or confirmation actions.
+- Resend processing now requires a non-empty provider message ID before claiming `completed`. Network uncertainty, provider 5xx, or a success response without ID become `blocked` for manual review. Only 429 and explicitly concurrent-idempotency 409 are automatically retryable; a payload-mismatch 409 fails closed.
+- Provider idempotency keys are SHA-256 based on the immutable workflow identity **and exact outbound content**, so a new approved appointment time gets a new key while retransmissions of identical content reuse the same key.
+- Resend documents that its idempotency protection is **24 hours**; after unknown delivery or the expiry window, a manual provider status check remains required. See https://resend.com/changelog/idempotency-keys
+- The real production function definition was checked read-only against the historical migration source; the meaningful trigger body matches, aside from formatting/SQL wrapper.
+
+**Evidence limitations:** The disposable PostgreSQL job and mocked HTTP tests run separately. They do not prove the complete chain in a deployed real Supabase staging project, nor actual provider *delivery*. The mocked Resend response is an **accepted** receipt, not evidence of inbox delivery.
+
+## 6. Outstanding external environment and security blockers
+
+The available Supabase projects are `Reception AI Production` and `AI Business Automation Production`, with no existing development branch. No third non-production environment was available for safely deploying the pending Edge Functions and SQL migration. A new Supabase branch/project may have a charge and must not be created until its cost is checked and explicitly approved.
+
+The current Supabase security advisor still reports:
+- `extension_in_public` for `pg_net`: https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public
+- `auth_leaked_password_protection`: https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection
+
+**No-sale gate remains active.** Still required: a disposable real Supabase deployment and complete HTTP-to-SQL-to-worker test; delivery event/receipt from a test mailbox using real provider credentials; confirmation retry/replay inspection; cleanup evidence; advisor remediation/acceptance; operator review and sign-off. No merge, real emails, payment, customer booking or production deployment was performed during this validation.
