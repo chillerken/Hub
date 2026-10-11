@@ -39,7 +39,10 @@ const scriptTags = Array.from(html.matchAll(/<script>([\s\S]*?)<\/script>/g));
 assert.ok(scriptTags.length >= 2);
 for (const [, inlineJs] of scriptTags) new Script(inlineJs, {filename:'jarvis-inline.js'});
 assert.ok(html.includes('id="lwReceptionLogin"'));
-assert.ok(html.includes('id="lwCrmLogin"'));
+assert.ok(html.includes('id="lwCrmLogin"'))
+assert.ok(html.includes('id="lwTomorrow"'));
+assert.ok(html.includes('Geen bevestigde afspraken morgen in deze bron'));
+assert.ok(html.includes("['confirmed','requested'].includes(a.status)"));;
 assert.ok(html.includes('Beveiligde toegang via je bestaande Supabase-accounts'));
 assert.ok(root.headers.get('Content-Security-Policy')?.includes('https://ndecxbsrxspkuxjsbndq.supabase.co'));
 assert.ok(root.headers.get('Content-Security-Policy')?.includes('https://nahwlhptgdkwhjcfkhkt.supabase.co'));
