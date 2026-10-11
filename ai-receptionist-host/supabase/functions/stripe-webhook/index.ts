@@ -219,6 +219,21 @@ Deno.serve(async req=>{
     console.log(paid?"BILLING activated tenant":"BILLING checkout pending payment",resolvedOrg,plan,String(o.payment_status||"unknown"));
     }
    }else if(["starter","pro","business"].includes(plan)){
+    if(paid){
+      // A signed, paid Checkout must never be acknowledged as processed when
+      // tenant activation could not be associated with a trusted reference.
+      // Persist only a machine-readable reason, not customer PII or tokens.
+      const eid=String(e.id||"");
+      if(!eid)throw new Error("paid_checkout_unlinked_missing_event_id");
+      const {error:unlinkedError}=await db.from("stripe_events").update({
+        status:"failed",
+        last_error:"paid_checkout_unlinked: paid Stripe Checkout requires authorized tenant reconciliation",
+        updated_at:new Date().toISOString()
+      }).eq("id",eid);
+      if(unlinkedError)throw unlinkedError;
+      console.warn("BILLING paid checkout unlinked; investigate Stripe event",eid);
+      return new Response("paid checkout requires reconciliation",{status:503});
+    }
     console.warn("BILLING checkout not linked to an authorized tenant",String(e.id||""),plan);
    }
   }
