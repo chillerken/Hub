@@ -9,6 +9,19 @@ const out=(body:any,status=200)=>new Response(JSON.stringify(body),{
   status,headers:{...cors,"Content-Type":"application/json"}
 });
 const clean=(v:any,max=1000)=>String(v??"").trim().slice(0,max);
+// Bind the write to the state the operator action actually checked. This is
+// one conditional database UPDATE, so a concurrent change is never overwritten.
+const guardAppointmentWrite=(query:any,current:any)=>{
+  query=query.eq("status",current.status);
+  for(const field of ["updated_at","start_at","end_at"]){
+    query=current[field]==null?query.is(field,null):query.eq(field,current[field]);
+  }
+  return query;
+};
+const appointmentChanged=()=>out({
+  error:"Appointment changed during this operation. Refresh and review before trying again.",
+  code:"appointment_changed"
+},409);
 
 Deno.serve(async(req:Request)=>{
   if(req.method==="OPTIONS") return new Response("ok",{headers:cors});
@@ -99,12 +112,12 @@ Deno.serve(async(req:Request)=>{
       }
       const status=["proposed","confirmed"].includes(b.status)?b.status:"proposed";
       const {data:current,error:ce}=await db.from("appointments")
-        .select("id,status,organization_id")
+        .select("id,status,organization_id,updated_at,start_at,end_at")
         .eq("id",appointmentId).eq("organization_id",org).single();
       if(ce||!current) return out({error:"Appointment not found"},404);
       if(["completed","cancelled"].includes(current.status)) return out({error:"Closed appointment cannot be rescheduled"},409);
 
-      const {data:updated,error}=await db.from("appointments")
+      const {data:updated,error}=await guardAppointmentWrite(db.from("appointments")
         .update({
           start_at:start.toISOString(),
           end_at:end.toISOString(),
@@ -113,9 +126,10 @@ Deno.serve(async(req:Request)=>{
           status,
           updated_at:new Date().toISOString()
         })
-        .eq("id",appointmentId).eq("organization_id",org)
-        .select("*").single();
+        .eq("id",appointmentId).eq("organization_id",org),current)
+        .select("*").maybeSingle();
       if(error) throw error;
+      if(!updated) return appointmentChanged();
       await db.from("audit_events").insert({
         organization_id:org,actor_user_id:u.user.id,event_type:"appointment.scheduled",
         entity_type:"appointment",entity_id:appointmentId,
@@ -130,12 +144,17 @@ Deno.serve(async(req:Request)=>{
         .eq("id",appointmentId).eq("organization_id",org).single();
       if(ce||!current) return out({error:"Appointment not found"},404);
       if(!current.start_at||!current.end_at) return out({error:"Set an exact start and end time first"},409);
+      const start=new Date(current.start_at),end=new Date(current.end_at);
+      if(Number.isNaN(start.getTime())||Number.isNaN(end.getTime())||end<=start){
+        return out({error:"Set a valid start and end time first"},409);
+      }
       if(["completed","cancelled"].includes(current.status)) return out({error:"Closed appointment cannot be confirmed"},409);
-      const {data:updated,error}=await db.from("appointments")
+      const {data:updated,error}=await guardAppointmentWrite(db.from("appointments")
         .update({status:"confirmed",updated_at:new Date().toISOString()})
-        .eq("id",appointmentId).eq("organization_id",org)
-        .select("*").single();
+        .eq("id",appointmentId).eq("organization_id",org),current)
+        .select("*").maybeSingle();
       if(error) throw error;
+      if(!updated) return appointmentChanged();
       await db.from("audit_events").insert({
         organization_id:org,actor_user_id:u.user.id,event_type:"appointment.confirmed",
         entity_type:"appointment",entity_id:appointmentId,
@@ -151,7 +170,7 @@ Deno.serve(async(req:Request)=>{
       if(ce||!current) return out({error:"Appointment not found"},404);
       if(current.status!=="confirmed") return out({error:"Only a confirmed appointment can be marked completed"},409);
 
-      const {data:unpaid}=await db.from("customer_payments")
+      const {data:unpaid,error:paymentError}=await db.from("customer_payments")
         .select("id,status,amount_cents,currency")
         .eq("organization_id",org)
         .eq("appointment_id",appointmentId)
@@ -159,6 +178,7 @@ Deno.serve(async(req:Request)=>{
         .order("created_at",{ascending:false})
         .limit(1)
         .maybeSingle();
+      if(paymentError) throw paymentError;
       if(unpaid){
         return out({
           error:"Appointment has an unpaid payment request",
@@ -168,11 +188,27 @@ Deno.serve(async(req:Request)=>{
         },409);
       }
 
-      const {data:updated,error}=await db.from("appointments")
+      const {data:updated,error}=await guardAppointmentWrite(db.from("appointments")
         .update({status:"completed",completed_at:new Date().toISOString(),updated_at:new Date().toISOString()})
-        .eq("id",appointmentId).eq("organization_id",org)
-        .select("*").single();
+        .eq("id",appointmentId).eq("organization_id",org),current)
+        .select("*").maybeSingle();
       if(error) throw error;
+      if(!updated) return appointmentChanged();
+
+      const {data:wonLead,error:wonErr}=await db.from("leads")
+        .update({status:"won",updated_at:new Date().toISOString()})
+        .eq("id",current.lead_id).eq("organization_id",org)
+        .neq("status","won")
+        .select("id,status").maybeSingle();
+      if(wonErr) throw wonErr;
+      if(wonLead){
+        await db.from("audit_events").insert({
+          organization_id:org,actor_user_id:u.user.id,event_type:"lead.won_from_completed_appointment",
+          entity_type:"lead",entity_id:current.lead_id,
+          payload:{appointment_id:appointmentId}
+        });
+      }
+
       await db.from("audit_events").insert({
         organization_id:org,actor_user_id:u.user.id,event_type:"appointment.completed",
         entity_type:"appointment",entity_id:appointmentId,
@@ -187,11 +223,12 @@ Deno.serve(async(req:Request)=>{
         .eq("id",appointmentId).eq("organization_id",org).single();
       if(ce||!current) return out({error:"Appointment not found"},404);
       if(current.status==="completed") return out({error:"Completed appointment cannot be cancelled"},409);
-      const {data:updated,error}=await db.from("appointments")
+      const {data:updated,error}=await guardAppointmentWrite(db.from("appointments")
         .update({status:"cancelled",updated_at:new Date().toISOString()})
-        .eq("id",appointmentId).eq("organization_id",org)
-        .select("*").single();
+        .eq("id",appointmentId).eq("organization_id",org),current)
+        .select("*").maybeSingle();
       if(error) throw error;
+      if(!updated) return appointmentChanged();
       await db.from("audit_events").insert({
         organization_id:org,actor_user_id:u.user.id,event_type:"appointment.cancelled",
         entity_type:"appointment",entity_id:appointmentId,

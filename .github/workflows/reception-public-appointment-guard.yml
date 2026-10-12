@@ -6,6 +6,8 @@ on:
     paths:
       - 'ai-receptionist-host/supabase/functions/public-reception-chat/**'
       - 'ai-receptionist-host/supabase/functions/public-demo-chat/**'
+      - 'ai-receptionist-host/supabase/functions/operations-admin/**'
+      - 'tests/reception-operator-appointment-guard.test.mjs'
       - 'tests/reception-demo-date-context.test.mjs'
       - 'tests/reception-public-appointment-guard.test.mjs'
       - 'tests/reception-brussels-slot.test.mjs'
@@ -15,6 +17,8 @@ on:
     paths:
       - 'ai-receptionist-host/supabase/functions/public-reception-chat/**'
       - 'ai-receptionist-host/supabase/functions/public-demo-chat/**'
+      - 'ai-receptionist-host/supabase/functions/operations-admin/**'
+      - 'tests/reception-operator-appointment-guard.test.mjs'
       - 'tests/reception-demo-date-context.test.mjs'
       - 'tests/reception-public-appointment-guard.test.mjs'
       - 'tests/reception-brussels-slot.test.mjs'
