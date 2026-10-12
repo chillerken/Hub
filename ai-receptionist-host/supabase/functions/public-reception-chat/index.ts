@@ -250,15 +250,19 @@ Deno.serve(async req=>{
       const slot=parseExplicitBelgianSlot(message);
       const {data:existingAppt}=await db.from("appointments").select("id,requested_text,status,start_at,end_at")
         .eq("organization_id",p.organization_id).eq("lead_id",leadId)
-        .in("status",["requested","proposed","confirmed"]).order("created_at",{ascending:false}).limit(1);
+        // Public chat may refine requests, never reschedule an operator-confirmed slot.
+        .in("status",["requested","proposed"]).order("created_at",{ascending:false}).limit(1);
       if(existingAppt?.[0]){
         appointmentId=existingAppt[0].id;
         if(dateHintRe.test(message)){
           const requested=[existingAppt[0].requested_text,message].filter(Boolean).join(" | ").slice(0,2000);
           const appointmentPatch:any={requested_text:requested,updated_at:new Date().toISOString()};
           if(slot){appointmentPatch.start_at=slot.start_at;appointmentPatch.end_at=slot.end_at;appointmentPatch.timezone=slot.timezone;}
-          const {error:appointmentUpdateError}=await db.from("appointments").update(appointmentPatch).eq("id",appointmentId);
+          const {data:updatedAppointment,error:appointmentUpdateError}=await db.from("appointments").update(appointmentPatch)
+            .eq("id",appointmentId).eq("organization_id",p.organization_id).eq("lead_id",leadId)
+            .in("status",["requested","proposed"]).select("id").maybeSingle();
           if(appointmentUpdateError)throw appointmentUpdateError;
+          if(!updatedAppointment)return json({error:"Deze afspraak is ondertussen gewijzigd. Dien uw nieuwe voorkeur opnieuw als aanvraag in."},409);
           await db.from("workflow_actions").update({
             payload:{appointment_id:appointmentId,requested_text:requested}
           }).eq("idempotency_key","appointment:"+appointmentId+":calendar_request").eq("status","pending");
