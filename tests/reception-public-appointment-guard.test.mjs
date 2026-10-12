@@ -33,7 +33,7 @@ class Query {
  async maybeSingle(){return this.single();}
  then(resolve,reject){return Promise.resolve(this.execute()).then(resolve,reject);}
 }
-function fixture(status='confirmed'){
+function fixture(status='confirmed',options={}){
  const original={id:'appointment-a',organization_id:'org-a',lead_id:'lead-a',status,
   start_at:'2030-01-15T12:00:00.000Z',end_at:'2030-01-15T13:00:00.000Z',
   requested_text:'Oorspronkelijke aanvraag',created_at:'2026-10-01T00:00:00Z'};
@@ -44,21 +44,21 @@ function fixture(status='confirmed'){
   conversations:[{id:'conversation-a',organization_id:'org-a',lead_id:'lead-a'}],
   appointments:[{...original}],messages:[],tasks:[],workflow_actions:[],widget_rate_limits:[]
  };
- let handler;
+ let handler;const requests=[];
  const source=readFileSync('ai-receptionist-host/supabase/functions/public-reception-chat/index.ts','utf8');
  const compiled=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
  runInNewContext(compiled,{
-  exports:{},Request,Response,Headers,crypto:webcrypto,TextEncoder,Date,setTimeout,clearTimeout,
+  exports:{},Request,Response,Headers,AbortController,crypto:webcrypto,TextEncoder,Date:options.clock||Date,setTimeout,clearTimeout,
   console:{error(){},log(){}},
-  fetch(){throw Error('External requests forbidden in this fixture');},
-  Deno:{env:{get(k){return k==='SUPABASE_URL'?'https://fixture.invalid':undefined;}},serve(h){handler=h;}},
+  async fetch(url,request){if(!options.ai)throw Error('External requests forbidden in this fixture');requests.push(JSON.parse(request.body));return new Response(JSON.stringify({candidates:[{content:{parts:[{text:'Alleen een gecontroleerd fixture-antwoord.'}]}}]}),{status:200});},
+  Deno:{env:{get(k){if(k==='GEMINI_API_KEY'&&options.ai)return 'isolated-fixture-key';return k==='SUPABASE_URL'?'https://fixture.invalid':undefined;}},serve(h){handler=h;}},
   require(name){
-   if(name.startsWith('https://esm.sh/'))return {createClient(){return {from(n){return new Query(db,n);}};}};
+   if(name.startsWith('https://esm.sh/'))return {createClient(){return {from(n){return new Query(db,n);},async rpc(name){assert.equal(name,'consume_ai_daily_quota');return {data:true,error:null};}};}};
    if(name==='./intent.js')return intent;
    throw Error('Unmocked import: '+name);
   }
  },{timeout:2000});
- return {db,original,async send(message,extra={}){
+ return {db,original,requests,async send(message,extra={}){
   const response=await handler(new Request('https://fixture.invalid/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({widget_token:'public-fixture',lead_id:'lead-a',conversation_id:'conversation-a',message,...extra})}));
   return {status:response.status,body:await response.json()};
  }};
@@ -101,6 +101,15 @@ test('concurrent operator confirmation prevents a public update',async()=>{
  assert.deepEqual(f.db.appointments[0],{...f.original,status:'confirmed'});
  assert.equal(f.db.appointments.length,1);
 });
+test('tenant chat gives the provider a Brussels server date without booking data',async()=>{
+ const instant=Date.parse('2026-12-31T23:30:00Z');
+ class Clock extends Date{constructor(...args){super(...(args.length?args:[instant]));}static now(){return instant;}}
+ const f=fixture('confirmed',{ai:true,clock:Clock});const r=await f.send('Wat zijn jullie diensten?');
+ assert.equal(r.status,200);assert.equal(r.body.ai_status,'generated');
+ assert.match(f.requests[0].system_instruction.parts[0].text,/Huidige datum \(Europe\/Brussels\): vrijdag 1 januari 2027/);
+ assert.deepEqual(f.db.appointments,[f.original]);
+});
+
 test('midnight preference reaches a requested appointment with correct UTC time',async()=>{
  const f=fixture();const r=await f.send('Ik wil een afspraak boeken op 16/01/2030 om 00u30');
  assert.equal(r.status,200);

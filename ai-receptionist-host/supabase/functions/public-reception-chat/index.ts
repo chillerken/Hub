@@ -322,6 +322,8 @@ Deno.serve(async req=>{
 
     const services=Array.isArray(p.services)?p.services:[];
     const instructions=[
+      "Huidige datum (Europe/Brussels): "+new Intl.DateTimeFormat("nl-BE",{timeZone:"Europe/Brussels",weekday:"long",day:"numeric",month:"long",year:"numeric"}).format(new Date()),
+      "Interpreteer vandaag en morgen uitsluitend ten opzichte van deze serverdatum. Een datum is geen bewijs van live beschikbaarheid.",
       "Je bent "+(p.receptionist_name||"Ava")+", AI-receptionist van "+p.business_name+".",
       "Antwoord vriendelijk, compact en professioneel in de taal van de klant.",
       "Gebruik uitsluitend de gegeven bedrijfsinformatie. Verzin niets.",
