@@ -45,6 +45,22 @@ function fixture({status='proposed',role='owner',active=true,authenticated=true}
   console:{error(){}},fetch(){throw Error('External requests forbidden');},
   Deno:{env:{get(k){return {SUPABASE_URL:'https://fixture.invalid',SUPABASE_ANON_KEY:'fixture-anon',SUPABASE_SERVICE_ROLE_KEY:'fixture-service'}[k];}},serve(h){handler=h;}},
   require(name){assert.equal(name,'https://esm.sh/@supabase/supabase-js@2.95.0');return {createClient(){return {
+   async rpc(name,p){
+    assert.equal(name,'complete_reception_appointment');assert.equal(p.p_actor_user_id,'operator-a');
+    if(db.rpcResult)return db.rpcResult;
+    if(db.paymentReadError)return {data:null,error:{message:'fixture database unavailable'}};
+    const row=db.appointments.find(a=>a.id===p.p_appointment_id&&a.organization_id===p.p_organization_id);
+    if(db.beforeWrite){const mutate=db.beforeWrite;db.beforeWrite=null;mutate(row);}
+    if(!row||row.status!=='confirmed'||row.updated_at!==p.p_expected_updated_at||row.start_at!==p.p_expected_start_at||row.end_at!==p.p_expected_end_at)
+     return {data:null,error:{message:'appointment_changed'}};
+    const unpaid=db.customer_payments.find(x=>x.organization_id===p.p_organization_id&&x.appointment_id===row.id&&x.status!=='paid');
+    if(unpaid)return {data:{ok:false,code:'payment_required_before_completion',payment_id:unpaid.id,payment_status:unpaid.status},error:null};
+    row.status='completed';row.completed_at=new Date().toISOString();
+    const lead=db.leads.find(x=>x.id===row.lead_id&&x.organization_id===row.organization_id);
+    if(lead&&lead.status!=='won'){lead.status='won';db.audit_events.push({event_type:'lead.won_from_completed_appointment'});}
+    db.audit_events.push({event_type:'appointment.completed'});
+    return {data:{ok:true,appointment:{...row}},error:null};
+   },
    from(n){return new Query(db,n);},auth:{async getUser(){return authenticated?{data:{user:{id:'operator-a'}},error:null}:{data:null,error:{message:'invalid token'}};}}
   };}};}
  },{timeout:2000});
@@ -111,4 +127,8 @@ test('confirmed paid appointment can be completed without touching other tenant'
 test('operator can schedule a text-only request without an existing exact time',async()=>{
  const f=fixture({status:'requested'});Object.assign(f.db.appointments[0],{start_at:null,end_at:null});
  const r=await f.send('schedule_appointment',slot);assert.equal(r.status,200);assert.equal(f.db.appointments[0].status,'proposed');
+});
+for(const rpcResult of [{data:null,error:{code:'PGRST202',message:'missing function'}},{data:null,error:null},{data:{ok:true},error:null}])test('missing or incomplete atomic result never falls back to legacy completion '+JSON.stringify(rpcResult),async()=>{
+ const f=fixture({status:'confirmed'});f.db.rpcResult=rpcResult;
+ const r=await f.send('complete_appointment');assert.ok([500,503].includes(r.status));assert.deepEqual(f.db.appointments,[f.original]);assert.equal(f.db.audit_events.length,0);
 });
