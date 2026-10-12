@@ -6,12 +6,14 @@ on:
     paths:
       - 'ai-receptionist-host/supabase/functions/public-reception-chat/**'
       - 'tests/reception-public-appointment-guard.test.mjs'
+      - 'tests/reception-brussels-slot.test.mjs'
       - '.github/workflows/reception-public-appointment-guard.yml'
   push:
     branches: [main]
     paths:
       - 'ai-receptionist-host/supabase/functions/public-reception-chat/**'
       - 'tests/reception-public-appointment-guard.test.mjs'
+      - 'tests/reception-brussels-slot.test.mjs'
       - '.github/workflows/reception-public-appointment-guard.yml'
   workflow_dispatch:
 
@@ -32,4 +34,4 @@ jobs:
       - name: Install locked handler test dependencies
         run: npm ci --ignore-scripts
       - name: Exercise real HTTP handler without external side effects
-        run: node --test tests/reception-public-appointment-guard.test.mjs tests/reception-booking-intent.test.mjs
+        run: node --test tests/reception-public-appointment-guard.test.mjs tests/reception-booking-intent.test.mjs tests/reception-brussels-slot.test.mjs
