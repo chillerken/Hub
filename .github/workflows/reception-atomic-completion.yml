@@ -37,6 +37,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install existing locked handler dependencies
+        run: npm ci --ignore-scripts
+      - name: Run complete isolated regressions and TypeScript boundary
+        run: |
+          node --test tests/reception-*.test.mjs tests/hub-typecheck-boundary.test.mjs ai-receptionist-host/tests/*.test.cjs luxwash-ai-os-host/sales/*.test.mjs luxwash-ai-os-host/stripe-webhook/edge-function/*.test.mjs
+          npm run lint
       - name: Install pinned isolated database client
         run: npm install --prefix "$RUNNER_TEMP/reception-pg" --ignore-scripts --package-lock=false pg@8.23.1
       - name: Test actual migration, rollback, grants and two-session locking
