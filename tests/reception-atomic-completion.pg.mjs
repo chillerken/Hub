@@ -6,7 +6,11 @@ import {createRequire} from 'node:module';
 
 const root=process.env.RECEPTION_PG_MODULE_ROOT;
 if(!root)throw Error('Set RECEPTION_PG_MODULE_ROOT to the isolated pg package directory');
-const {Client}=createRequire(root+'/package.json')('pg');
+const {Client,types}=createRequire(root+'/package.json')('pg');
+// PostgREST returns the full timestamp as text. The pg driver's Date parser
+// discards microseconds and would manufacture a stale-version conflict after
+// the real touch_updated_at trigger. Preserve the exact database value.
+types.setTypeParser(1184,value=>value);
 if(!['127.0.0.1','localhost','::1'].includes(process.env.PGHOST)||process.env.PGDATABASE!=='reception_disposable')
  throw Error('Only an explicitly named loopback disposable database is permitted');
 const A='10000000-0000-4000-8000-000000000001',B='10000000-0000-4000-8000-000000000002';
