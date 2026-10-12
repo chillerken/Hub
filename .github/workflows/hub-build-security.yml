@@ -1,0 +1,27 @@
+name: Hub Build and Security Regression
+on:
+  pull_request:
+    branches: [main]
+    paths: ['package.json', 'package-lock.json', 'tsconfig.json', 'src/**', 'vite.config.ts', 'tests/hub-typecheck-boundary.test.mjs', '.github/workflows/hub-build-security.yml']
+  push:
+    branches: [main]
+    paths: ['package.json', 'package-lock.json', 'tsconfig.json', 'src/**', 'vite.config.ts', 'tests/hub-typecheck-boundary.test.mjs', '.github/workflows/hub-build-security.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
+      - run: npm run build
+      - run: node --test tests/reception-*.test.mjs tests/hub-typecheck-boundary.test.mjs ai-receptionist-host/tests/*.test.cjs luxwash-ai-os-host/sales/*.test.mjs luxwash-ai-os-host/stripe-webhook/edge-function/*.test.mjs
+      - run: npm audit --audit-level=high
