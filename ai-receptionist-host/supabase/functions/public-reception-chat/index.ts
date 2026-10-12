@@ -29,20 +29,38 @@ function normalizePhone(raw:string,locale:string){
 
 function parseExplicitBelgianSlot(message:string){
   const dm=message.match(/\b(\d{1,2})[\/.\-](\d{1,2})(?:[\/.\-](\d{2,4}))?\b/);
-  const tm=message.match(/\b(?:om\s*)?(\d{1,2})(?:[:.]([0-5]\d)|\s*(?:u|uur)(?:\s*([0-5]\d))?)\b/i);
-  if(!dm||!tm)return null;
-  let year=dm[3]?Number(dm[3]):new Date().getFullYear(); if(year<100)year+=2000;
+  if(!dm)return null;
+  // A dotted date is not a clock. Remove the date before looking for a time.
+  const clockText=message.slice(0,dm.index)+" "+message.slice((dm.index||0)+dm[0].length);
+  const tm=clockText.match(/\b(?:om\s*)?(\d{1,2})(?:[:.]([0-9]{1,2})|\s*(?:uur|u)(?:\s*([0-9]{1,2}))?)(?![a-z0-9])/i);
+  if(!tm)return null;
+  const formatter=new Intl.DateTimeFormat("en-GB",{
+    timeZone:"Europe/Brussels",year:"numeric",month:"2-digit",day:"2-digit",
+    hour:"2-digit",minute:"2-digit",hourCycle:"h23"
+  });
+  const parts=(instant:number)=>Object.fromEntries(formatter.formatToParts(new Date(instant))
+    .filter(x=>x.type!=="literal").map(x=>[x.type,Number(x.value)]));
+  const now=Date.now();
+  let year=dm[3]?Number(dm[3]):parts(now).year;if(year<100)year+=2000;
   const month=Number(dm[2]),day=Number(dm[1]),hour=Number(tm[1]),minute=Number(tm[2]||tm[3]||0);
-  if(month<1||month>12||day<1||day>31||hour>23)return null;
-  const pad=(n:number)=>String(n).padStart(2,"0");
-  const wall=year+"-"+pad(month)+"-"+pad(day)+"T"+pad(hour)+":"+pad(minute)+":00";
-  const probe=new Date(wall+"+02:00");
-  if(Number.isNaN(probe.getTime())||probe.getUTCFullYear()!==year||probe.getUTCMonth()+1!==month||probe.getUTCDate()!==day)return null;
-  const lastSunday=(m:number)=>{const d=new Date(Date.UTC(year,m,0));return d.getUTCDate()-d.getUTCDay()};
-  const dstStart=Date.UTC(year,2,lastSunday(3),1),dstEnd=Date.UTC(year,9,lastSunday(10),1),approx=Date.UTC(year,month-1,day,hour,minute);
-  const offset=approx>=dstStart&&approx<dstEnd?"+02:00":"+01:00";
-  const start=new Date(wall+offset); if(start.getTime()<Date.now()+5*60*1000)return null;
-  const end=new Date(start.getTime()+60*60*1000);
+  if(year<1900||year>9999||month<1||month>12||day<1||day>31||hour>23||minute>59)return null;
+  const wall=Date.UTC(year,month-1,day,hour,minute);
+  const probe=new Date(wall);
+  if(probe.getUTCFullYear()!==year||probe.getUTCMonth()+1!==month||probe.getUTCDate()!==day)return null;
+  // Derive the actual offsets around this wall date from the timezone database.
+  // Round-trip every candidate: gaps have no match, overlaps have two matches.
+  const offsets=new Set<number>();
+  for(const delta of [-36,0,36]){
+    const instant=wall+delta*3600000,p=parts(instant);
+    offsets.add(Date.UTC(p.year,p.month-1,p.day,p.hour,p.minute)-instant);
+  }
+  const candidates:number[]=[];
+  for(const offset of offsets){
+    const candidate=wall-offset,p=parts(candidate);
+    if(p.year===year&&p.month===month&&p.day===day&&p.hour===hour&&p.minute===minute)candidates.push(candidate);
+  }
+  if(candidates.length!==1||candidates[0]<now+5*60000)return null;
+  const start=new Date(candidates[0]),end=new Date(candidates[0]+3600000);
   return {start_at:start.toISOString(),end_at:end.toISOString(),timezone:"Europe/Brussels"};
 }
 
