@@ -109,3 +109,18 @@ test('tenant chat gives the provider a Brussels server date without booking data
  assert.match(f.requests[0].system_instruction.parts[0].text,/Huidige datum \(Europe\/Brussels\): vrijdag 1 januari 2027/);
  assert.deepEqual(f.db.appointments,[f.original]);
 });
+
+test('midnight preference reaches a requested appointment with correct UTC time',async()=>{
+ const f=fixture();const r=await f.send('Ik wil een afspraak boeken op 16/01/2030 om 00u30');
+ assert.equal(r.status,200);
+ const a=f.db.appointments.find(x=>x.id===r.body.appointment_id);
+ assert.equal(a.status,'requested');assert.equal(a.start_at,'2030-01-15T23:30:00.000Z');
+ assert.deepEqual(f.db.appointments.find(x=>x.id===f.original.id),f.original);
+});
+for(const message of ['Ik wil een afspraak boeken op 31/03/2030 om 02u30','Ik wil een afspraak boeken op 27/10/2030 om 02u30','Ik wil een afspraak boeken op 16.01.2030'])test('unclear preference remains an unconfirmed text request: '+message,async()=>{
+ const f=fixture();const r=await f.send(message);assert.equal(r.status,200);
+ const a=f.db.appointments.find(x=>x.id===r.body.appointment_id);
+ assert.equal(a.status,'requested');assert.equal(a.start_at,undefined);assert.equal(a.end_at,undefined);
+ assert.equal(a.requested_text,message);
+ assert.deepEqual(f.db.appointments.find(x=>x.id===f.original.id),f.original);
+});
