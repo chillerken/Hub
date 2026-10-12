@@ -170,51 +170,28 @@ Deno.serve(async(req:Request)=>{
       if(ce||!current) return out({error:"Appointment not found"},404);
       if(current.status!=="confirmed") return out({error:"Only a confirmed appointment can be marked completed"},409);
 
-      const {data:unpaid,error:paymentError}=await db.from("customer_payments")
-        .select("id,status,amount_cents,currency")
-        .eq("organization_id",org)
-        .eq("appointment_id",appointmentId)
-        .neq("status","paid")
-        .order("created_at",{ascending:false})
-        .limit(1)
-        .maybeSingle();
-      if(paymentError) throw paymentError;
-      if(unpaid){
-        return out({
-          error:"Appointment has an unpaid payment request",
-          code:"payment_required_before_completion",
-          payment_id:unpaid.id,
-          payment_status:unpaid.status
-        },409);
-      }
-
-      const {data:updated,error}=await guardAppointmentWrite(db.from("appointments")
-        .update({status:"completed",completed_at:new Date().toISOString(),updated_at:new Date().toISOString()})
-        .eq("id",appointmentId).eq("organization_id",org),current)
-        .select("*").maybeSingle();
-      if(error) throw error;
-      if(!updated) return appointmentChanged();
-
-      const {data:wonLead,error:wonErr}=await db.from("leads")
-        .update({status:"won",updated_at:new Date().toISOString()})
-        .eq("id",current.lead_id).eq("organization_id",org)
-        .neq("status","won")
-        .select("id,status").maybeSingle();
-      if(wonErr) throw wonErr;
-      if(wonLead){
-        await db.from("audit_events").insert({
-          organization_id:org,actor_user_id:u.user.id,event_type:"lead.won_from_completed_appointment",
-          entity_type:"lead",entity_id:current.lead_id,
-          payload:{appointment_id:appointmentId}
-        });
-      }
-
-      await db.from("audit_events").insert({
-        organization_id:org,actor_user_id:u.user.id,event_type:"appointment.completed",
-        entity_type:"appointment",entity_id:appointmentId,
-        payload:{completed_at:updated.completed_at}
+      const {data:result,error:completionError}=await db.rpc("complete_reception_appointment",{
+        p_organization_id:org,p_appointment_id:appointmentId,p_actor_user_id:u.user.id,
+        p_expected_updated_at:current.updated_at,p_expected_start_at:current.start_at,
+        p_expected_end_at:current.end_at
       });
-      return out({ok:true,appointment:updated});
+      if(completionError){
+        if(completionError.message==="appointment_changed") return appointmentChanged();
+        if(completionError.message==="operator_not_authorized") return out({error:"Owner or admin role required"},403);
+        if(completionError.message==="appointment_not_found") return out({error:"Appointment not found"},404);
+        if(["PGRST202","42883"].includes(completionError.code)){
+          return out({error:"Atomic appointment completion is not available",code:"atomic_completion_unavailable"},503);
+        }
+        throw completionError;
+      }
+      if(result?.ok===false && result.code==="payment_required_before_completion"){
+        return out({error:"Appointment has an unpaid payment request",...result},409);
+      }
+      if(result?.ok!==true || result.appointment?.id!==appointmentId
+         || result.appointment?.organization_id!==org || result.appointment?.status!=="completed"){
+        return out({error:"Atomic appointment completion returned no verified result"},500);
+      }
+      return out(result);
     }
 
     if(action==="cancel_appointment"){

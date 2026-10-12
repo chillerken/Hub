@@ -1,0 +1,43 @@
+name: Reception AI Atomic Appointment Completion
+on:
+  pull_request:
+    paths:
+      - 'ai-receptionist-host/supabase/functions/operations-admin/**'
+      - 'ai-receptionist-host/supabase/migrations/*atomic_appointment_completion.sql'
+      - 'tests/reception-atomic-completion*'
+      - 'tests/reception-operator-appointment-guard.test.mjs'
+      - '.github/workflows/reception-atomic-completion.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-postgres-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: disposable_test_only
+          POSTGRES_DB: reception_disposable
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d reception_disposable"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: disposable_test_only
+      PGDATABASE: reception_disposable
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned isolated database client
+        run: npm install --prefix "$RUNNER_TEMP/reception-pg" --ignore-scripts --package-lock=false pg@8.23.1
+      - name: Test actual migration, rollback, grants and two-session locking
+        run: RECEPTION_PG_MODULE_ROOT="$RUNNER_TEMP/reception-pg" node --test tests/reception-atomic-completion.pg.mjs
