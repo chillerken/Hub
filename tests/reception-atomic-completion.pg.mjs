@@ -42,6 +42,17 @@ test('legacy separate payment check and completion reproduces unpaid completed s
  assert.equal((await snapshot()).status,'completed');assert.equal((await db.query("SELECT count(*)::int n FROM customer_payments WHERE status='pending'")).rows[0].n,1);
  console.log('REPRODUCED: legacy completion bypasses a newly inserted pending payment');
 });
+test('legacy separate calls retain completion and lead changes after audit failure',async()=>{
+ await db.query("ALTER TABLE audit_events ADD CONSTRAINT fixture_legacy_audit_failure CHECK(event_type<>'appointment.completed')");
+ try{
+  await db.query("UPDATE appointments SET status='completed' WHERE id=$1",[P]);
+  await db.query("UPDATE leads SET status='won' WHERE id=$1",[L]);
+  await assert.rejects(db.query("INSERT INTO audit_events(organization_id,event_type) VALUES($1,'appointment.completed')",[A]),/fixture_legacy_audit_failure/);
+ }finally{await db.query('ALTER TABLE audit_events DROP CONSTRAINT fixture_legacy_audit_failure');}
+ assert.equal((await snapshot()).status,'completed');assert.equal((await db.query('SELECT status FROM leads')).rows[0].status,'won');
+ assert.equal((await db.query('SELECT count(*)::int n FROM audit_events')).rows[0].n,0);
+ console.log('REPRODUCED: legacy audit failure leaves prior completion and lead conversion committed');
+});
 test('authorized completion atomically writes appointment, lead and audits',async()=>{
  await db.query('SET ROLE service_role');try{const r=await complete();assert.equal(r.ok,true);assert.equal(r.appointment.status,'completed');}finally{await db.query('RESET ROLE');}
  assert.equal((await db.query('SELECT status FROM leads')).rows[0].status,'won');
@@ -72,6 +83,10 @@ test('audit failure rolls back appointment and lead conversion',async()=>{
 test('public callers have no RPC execution privilege and search_path is empty',async()=>{
  const signature='public.complete_reception_appointment(uuid,uuid,uuid,timestamptz,timestamptz,timestamptz)';
  for(const role of ['anon','authenticated'])assert.equal((await db.query('SELECT has_function_privilege($1,$2,\'EXECUTE\') yes',[role,signature])).rows[0].yes,false);
+ const row=await snapshot();
+ for(const role of ['anon','authenticated']){
+  await db.query('SET ROLE '+role);try{await assert.rejects(complete(db,row),/permission denied for function complete_reception_appointment/);}finally{await db.query('RESET ROLE');}
+ }
  assert.equal((await db.query('SELECT has_function_privilege(\'service_role\',$1,\'EXECUTE\') yes',[signature])).rows[0].yes,true);
  assert.deepEqual((await db.query("SELECT proconfig FROM pg_proc WHERE proname='complete_reception_appointment'")).rows[0].proconfig,['search_path=""']);
 });
