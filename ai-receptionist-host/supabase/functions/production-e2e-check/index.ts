@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
-const cors={"access-control-allow-origin":"https://ai.luxwash.online","access-control-allow-headers":"authorization, x-client-info, apikey, content-type","access-control-allow-methods":"POST, OPTIONS","vary":"Origin"};
+const cors={"access-control-allow-headers":"authorization, x-client-info, apikey, content-type","access-control-allow-methods":"POST, OPTIONS","vary":"Origin"};
 const json=(b:any,s=200)=>new Response(JSON.stringify(b),{status:s,headers:{"content-type":"application/json","cache-control":"no-store",...cors}});
 
 async function commercialReadiness(req:Request, body:any) {
@@ -83,7 +83,7 @@ async function commercialReadiness(req:Request, body:any) {
  return json({ok:!errorMessage&&cleanup,receipt,...(errorMessage?{error:errorMessage}:{})},errorMessage||!cleanup?502:200);
 }
 
-Deno.serve(async(req:Request)=>{
+async function handleRequest(req:Request){
  const routeBody=await req.clone().json().catch(()=>({}));
  if(routeBody.action==="commercial_readiness")return commercialReadiness(req,routeBody);
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors});
@@ -121,4 +121,20 @@ Deno.serve(async(req:Request)=>{
    receipt.cleaned_up=cleanupOk; return json({ok:verified&&cleanupOk,test_id:testId,receipt});
   }catch(e){ if(body.cleanup===true&&leadId){for(const [table,col,val] of [["workflow_actions","lead_id",leadId],["tasks","lead_id",leadId],["handoffs","lead_id",leadId],["appointments","lead_id",leadId],["messages","conversation_id",conversationId],["conversations","id",conversationId],["leads","id",leadId]] as any[]){if(val){const {error}=await db.from(table).delete().eq(col,val).eq("organization_id",profile.organization_id);if(error)cleanupOk=false;}}} return json({ok:false,test_id:testId,error:String((e as any)?.message||e),cleaned_up:cleanupOk},502);}
  }catch(e){return json({error:"Internal error",detail:String((e as any)?.message||e)},500)}
+}
+
+// Only the existing production dashboards may read this authenticated endpoint.
+const dashboardOrigins=new Set([
+ "https://ai.luxwash.online",
+ "https://reception-ai-luxwash.vercel.app"
+]);
+Deno.serve(async(req:Request)=>{
+ const origin=req.headers.get("origin");
+ if(origin&&!dashboardOrigins.has(origin))return json({error:"Origin not allowed"},403);
+ const headers=new Headers(cors);
+ if(origin)headers.set("access-control-allow-origin",origin);
+ if(req.method==="OPTIONS")return new Response(null,{status:204,headers});
+ const response=await handleRequest(req);
+ for(const [key,value] of headers)response.headers.set(key,value);
+ return response;
 });
