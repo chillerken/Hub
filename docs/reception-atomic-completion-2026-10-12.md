@@ -56,6 +56,20 @@ Data API isolation setting but must be checked in the isolated release acceptanc
   grants/search_path, payment-link validation, snapshot isolation, and both
   two-session orderings. Use CI results to assess this contract.
 
+Final extended acceptance loads 13 existing functions and 16 relevant live
+appointment/payment/lead triggers from the read-only snapshot in
+`tests/fixtures/reception-lifecycle-live-20261012.sql`. Review/retention consent
+and plan gates, outcome timestamps, activation idempotency, sales closure and
+central-sync code are included. `net.http_post` is a test-only SQL capture;
+there are no real network requests or Vault secrets.
+
+CI **38192028878**, job **114626647236**, passes **159/159** handler regressions
+and **20/20** PostgreSQL cases without skips, including rollback of queues,
+activation rows, sales closure and captured sync on an audit error. Initial
+extended CI 38191942287 was 19/20: pg's Date decoder lost timestamp microseconds
+and manufactured a stale-version conflict. Preserving timestamp strings, as
+PostgREST does, fixed the fixture without weakening the production check.
+
 The runner refuses any host other than loopback and any database name other than
 `reception_disposable`. There are no Stripe keys, customer messages or booking calls.
 
