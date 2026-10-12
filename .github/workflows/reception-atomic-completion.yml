@@ -5,6 +5,7 @@ on:
       - 'ai-receptionist-host/supabase/functions/operations-admin/**'
       - 'ai-receptionist-host/supabase/migrations/*atomic_appointment_completion.sql'
       - 'tests/reception-atomic-completion*'
+      - 'tests/fixtures/reception-lifecycle-live-20261012.sql'
       - 'tests/reception-operator-appointment-guard.test.mjs'
       - '.github/workflows/reception-atomic-completion.yml'
   workflow_dispatch:
