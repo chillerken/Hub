@@ -68,7 +68,7 @@ if(isAgendaQuestion){
   }catch(e){console.warn('JARVIS agenda fetch failed',e?.name||'Error');return send({response:'De LuxWash-planning is tijdelijk niet beschikbaar in Reception AI. Ik ga geen afspraken verzinnen.'})}
 }
 const priceQuestion=/\b(prijs|prijzen|tarief|tarieven|kost|kosten|hoeveel|prijslijst|prijskaart)\b/.test(q);
-const refersToLuxWash=/\b(luxwash|luxweg|carwash|detail|auto|interieur|zetel|hoeksalon|hoekbank|bankstel|meubel|stoel|oprit|terras|tuinmeubel|mos|voorrij|verplaatsing)\b/.test(q);
+const refersToLuxWash=/\b(luxwash|luxweg|carwash|detail|auto|sedan|suv|bestelwagen|interieur|clean|combi|premium|zetel|hoekzetel|hoeksalon|hoekbank|bankstel|meubel|stoel|eetkamerstoel|tapijt|matras|oprit|terras|tuinmeubel|mos|voorrij|verplaatsing)\b/.test(q);
 const asksLuxWashPriceList=/\b(prijslijst|alle prijzen|alle tarieven)\b/.test(q)&&!/\b(muse|meta|netflix|software|computer|abonnement)\b/.test(q);
 const isPricingQuestion=priceQuestion&&(refersToLuxWash||asksLuxWashPriceList);
 if(isPricingQuestion){
