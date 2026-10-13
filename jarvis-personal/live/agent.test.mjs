@@ -27,7 +27,14 @@ assert.ok(html.includes('#agent .form{flex-wrap:wrap'),'Agent actions must wrap 
 assert.ok(html.includes('#agent .note p,#agent .note .help'),'Agent long text must wrap');
 assert.ok(!html.includes('vereist/vergen je aandacht'),'Status must read naturally in Dutch');
 
-assert.ok(controller.includes('een bruikbaar stappenplan'),'Planner must produce reviewable steps');
+assert.ok(controller.includes('Antwoord met 3 tot 5 genummerde actie-stappen'),'Planner must produce reviewable steps');
+assert.ok(html.includes('<option value="plan">Actieplan met afvinkbare stappen</option>'),'Dedicated plan type is required');
+assert.ok(controller.includes("byId('agentKind').value='plan'"),'AI-planning must select plan mode, not reminder');
+assert.ok(controller.includes('stepsFromPlan(job.objective)'),'Plan must render individual steps');
+assert.ok(controller.includes("plan_progress:next"),'Ticking a step must persist in Supabase');
+assert.ok(controller.includes("status=eq.queued"),'Checklist must not be writable after closing');
+assert.ok(controller.includes('Plan afgerond'),'Plan completion action missing');
+assert.ok(controller.includes('geen bedrijfsnamen'),'Prospecting prompt must ban invented leads');
 assert.ok(controller.includes('textContent'),'DOM content must be escaped');
 assert.ok(!controller.includes('service_role'),'No privileged secrets in browser');
 assert.ok(!controller.includes('/send-message'),'Do not claim outbound messaging');
