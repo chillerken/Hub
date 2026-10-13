@@ -115,7 +115,7 @@ function post(messages,token='user-owner-jwt'){return {method:'POST',headers:{'C
 const health=await run('/api/health');
 assert.equal(health.status,200);
 const h=await health.json();
-assert.equal(h.version,'1.3.9');assert.equal(h.aiConfigured,true);assert.equal(h.auth,'reception-ai-login');
+assert.equal(h.version,'1.4.0-muse');assert.equal(h.aiConfigured,true);assert.equal(h.auth,'reception-ai-login');
 assert.equal((await run('/api/chat')).status,405);
 assert.equal((await run('/api/chat',{method:'POST',body:'{}'})).status,401);
 assert.equal((await run('/api/chat',post([{role:'user',content:'Dag JARVIS'}],'wrong-jwt'))).status,401);
@@ -243,4 +243,4 @@ assert.equal(invalid.status,503);
 assert.equal((await invalid.json()).code,'DUAL_SOURCE_READ_FAILED');
 missionMode='ok';
 assert.equal((await run('/missing')).status,404);
-console.log('JARVIS v1.3.8 tests OK: JWT auth, admin membership, denied access, AI response, invalid inputs, front-end JS syntax, PWA routes.');
+console.log('JARVIS v1.4.0 Muse smoke tests OK: JWT auth, admin membership, denied access, AI response, invalid inputs, front-end JS syntax, PWA routes.');
