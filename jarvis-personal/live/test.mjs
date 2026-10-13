@@ -3,7 +3,7 @@ import { Script } from 'node:vm';
 import worker from './worker.js';
 
 const userId='test-owner-1',org='09069b87-e02a-471d-977c-e4acd4e383b7';
-let authCalls=0,modelCalls=0;
+let authCalls=0,modelCalls=0,priceCalls=0,pricesUnavailable=false;
 const leadId='11111111-1111-4111-8111-111111111111';
 const dayFmt=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Brussels',year:'numeric',month:'2-digit',day:'2-digit'});
 const localToday=dayFmt.format(new Date());
@@ -12,6 +12,27 @@ const tomorrowStart=new Date(todayStart.getTime()+86400000);
 const appointment=(start,description)=>({id:description,lead_id:leadId,status:'confirmed',organization_id:org,start_at:start.toISOString(),end_at:new Date(start.getTime()+7200000).toISOString(),location:'Locatie '+description,requested_text:description});
 globalThis.fetch=async (input,opts={})=>{
   const u=new URL(input), token=opts.headers?.Authorization;
+  if(u.hostname==='www.luxwash.online'){
+    priceCalls++;assert.equal(u.pathname,'/prijzen');
+    assert.equal(opts.redirect,'manual');
+    if(pricesUnavailable)return new Response('Prijslijst tijdelijk niet bereikbaar',{status:503,headers:{'Content-Type':'text/html'}});
+    const html='<html><body><h1>Prijzen LuxWash</h1>'
+    +'<h2>Clean &amp; Shine — Sedan</h2><p>Handwas exterieur. €59</p>'
+    +'<h2>Clean &amp; Shine — Break/SUV</h2><p>€69</p>'
+    +'<h2>Clean &amp; Shine — Kleine bestelwagen</h2><p>€79</p>'
+    +'<h2>COMBI — INTERIEUR + EXTERIEUR</h2><p>vanaf €109</p>'
+    +'<h2>Premium Mobile Detail — Sedan</h2><p>€149</p>'
+    +'<h2>Premium Mobile Detail — Break/SUV</h2><p>€169</p>'
+    +'<p>Alleen interieur — Sedan €59</p><p>Alleen interieur — Break/SUV €69</p>'
+    +'<p>Alleen interieur — Kleine bestelwagen €79</p>'
+    +'<h2>Opritreiniging</h2><p>vanaf €4,50/m²</p><h2>Terrasreiniging</h2><p>vanaf €5,00/m²</p>'
+    +'<p>Anti-mos nabehandeling vanaf €1,75/m²</p>'
+    +'<p>1-zit zetel vanaf €55</p><p>2-zit zetel vanaf €79</p><p>3-zit zetel vanaf €109</p>'
+    +'<p>Hoekzetel vanaf €149</p><p>Eetkamerstoel vanaf €20/stuk</p>'
+    +'<p>Binnen 10 km Gratis</p><p>10–20 km €10</p><p>20–30 km €20</p>'
+    +'</body></html>';
+    return new Response(html,{status:200,headers:{'Content-Type':'text/html; charset=utf-8'}});
+  }
   assert.equal(u.hostname,'ndecxbsrxspkuxjsbndq.supabase.co');
   assert.ok(opts.headers?.apikey?.startsWith('sb_publishable_'));
   assert.equal(opts.cache,undefined,'Legacy Cloudflare compatibility does not implement fetch cache option');
@@ -115,12 +136,19 @@ assert.ok(tomorrowText.includes('TEST MORGEN'));
 assert.ok(!tomorrowText.includes('TEST VANDAAG'));
 // Official LuxWash tariff snapshot must bypass freeform AI.
 const priceText=(await (await run('/api/chat',post([{role:'user',content:'Wat zijn de prijzen van luxweg?'}]))).json()).response;
-assert.ok(priceText.includes('Clean & Shine sedan €49'));
-assert.ok(priceText.includes('hoekzetel €135'));
+assert.ok(priceText.includes('Clean & Shine sedan: €59'),priceText);
+assert.ok(priceText.includes('Hoekzetel: vanaf €149'),priceText);
 assert.ok(priceText.includes('https://www.luxwash.online/prijzen'));
+assert.ok(!priceText.includes('hoekzetel €135'),'Never return obsolete prices');
 const furniture=(await (await run('/api/chat',post([{role:'user',content:'Wat kost een hoekzetel?'}]))).json()).response;
-assert.ok(furniture.includes('hoekzetel €135'));
+assert.ok(furniture.includes('Hoekzetel: vanaf €149'),furniture);
 assert.ok(!furniture.includes('Clean & Shine'));
+pricesUnavailable=true;
+const inaccessible=(await (await run('/api/chat',post([{role:'user',content:'Wat kost een hoekzetel?'}]))).json()).response;
+assert.ok(inaccessible.includes('geen oude of verzonnen bedragen'),inaccessible);
+assert.ok(!inaccessible.includes('€'),'Never invent a price if the official source is unavailable');
+pricesUnavailable=false;
+assert.equal(priceCalls,3,'Every price answer must fetch the official site again');
 assert.equal(modelCalls,2,'Known schedule and tariff answers must bypass AI');
 assert.equal((await run('/missing')).status,404);
 console.log('JARVIS v1.3.8 tests OK: JWT auth, admin membership, denied access, AI response, invalid inputs, front-end JS syntax, PWA routes.');
