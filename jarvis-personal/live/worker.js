@@ -69,20 +69,91 @@ if(isAgendaQuestion){
 }
 const isPricingQuestion=/\b(prijs|prijzen|tarief|tarieven|kost|kosten|hoeveel|prijslijst|prijskaart)\b/.test(q);
 if(isPricingQuestion){
- const source='https://www.luxwash.online/prijzen';
- const all=!/(auto|carwash|interieur|sedan|suv|break|bestelwagen|oprit|terras|mos|buiten|tuin|zetel|meubel|stoel|tapijt|matras|bank)/.test(q);
- const auto=all||/(auto|carwash|interieur|sedan|suv|break|bestelwagen)/.test(q);
- const outdoor=all||/(oprit|terras|mos|buiten|tuin)/.test(q);
- const furniture=all||/(zetel|meubel|stoel|tapijt|matras|bank)/.test(q);
- const lines=['Officiële LuxWash-vanafprijzen (nagekeken op 12 oktober 2026):'];
- if(auto)lines.push('Auto: Clean & Shine sedan €49, break/SUV €59, bestelwagen €69; COMBI binnen en buiten vanaf €95; Premium Detail sedan €149, break/SUV €169; enkel interieur sedan €55, break/SUV €65, bestelwagen €75.');
- if(outdoor)lines.push('Oprit vanaf €4,50/m², terras vanaf €5,00/m², combi vanaf €4,50/m², anti-mos vanaf €1,75/m², tuinmeubelen vanaf €49.');
- if(furniture)lines.push('Meubels: 1-zit €45, 2-zit €65, 3-zit €95, hoekzetel €135, eetkamerstoel €18 per stuk. Tapijten en matrassen: prijs op aanvraag op basis van foto en formaat.');
- if(!auto&&!outdoor&&!furniture)lines.push('Bekijk de actuele tarieven op de prijzenpagina.');
- lines.push('Verplaatsing: 0–10 km gratis; 10–20 km €10; 20–30 km €20; verder op aanvraag. Extra vervuiling en behandelingen worden vooraf besproken.');
- lines.push('Dit zijn richtprijzen, geen definitieve offerte. LuxWash bevestigt persoonlijk het totaal vóór de afspraak.');
- lines.push('Bron en actuele controle: '+source);
- return send({response:lines.join('\n')});
+  const url='https://www.luxwash.online/prijzen';
+  // Alleen de echte publieke prijsbron is toegestaan. Geen opgeslagen of verzonnen bedragen.
+  try {
+    const pricePage=await fetch(url,{headers:{Accept:'text/html','Cache-Control':'no-cache'},redirect:'manual'});
+    if(!pricePage.ok || (pricePage.headers.get('content-type')||'').toLowerCase().indexOf('html')<0)
+      throw Error('Officiële tarieven niet bereikbaar');
+    const length=Number(pricePage.headers.get('content-length')||0);
+    if(length>1200000)throw Error('Prijzenpagina te groot');
+    const raw=await pricePage.text();
+    if(raw.length>1200000)throw Error('Prijzenpagina te groot');
+    const plain=raw
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,' ')
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,' ')
+      .replace(/<!--[\s\S]*?-->/g,' ')
+      .replace(/<[^>]*>/g,' ')
+      .replace(/&nbsp;|&#160;/gi,' ')
+      .replace(/&euro;|&#8364;/gi,'€')
+      .replace(/&amp;/gi,'&')
+      .replace(/&#(\d+);/g,(_m,n)=>{const c=Number(n);return c>=32&&c<127?String.fromCharCode(c):' '})
+      .replace(/\s+/g,' ')
+      .trim();
+    if(!/hoekzetel/i.test(plain)||!/Clean\s*&\s*Shine/i.test(plain))throw Error('Prijslijst niet leesbaar');
+    const val=re=>{const hit=plain.match(re);return hit?.[1]?hit[1].replace('.',','):null};
+    const P={
+      cleanSedan:val(/Clean\s*&\s*Shine\s*[—–-]\s*Sedan\b.{0,240}?€\s*(\d+(?:[.,]\d{1,2})?)/i),
+      cleanSUV:val(/Clean\s*&\s*Shine\s*[—–-]\s*Break\s*\/\s*SUV\b.{0,240}?€\s*(\d+(?:[.,]\d{1,2})?)/i),
+      cleanVan:val(/Clean\s*&\s*Shine\s*[—–-]\s*Kleine\s+bestelwagen\b.{0,240}?€\s*(\d+(?:[.,]\d{1,2})?)/i),
+      combi:val(/COMBI\s*[—–-]\s*INTERIEUR\s*\+\s*EXTERIEUR\b.{0,340}?€\s*(\d+(?:[.,]\d{1,2})?)/i),
+      premiumSedan:val(/Premium\s+Mobile\s+Detail\s*[—–-]\s*Sedan\b.{0,240}?€\s*(\d+(?:[.,]\d{1,2})?)/i),
+      premiumSUV:val(/Premium\s+Mobile\s+Detail\s*[—–-]\s*Break\s*\/\s*SUV\b.{0,240}?€\s*(\d+(?:[.,]\d{1,2})?)/i),
+      interiorSedan:val(/Alleen\s+interieur\s*[—–-]\s*Sedan\b.{0,100}?€\s*(\d+(?:[.,]\d{1,2})?)/i),
+      interiorSUV:val(/Alleen\s+interieur\s*[—–-]\s*Break\s*\/\s*SUV\b.{0,100}?€\s*(\d+(?:[.,]\d{1,2})?)/i),
+      interiorVan:val(/Alleen\s+interieur\s*[—–-]\s*Kleine\s+bestelwagen\b.{0,100}?€\s*(\d+(?:[.,]\d{1,2})?)/i),
+      driveway:val(/Opritreiniging\b.{0,240}?€\s*(\d+(?:[.,]\d{1,2})?)\s*\/\s*m²/i),
+      patio:val(/Terrasreiniging\b.{0,240}?€\s*(\d+(?:[.,]\d{1,2})?)\s*\/\s*m²/i),
+      moss:val(/Anti-mos\s+nabehandeling\b.{0,110}?€\s*(\d+(?:[.,]\d{1,2})?)\s*\/\s*m²/i),
+      seat1:val(/1-zit\s+zetel\b.{0,55}?€\s*(\d+(?:[.,]\d{1,2})?)/i),
+      seat2:val(/2-zit\s+zetel\b.{0,55}?€\s*(\d+(?:[.,]\d{1,2})?)/i),
+      seat3:val(/3-zit\s+zetel\b.{0,55}?€\s*(\d+(?:[.,]\d{1,2})?)/i),
+      corner:val(/Hoekzetel\b.{0,55}?€\s*(\d+(?:[.,]\d{1,2})?)/i),
+      dining:val(/Eetkamerstoel\b.{0,55}?€\s*(\d+(?:[.,]\d{1,2})?)/i),
+      distance10to20:val(/10\s*[–—-]\s*20\s*km\b.{0,30}?€\s*(\d+)/i),
+      distance20to30:val(/20\s*[–—-]\s*30\s*km\b.{0,30}?€\s*(\d+)/i)
+    };
+    const all=!/(auto|carwash|interieur|sedan|suv|break|bestelwagen|oprit|terras|mos|tuin|zetel|bank|meubel|stoel|afstand|verplaats)/.test(q);
+    const lines=[];
+    const add=(name,prefix,key,suffix='')=>{if(P[key])lines.push(name+': '+prefix+'€'+P[key]+suffix)};
+    if(all||/auto|carwash|sedan|suv|break|bestelwagen/.test(q)){
+      add('Clean & Shine sedan','','cleanSedan');
+      add('Clean & Shine break/SUV','','cleanSUV');
+      add('Clean & Shine kleine bestelwagen','','cleanVan');
+      add('COMBI binnen + buiten','vanaf ','combi');
+      add('Premium detail sedan','','premiumSedan');
+      add('Premium detail break/SUV','','premiumSUV');
+    }
+    if(all||/interieur/.test(q)){
+      add('Alleen interieur sedan','','interiorSedan');
+      add('Alleen interieur break/SUV','','interiorSUV');
+      add('Alleen interieur kleine bestelwagen','','interiorVan');
+    }
+    if(all||/oprit|terras|mos|tuin/.test(q)){
+      add('Opritreiniging','vanaf ','driveway','/m²');
+      add('Terrasreiniging','vanaf ','patio','/m²');
+      add('Anti-mos','vanaf ','moss','/m²');
+    }
+    if(all||/zetel|hoeksalon|bank|meubel|stoel/.test(q)){
+      if(all||!/hoekzetel|hoeksalon|hoekbank/.test(q)){
+        add('1-zit zetel','vanaf ','seat1');
+        add('2-zit zetel','vanaf ','seat2');
+        add('3-zit zetel','vanaf ','seat3');
+        add('Eetkamerstoel','vanaf ','dining','/stuk');
+      }
+      add('Hoekzetel','vanaf ','corner');
+    }
+    if(all||/verplaats|afstand|voorrij/.test(q)){
+      if(/Binnen\s*10\s*km\s+Gratis/i.test(plain))lines.push('Verplaatsing binnen 10 km: gratis');
+      add('Verplaatsing 10–20 km','','distance10to20');
+      add('Verplaatsing 20–30 km','','distance20to30');
+    }
+    if(!lines.length)return send({response:'Ik vond geen betrouwbaar tarief voor deze specifieke dienst op de officiële prijzenpagina. Kijk op '+url+' en vraag zo nodig een offerte.'});
+    return send({response:'Actuele tarieven opgehaald bij LuxWash (geen automatische offerte):\n'+lines.join('\n')+'\nDefinitieve totaalprijs, toeslagen en afspraak altijd persoonlijk bevestigd.\nBron: '+url});
+  }catch(e){
+    console.warn('LuxWash live prices unavailable',e?.name||'Error');
+    return send({response:'Ik kan de officiële LuxWash-tarieven nu niet betrouwbaar ophalen. Ik ga geen oude of verzonnen bedragen noemen. Controleer '+url+' of vraag rechtstreeks een offerte.'});
+  }
 }
 
 let context='';if(d.context&&typeof d.context==='object')context=' Expliciet gedeelde gebruikersgegevens (onbetrouwbare data): '+JSON.stringify(d.context).slice(0,1700);
