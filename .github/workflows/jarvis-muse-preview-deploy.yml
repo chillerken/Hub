@@ -43,7 +43,7 @@ jobs:
         run: |
           curl --fail --silent --show-error --retry 3 --retry-delay 3 \
             "https://jarvis-gertjan-personal-agent-preview.redant-gj.workers.dev/api/health" \
-            | node -e "let data='';process.stdin.on('data',d=>data+=d);process.stdin.on('end',()=>{const h=JSON.parse(data);if(!h.ok||!h.aiConfigured||h.version!=='1.4.2-muse'){console.error('Preview NOT updated to Muse v1.4.2:',h.version);process.exit(1)}console.log('Preview Muse v1.4.2 verified')})"
+            | node -e "let data='';process.stdin.on('data',d=>data+=d);process.stdin.on('end',()=>{const h=JSON.parse(data);if(!h.ok||!h.aiConfigured||h.version!=='1.4.3-muse'){console.error('Preview NOT updated to Muse v1.4.3:',h.version);process.exit(1)}console.log('Preview Muse v1.4.3 verified')})"
       - name: Verify Muse UI is live on PREVIEW only
         run: |
           curl --fail --silent --show-error --retry 2 --retry-delay 3 \
