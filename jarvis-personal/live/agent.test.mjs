@@ -55,8 +55,19 @@ assert.ok(controller.includes("status:'pending_approval'"),'Mission must stage p
 assert.ok(controller.includes('resolution=ignore-duplicates'),'Repeated analysis must avoid duplicate tasks');
 assert.ok(controller.includes("crypto.subtle.digest('SHA-256'"),'Mission keys must be deterministic');
 assert.ok(controller.includes('missionRequestId'),'Mission idempotency missing');
-assert.ok(controller.includes("latestMission.plan.slice(0,3)"),'Limit auto staged tasks');
-assert.ok(controller.includes('geen acties uitgevoerd'),'Never overclaim outbound execution');
+assert.ok(controller.includes("slice(0,3)"),'Max three approval-gated tasks');
+assert.ok(controller.includes("source==='luxwash_crm'"),'Only verified CRM proposals may be staged');
+assert.ok(controller.includes("missionCrmToken!==crmJwt()"),'Staging must check unchanged CRM session');
+assert.ok(controller.includes('nog niets uitgevoerd of verzonden'),'Never overclaim outbound execution');
 assert.ok(!controller.includes("service_role"),'Never expose service role in agent controller');
+
+
+assert.ok(html.includes('id="jarvisMissionCRMLogin"'),'Dedicated CRM login link missing');
+assert.ok(html.includes('id="jarvisMissionCRMMetrics"'),'Separate CRM figures missing');
+assert.ok(controller.includes('window.JarvisCRMAuth?.token?.()'),'CRM must require its own login token');
+assert.ok(html.includes("authSessions={reception:'',crm:''}"),'Independent logins must remain in volatile memory only');
+assert.ok(html.includes("authSessions.reception='';authSessions.crm=''"),'Logout must revoke both local sessions');
+assert.ok(controller.includes("['Interne/demo eruit'"),'Internal demo filtering must be visible');
+assert.ok(controller.includes('Bron: LuxWash CRM'),'Every prospect must show data provenance');
 
 console.log('JARVIS agent smoke tests passed: HTML, JS syntax, approvals, storage, audit, draft workflow, no outbound.');
