@@ -23,3 +23,5 @@ jobs:
         run: node jarvis-personal/live/test.mjs
       - name: Check agent UI and approval gating (offline only)
         run: node jarvis-personal/live/agent.test.mjs
+      - name: Check Muse daily brief, source separation and confirmation (offline only)
+        run: node jarvis-personal/live/muse.test.mjs
