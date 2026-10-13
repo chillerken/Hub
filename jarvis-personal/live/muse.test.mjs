@@ -56,6 +56,9 @@ const receptionTasks=[
  {id:'88888888-8888-4888-8888-888888888888',title:'Klant opvolgen',status:'queued',kind:'reminder'}
 ];
 const handlers=new Map(),nodes=new Map(),calls=[],saves=[],externalRequests=[],spoken=[];
+const navState={active:'agent',crmMode:'reception'};
+const navButton={click(){navState.active='luxwash'}};
+const taskNavButton={click(){navState.active='tasks'}};
 let refreshed=0;
 const node=(tag='div',content='')=>({
  tag,textContent:String(content??''),className:'',disabled:false,hidden:false,children:[],listeners:{},value:'',
@@ -124,13 +127,23 @@ const call=async (path,opts={})=>{
 const listeners={};
 const fakeWindow={
  JarvisPersonal:{snapshot:()=>({open:2,dueSoon:1,notes:4,source:'local_device_only'})},
- addEventListener:(event,cb)=>{listeners[event]=cb;},
+ JarvisAuth:{token:()=>receptionToken},
+ addEventListener:(event,cb)=>{(listeners[event]??=[]).push(cb);},
+ dispatchEvent:(event)=>{for(const cb of listeners[event.type]||[])cb(event);},
  speechSynthesis:{cancel(){},speak:u=>spoken.push(u.text)},
  JarvisNative:{speak:s=>spoken.push(s)}
 };
+byId('lwShowCrm').click=()=>{
+ navState.crmMode='crm';
+ fakeWindow.dispatchEvent({type:'jarvis-auth-changed'});
+};
 const sandbox={
  byId,item:node,jwt:()=>receptionToken,crmJwt:()=>crmToken,window:fakeWindow,
- document:{querySelector:()=>({click(){}})},
+ document:{querySelector:(selector)=>{
+  if(selector==='nav button[data-tab="luxwash"]')return navButton;
+  if(selector==='button[data-tab="tasks"]')return taskNavButton;
+  return null;
+ }},
  owner:async()=>ownerId,call,refresh:async()=>{refreshed++},
  missionRequestId:async()=> '99999999-9999-8999-8999-999999999999',
  ORG:'09069b87-e02a-471d-977c-e4acd4e383b7',
@@ -140,6 +153,18 @@ const sandbox={
 };
 runInNewContext(museCode+'\nthis.museTestHooks={museRun,museSelect,museCommit,museAi,museFindings,clear:museClear,snapshot:()=>museSnapshot};',sandbox,{filename:'muse-control.js'});
 const hooks=sandbox.museTestHooks;
+assert.equal(typeof handlers.get('museRun.click'),'function');
+// Execute the actual authenticated-mode notification listener from the JARVIS
+// navigation script: opening CRM must not switch to Assistent.
+const navScript=scripts[0];
+const authStart=navScript.indexOf('let lastReceptionAuthForAI=');
+const authEnd=navScript.indexOf("$('export').onclick=",authStart);
+assert.ok(authStart>=0&&authEnd>authStart,'Could not locate real reception auth-navigation handler');
+let renderCalls=0,notices=[];
+runInNewContext(navScript.slice(authStart,authEnd),{
+ window:fakeWindow,render:()=>{renderCalls++},notice:x=>notices.push(x),
+ $:id=>byId(id),aiVerified:true,aiError:'',console
+},{filename:'auth-navigation.js'});
 assert.equal(typeof handlers.get('museRun.click'),'function');
 
 crmToken='';
@@ -164,8 +189,15 @@ assert.ok(snap.actions.some(x=>x.kind==='personal'));
 assert.ok(snap.actions.some(x=>x.kind==='followup'&&x.id===leadId));
 assert.ok(byId('musePriorities').children.length>=4);
 assert.equal(saves.length,0,'Analysis must be read-only');
+assert.equal(navState.active,'agent');
 hooks.museSelect(snap.actions.find(x=>x.kind==='hygiene'));
+assert.equal(navState.active,'luxwash','The Open CRM button must land on the LuxWash tab, not Assistent');
+assert.equal(navState.crmMode,'crm','The Open CRM button must activate CRM, not Reception AI');
+assert.equal(byId('lwMuseStalePanel').hidden,false,'MUSE must show stale follow-ups inside LuxWash CRM');
+assert.equal(byId('lwMuseStaleList').children.length,1,'Stale contact listing must contain actual sourced lead');
+assert.ok(byId('lwMuseStaleList').children[0].children.some(x=>String(x.textContent).includes('Garage Met Oude Datum')));
 assert.equal(saves.length,0,'CRM hygiene shortcut must not stage outreach or write data');
+assert.equal(renderCalls,0,'Switching CRM mode must not trigger an unnecessary assistant rerender');
 
 hooks.museSelect(snap.actions.find(x=>x.kind==='error'));
 assert.equal(byId('museConfirm').hidden,false,'First click must show visible user confirmation');
@@ -197,8 +229,8 @@ assert.ok(externalRequests.filter(x=>x.url.endsWith('/api/chat')).length===1);
 assert.ok(!externalRequests.some(x=>x.url.includes('/send-message')),'Never send WhatsApp');
 
 crmToken='eyJ-different-login';
-listeners['jarvis-auth-changed']();
+fakeWindow.dispatchEvent({type:'jarvis-auth-changed'});
 assert.equal(hooks.snapshot(),null,'Logout or account change must invalidate stale Muse results');
 assert.ok(byId('museStatus').textContent.includes('Vernieuw'));
 
-console.log('MUSE integration tests OK: live-source snapshot, stale CRM deadline detection, no duplicate outreach, revalidation, approval/readback, AI and dual login.');
+console.log('MUSE integration tests OK: CRM navigation stays on LuxWash, actual stale lead listing visible, no forced Assistent tab, dual auth protection, lead freshness and no outbound.');
