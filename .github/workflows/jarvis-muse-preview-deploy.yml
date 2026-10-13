@@ -1,5 +1,6 @@
 name: Deploy JARVIS Muse Preview
 on:
+  workflow_dispatch:
   push:
     branches: ['feature/jarvis-muse-agent-v1']
     paths:
@@ -21,20 +22,17 @@ jobs:
           node jarvis-personal/live/test.mjs
           node jarvis-personal/live/agent.test.mjs
           node jarvis-personal/live/muse.test.mjs
-      - name: Verify Cloudflare preview deployment credentials are present
-        id: authorize
+      - name: Require Cloudflare preview deployment credentials
         env:
           CF_DEPLOY_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          if [ -n "$CF_DEPLOY_TOKEN" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "A Cloudflare preview deploy credential is configured."
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Preview deploy skipped: CLOUDFLARE_API_TOKEN secret not configured in this repository."
+          if [ -z "$CF_DEPLOY_TOKEN" ]; then
+            echo "::error::NOT DEPLOYED: Add the CLOUDFLARE_API_TOKEN Actions secret in GitHub repository Settings. No production changes were made."
+            exit 1
           fi
+          echo "Cloudflare preview deployment credential configured (value hidden)."
+
       - name: Deploy ONLY jarvis-gertjan-personal-agent-preview
-        if: steps.authorize.outputs.enabled == 'true'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -42,8 +40,13 @@ jobs:
           workingDirectory: jarvis-personal/live
           command: deploy --config wrangler.preview.toml
       - name: Check preview Worker health after deployment
-        if: steps.authorize.outputs.enabled == 'true'
         run: |
           curl --fail --silent --show-error --retry 3 --retry-delay 3 \
             "https://jarvis-gertjan-personal-agent-preview.redant-gj.workers.dev/api/health" \
-            | node -e "let data='';process.stdin.on('data',d=>data+=d);process.stdin.on('end',()=>{const h=JSON.parse(data);if(!h.ok||!h.aiConfigured)process.exit(1);console.log('Preview health OK',h.version)})"
+            | node -e "let data='';process.stdin.on('data',d=>data+=d);process.stdin.on('end',()=>{const h=JSON.parse(data);if(!h.ok||!h.aiConfigured||h.version!=='1.4.0-muse'){console.error('Preview NOT updated to Muse v1.4.0:',h.version);process.exit(1)}console.log('Preview Muse v1.4.0 verified')})"
+      - name: Verify Muse UI is live on PREVIEW only
+        run: |
+          curl --fail --silent --show-error --retry 2 --retry-delay 3 \
+            "https://jarvis-gertjan-personal-agent-preview.redant-gj.workers.dev/" \
+            | grep -Fq 'MUSE Dagcentrum'
+          echo "MUSE Dagcentrum verified in preview HTML."
