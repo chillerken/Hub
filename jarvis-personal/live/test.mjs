@@ -3,7 +3,7 @@ import { Script } from 'node:vm';
 import worker from './worker.js';
 
 const userId='6574c619-8dad-4e79-872a-18e53d4f5277',org='09069b87-e02a-471d-977c-e4acd4e383b7';
-let authCalls=0,modelCalls=0,priceCalls=0,pricesUnavailable=false,missionCalls=0,missionMode='ok';
+let authCalls=0,modelCalls=0,priceCalls=0,pricesUnavailable=false,missionCalls=0,crmReads=0,missionMode='ok';
 const leadId='11111111-1111-4111-8111-111111111111';
 const dayFmt=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Brussels',year:'numeric',month:'2-digit',day:'2-digit'});
 const localToday=dayFmt.format(new Date());
@@ -33,6 +33,33 @@ globalThis.fetch=async (input,opts={})=>{
     +'</body></html>';
     return new Response(html,{status:200,headers:{'Content-Type':'text/html; charset=utf-8'}});
   }
+
+  if(u.hostname==='nahwlhptgdkwhjcfkhkt.supabase.co'){
+    crmReads++;assert.ok(opts.headers?.apikey?.startsWith('sb_publishable_'));
+    assert.equal(opts.redirect,'manual');
+    if(u.pathname==='/auth/v1/user'){
+      if(token==='Bearer eyJ-crm-owner-token'||token==='Bearer eyJ-crm-reader-token')
+        return Response.json({id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'});
+      return Response.json({message:'unauthorized'},{status:401});
+    }
+    if(u.pathname==='/rest/v1/luxwash_app_members')
+      return Response.json([{user_id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        role:token==='Bearer eyJ-crm-reader-token'?'visitor':'owner',active:true}]);
+    if(u.pathname==='/rest/v1/leads'){
+      assert.equal(token,'Bearer eyJ-crm-owner-token');
+      return Response.json([
+        {id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',company:'Garage Testgenoot',city:'Aalst',source:'internal_test',
+          is_test:true,pipeline_stage:'new',commercial_score:99},
+        {id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',company:'Garage Extern',city:'Lede',source:'luxscout',
+          is_test:false,pipeline_stage:'new',commercial_score:78,opted_out:false,consent_basis:null},
+        {id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',company:'Garage Al Gebeld',city:'Wetteren',source:'luxscout',
+          is_test:false,pipeline_stage:'email_sent',commercial_score:85,opted_out:false,last_outbound_at:'2026-10-01T09:00:00Z'},
+        {id:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',company:'Garage Uitgeschreven',city:'Aalst',source:'luxscout',
+          is_test:false,pipeline_stage:'new',opted_out:true,commercial_score:100}
+      ]);
+    }
+    throw Error('Unexpected CRM route '+u.pathname);
+  }
   assert.equal(u.hostname,'ndecxbsrxspkuxjsbndq.supabase.co');
   assert.ok(opts.headers?.apikey?.startsWith('sb_publishable_'));
   assert.equal(opts.cache,undefined,'Legacy Cloudflare compatibility does not implement fetch cache option');
@@ -49,13 +76,10 @@ globalThis.fetch=async (input,opts={})=>{
     if(token==='Bearer user-owner-jwt')return Response.json([{user_id:userId,organization_id:org,active:true,role:'owner'}]);
     if(token==='Bearer user-reader-jwt')return Response.json([{user_id:'11111111-1111-4111-8111-111111111111',organization_id:org,active:true,role:'reader'}]);
   }
-  if(u.pathname==='/functions/v1/jarvis-orchestrator'){
-    missionCalls++;assert.equal(opts.method,'POST');
-    assert.equal(token,'Bearer user-owner-jwt');
-    assert.equal(opts.body,'{}');
-    if(missionMode==='http')return Response.json({error:'upstream_unavailable'},{status:503});
-    if(missionMode==='invalid')return Response.json({ok:true,plan:'not an array',stats:null});
-    return Response.json({ok:true,summary:'Echte Reception AI-gegevens gecontroleerd (testresponse)',stats:{leads:2,open_tasks:1},plan:[{agent:'Lead Agent',priority:'high',action:'Controleer opvolging',reason:'1 open taak'}]});
+  if(u.pathname==='/functions/v1/jarvis-orchestrator')throw Error('Old orchestrator must not feed lead recommendations');
+  if(u.pathname==='/rest/v1/tasks'){
+    assert.equal(u.searchParams.get('organization_id'),'eq.'+org);
+    return Response.json([{id:'abababab-abab-4aba-8aba-abababababab',status:'open'}]);
   }
   if(u.pathname==='/rest/v1/appointments'){
     assert.equal(u.searchParams.get('organization_id'),'eq.'+org);
@@ -64,7 +88,20 @@ globalThis.fetch=async (input,opts={})=>{
   }
   if(u.pathname==='/rest/v1/leads'){
     assert.equal(u.searchParams.get('organization_id'),'eq.'+org);
-    return Response.json([{id:leadId,name:'Voorbeeldklant'}]);
+    const isMission=u.searchParams.get('select')?.includes('contact_consent_at');
+    if(!isMission)return Response.json([{id:leadId,name:'Voorbeeldklant'}]);
+    missionCalls++;
+    if(missionMode==='http')return Response.json({error:'upstream_failed'},{status:503});
+    if(missionMode==='invalid')return Response.json({error:'not_an_array'});
+    return Response.json([
+      {id:'11111111-1111-4111-8111-111111111111',name:'Gert-Jan',email:'info@luxwash.online',
+        source:'reception_ai_sales',status:'follow_up',score:90,summary:'Bedrijf: Luxwash',
+        contact_consent_at:'2026-10-12T10:00:00Z'},
+      {id:'22222222-2222-4222-8222-222222222222',name:'Immo Echt',source:'reception_ai_outbound_research',
+        status:'qualified',score:85,email:'',phone:'',contact_consent_at:null},
+      {id:'33333333-3333-4333-8333-333333333333',name:'Websitebezoeker',source:'web_chat',
+        status:'qualifying',score:80,contact_consent_at:null}
+    ]);
   }
   throw Error('Unexpected auth path');
 };
@@ -163,25 +200,47 @@ assert.equal(priceCalls,3,'Unrelated price question must never fetch LuxWash tar
 assert.equal(modelCalls,3,'Known schedule and LuxWash tariff answers bypass AI, unrelated prices do not');
 
 assert.equal((await run('/api/mission')).status,405,'Mission is POST only');
-assert.equal((await run('/api/mission',{method:'POST',body:'{}'})).status,401,'Missing JWT denied');
-assert.equal((await run('/api/mission',{method:'POST',headers:{Authorization:'Bearer wrong-jwt'},body:'{}'})).status,401,'Invalid JWT denied');
-assert.equal((await run('/api/mission',{method:'POST',headers:{Authorization:'Bearer user-reader-jwt'},body:'{}'})).status,403,'Non-admin cannot call mission');
-assert.equal(missionCalls,0,'No upstream mission call before owner authorization');
-const missionSuccess=await run('/api/mission',{method:'POST',headers:{Authorization:'Bearer user-owner-jwt','Content-Type':'application/json'},body:'{}'});
-assert.equal(missionSuccess.status,200);
-const missionData=await missionSuccess.json();
-assert.equal(missionData.ok,true);
-assert.equal(missionData.plan[0].action,'Controleer opvolging');
-assert.equal(missionData.stats.leads,2);
-assert.equal(missionCalls,1,'Calls fixed orchestrator only for authenticated owner');
+assert.equal((await run('/api/mission',{method:'POST',body:'{}'})).status,401,'Missing Reception JWT denied');
+assert.equal((await run('/api/mission',{method:'POST',headers:{Authorization:'Bearer wrong-jwt'},body:'{}'})).status,401,'Invalid Reception JWT denied');
+assert.equal((await run('/api/mission',{method:'POST',headers:{Authorization:'Bearer user-reader-jwt'},body:'{}'})).status,403,'Reception non-admin cannot read Mission Control');
+assert.equal(missionCalls,0,'No DB reads before owner authorization');
+const missionOptions=(crm)=>({method:'POST',headers:{Authorization:'Bearer user-owner-jwt',
+  ...(crm?{'X-Luxwash-Crm-Token':crm}:{})},body:'{}'});
+const receptionOnly=await run('/api/mission',missionOptions());
+assert.equal(receptionOnly.status,200);
+const receptionData=await receptionOnly.json();
+assert.equal(receptionData.ok,true);
+assert.equal(receptionData.reception.total,3);
+assert.equal(receptionData.reception.excluded_internal,1,'Own Reception demo must not be treated as customer lead');
+assert.equal(receptionData.reception.warm,1,'Anonymous widget lead does not count as a warm B2B prospect');
+assert.equal(receptionData.reception.actionable,0);
+assert.equal(receptionData.crm.connected,false,'Real LuxWash CRM is not silently read');
+assert.equal(receptionData.plan.length,0,'No cross-source verified proposals when CRM is disconnected');
+assert.equal(crmReads,0,'No CRM subrequests without separate CRM authorization');
+assert.equal((await run('/api/mission',missionOptions('invalid-crm-token'))).status,401,'Reject invalid CRM token');
+const deniedCRM=await run('/api/mission',missionOptions('eyJ-crm-reader-token'));
+assert.equal(deniedCRM.status,403,'Only active CRM staff may read');
+const crmResponse=await run('/api/mission',missionOptions('eyJ-crm-owner-token'));
+assert.equal(crmResponse.status,200);
+const linked=await crmResponse.json();
+assert.equal(linked.crm.connected,true);
+assert.equal(linked.crm.stats.total,4);
+assert.equal(linked.crm.stats.excluded_internal,1,'Test CRM lead excluded');
+assert.equal(linked.crm.stats.opted_out,1,'Opt-out observed');
+assert.equal(linked.crm.stats.not_contacted,1,'Already contacted and opted-out leads excluded');
+assert.equal(linked.plan.length,1);
+assert.equal(linked.plan[0].lead_id,'cccccccc-cccc-4ccc-8ccc-cccccccccccc');
+assert.equal(linked.plan[0].source,'luxwash_crm');
+assert.ok(linked.plan[0].reason.includes('contactbasis nog te controleren'));
+assert.ok(!JSON.stringify(linked).includes('info@luxwash.online'),'Own email should never be echoed');
 missionMode='http';
-const failed=await run('/api/mission',{method:'POST',headers:{Authorization:'Bearer user-owner-jwt'},body:'{}'});
+const failed=await run('/api/mission',missionOptions());
 assert.equal(failed.status,503);
-assert.equal((await failed.json()).code,'ORCHESTRATOR_HTTP_503');
+assert.equal((await failed.json()).code,'DUAL_SOURCE_READ_FAILED');
 missionMode='invalid';
-const invalid=await run('/api/mission',{method:'POST',headers:{Authorization:'Bearer user-owner-jwt'},body:'{}'});
-assert.equal(invalid.status,502);
-assert.equal((await invalid.json()).code,'INVALID_ORCHESTRATOR_RESPONSE');
+const invalid=await run('/api/mission',missionOptions());
+assert.equal(invalid.status,503);
+assert.equal((await invalid.json()).code,'DUAL_SOURCE_READ_FAILED');
 missionMode='ok';
 assert.equal((await run('/missing')).status,404);
 console.log('JARVIS v1.3.8 tests OK: JWT auth, admin membership, denied access, AI response, invalid inputs, front-end JS syntax, PWA routes.');
