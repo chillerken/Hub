@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { Script } from 'node:vm';
 import worker from './worker.js';
 
-const userId='test-owner-1',org='09069b87-e02a-471d-977c-e4acd4e383b7';
-let authCalls=0,modelCalls=0,priceCalls=0,pricesUnavailable=false;
+const userId='6574c619-8dad-4e79-872a-18e53d4f5277',org='09069b87-e02a-471d-977c-e4acd4e383b7';
+let authCalls=0,modelCalls=0,priceCalls=0,pricesUnavailable=false,missionCalls=0,missionMode='ok';
 const leadId='11111111-1111-4111-8111-111111111111';
 const dayFmt=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Brussels',year:'numeric',month:'2-digit',day:'2-digit'});
 const localToday=dayFmt.format(new Date());
@@ -41,13 +41,21 @@ globalThis.fetch=async (input,opts={})=>{
   authCalls++;
   if(u.pathname==='/auth/v1/user'){
     if(token==='Bearer user-owner-jwt')return Response.json({id:userId});
-    if(token==='Bearer user-reader-jwt')return Response.json({id:'test-reader-2'});
+    if(token==='Bearer user-reader-jwt')return Response.json({id:'11111111-1111-4111-8111-111111111111'});
     return Response.json({message:'unauthorized'},{status:401});
   }
   if(u.pathname==='/rest/v1/memberships'){
     assert.equal(u.searchParams.get('organization_id'),'eq.'+org);
     if(token==='Bearer user-owner-jwt')return Response.json([{user_id:userId,organization_id:org,active:true,role:'owner'}]);
-    if(token==='Bearer user-reader-jwt')return Response.json([{user_id:'test-reader-2',organization_id:org,active:true,role:'reader'}]);
+    if(token==='Bearer user-reader-jwt')return Response.json([{user_id:'11111111-1111-4111-8111-111111111111',organization_id:org,active:true,role:'reader'}]);
+  }
+  if(u.pathname==='/functions/v1/jarvis-orchestrator'){
+    missionCalls++;assert.equal(opts.method,'POST');
+    assert.equal(token,'Bearer user-owner-jwt');
+    assert.equal(opts.body,'{}');
+    if(missionMode==='http')return Response.json({error:'upstream_unavailable'},{status:503});
+    if(missionMode==='invalid')return Response.json({ok:true,plan:'not an array',stats:null});
+    return Response.json({ok:true,summary:'Echte Reception AI-gegevens gecontroleerd (testresponse)',stats:{leads:2,open_tasks:1},plan:[{agent:'Lead Agent',priority:'high',action:'Controleer opvolging',reason:'1 open taak'}]});
   }
   if(u.pathname==='/rest/v1/appointments'){
     assert.equal(u.searchParams.get('organization_id'),'eq.'+org);
@@ -153,5 +161,27 @@ const personalPrice=(await (await run('/api/chat',post([{role:'user',content:'Wa
 assert.ok(personalPrice.includes('Dag! AI antwoordt.'),'Personal cost queries must reach the AI rather than LuxWash tariffs');
 assert.equal(priceCalls,3,'Unrelated price question must never fetch LuxWash tariffs');
 assert.equal(modelCalls,3,'Known schedule and LuxWash tariff answers bypass AI, unrelated prices do not');
+
+assert.equal((await run('/api/mission')).status,405,'Mission is POST only');
+assert.equal((await run('/api/mission',{method:'POST',body:'{}'})).status,401,'Missing JWT denied');
+assert.equal((await run('/api/mission',{method:'POST',headers:{Authorization:'Bearer wrong-jwt'},body:'{}'})).status,401,'Invalid JWT denied');
+assert.equal((await run('/api/mission',{method:'POST',headers:{Authorization:'Bearer user-reader-jwt'},body:'{}'})).status,403,'Non-admin cannot call mission');
+assert.equal(missionCalls,0,'No upstream mission call before owner authorization');
+const missionSuccess=await run('/api/mission',{method:'POST',headers:{Authorization:'Bearer user-owner-jwt','Content-Type':'application/json'},body:'{}'});
+assert.equal(missionSuccess.status,200);
+const missionData=await missionSuccess.json();
+assert.equal(missionData.ok,true);
+assert.equal(missionData.plan[0].action,'Controleer opvolging');
+assert.equal(missionData.stats.leads,2);
+assert.equal(missionCalls,1,'Calls fixed orchestrator only for authenticated owner');
+missionMode='http';
+const failed=await run('/api/mission',{method:'POST',headers:{Authorization:'Bearer user-owner-jwt'},body:'{}'});
+assert.equal(failed.status,503);
+assert.equal((await failed.json()).code,'ORCHESTRATOR_HTTP_503');
+missionMode='invalid';
+const invalid=await run('/api/mission',{method:'POST',headers:{Authorization:'Bearer user-owner-jwt'},body:'{}'});
+assert.equal(invalid.status,502);
+assert.equal((await invalid.json()).code,'INVALID_ORCHESTRATOR_RESPONSE');
+missionMode='ok';
 assert.equal((await run('/missing')).status,404);
 console.log('JARVIS v1.3.8 tests OK: JWT auth, admin membership, denied access, AI response, invalid inputs, front-end JS syntax, PWA routes.');
