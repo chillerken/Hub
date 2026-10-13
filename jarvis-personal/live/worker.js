@@ -67,7 +67,10 @@ if(isAgendaQuestion){
     return send({response:intro+'\nBron: Reception AI; volledige Google Agenda nog niet gekoppeld.'});
   }catch(e){console.warn('JARVIS agenda fetch failed',e?.name||'Error');return send({response:'De LuxWash-planning is tijdelijk niet beschikbaar in Reception AI. Ik ga geen afspraken verzinnen.'})}
 }
-const isPricingQuestion=/\b(prijs|prijzen|tarief|tarieven|kost|kosten|hoeveel|prijslijst|prijskaart)\b/.test(q);
+const priceQuestion=/\b(prijs|prijzen|tarief|tarieven|kost|kosten|hoeveel|prijslijst|prijskaart)\b/.test(q);
+const refersToLuxWash=/\b(luxwash|luxweg|carwash|detail|auto|interieur|zetel|hoeksalon|hoekbank|bankstel|meubel|stoel|oprit|terras|tuinmeubel|mos|voorrij|verplaatsing)\b/.test(q);
+const asksLuxWashPriceList=/\b(prijslijst|alle prijzen|alle tarieven)\b/.test(q)&&!/\b(muse|meta|netflix|software|computer|abonnement)\b/.test(q);
+const isPricingQuestion=priceQuestion&&(refersToLuxWash||asksLuxWashPriceList);
 if(isPricingQuestion){
   const url='https://www.luxwash.online/prijzen';
   // Alleen de echte publieke prijsbron is toegestaan. Geen opgeslagen of verzonnen bedragen.
@@ -87,6 +90,8 @@ if(isPricingQuestion){
       .replace(/&nbsp;|&#160;/gi,' ')
       .replace(/&euro;|&#8364;/gi,'€')
       .replace(/&amp;/gi,'&')
+      .replace(/&mdash;|&#8212;|&#x2014;/gi,'—')
+      .replace(/&ndash;|&#8211;|&#x2013;/gi,'–')
       .replace(/&#(\d+);/g,(_m,n)=>{const c=Number(n);return c>=32&&c<127?String.fromCharCode(c):' '})
       .replace(/\s+/g,' ')
       .trim();
