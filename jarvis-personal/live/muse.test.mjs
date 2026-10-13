@@ -62,6 +62,7 @@ const node=(tag='div',content='')=>({
  append(...parts){this.children.push(...parts);},
  replaceChildren(...parts){this.children=[...parts];},
  scrollIntoView(){this.scrolled=true;},
+ click(){this.clicked=true;},
  addEventListener(evt,handler){this.listeners[evt]=handler;}
 });
 const byId=id=>{
