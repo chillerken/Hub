@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import { Script } from 'node:vm';
+import worker from './worker.js';
+
+const response=await worker.fetch(new Request('https://jarvis-test.example/'),{});
+assert.equal(response.status,200);
+const html=await response.text();
+assert.ok(html.includes('data-tab="agent"'),'Agent tab missing');
+assert.ok(html.includes('id="agentForm"'),'Agent form missing');
+assert.ok(html.includes('id="agentList"'),'Agent list missing');
+assert.ok(html.includes('id="agentStatus"'),'Agent status missing');
+assert.ok(html.includes('JARVIS Agent · opdrachten'),'Agent heading missing');
+const scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
+assert.equal(scripts.length,3,'Expected legacy app scripts and new agent controller');
+for(const [i,js] of scripts.entries())new Script(js,{filename:'jarvis-inline-'+i+'.js'});
+const controller=scripts.at(-1);
+assert.ok(controller.includes('window.JarvisAuth?.token?.()'),'Must require Reception AI session');
+assert.ok(controller.includes('/rest/v1/jarvis_agent_tasks'),'Must persist tasks in existing backend');
+assert.ok(controller.includes('/rest/v1/jarvis_agent_events'),'Must expose task audit log');
+assert.ok(controller.includes("status:'pending_approval'"),'Must never enqueue without approval');
+assert.ok(controller.includes("status:'queued'"),'Must require owner approval');
+assert.ok(controller.includes("kind==='draft'"),'Draft capability missing');
+assert.ok(controller.includes("'/api/chat'"),'Draft must invoke protected model');
+assert.ok(controller.includes('crypto.randomUUID()'),'Idempotency key missing');
+assert.ok(controller.includes('textContent'),'DOM content must be escaped');
+assert.ok(!controller.includes('service_role'),'No privileged secrets in browser');
+assert.ok(!controller.includes('/send-message'),'Do not claim outbound messaging');
+console.log('JARVIS agent smoke tests passed: HTML, JS syntax, approvals, storage, audit, draft workflow, no outbound.');
