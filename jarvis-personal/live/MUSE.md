@@ -1,4 +1,4 @@
-# JARVIS v1.4.0 — MUSE Dagcentrum
+# JARVIS v1.4.1 — MUSE Dagcentrum
 
 Dit is **een Muse-geïnspireerde werkwijze** in de bestaande JARVIS-app.
 Het is geen officieel Meta Muse-model en er is geen Meta Muse API verbonden.
@@ -58,7 +58,7 @@ als echte klantberichten of werkelijk uitgevoerde acties worden geïnterpreteerd
 - Na het instellen van het secret moet de geautoriseerde workflow opnieuw
   worden gestart (GitHub Actions → Deploy JARVIS Muse Preview → Run workflow),
   of moet een nieuwe commit op de featurebranch worden gedaan.
-- Controle na deployment: `/api/health` moet `"version":"1.4.0-muse"`
+- Controle na deployment: `/api/health` moet `"version":"1.4.1-muse"`
   én `"aiConfigured":true` tonen. De homepage moet `✦ MUSE Dagcentrum` tonen.
 - Publiceer niet naar productie, main of `jarvis-gertjan-personal` voordat beide
   accounts via de preview in een echte browser zijn getest.
