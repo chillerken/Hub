@@ -195,7 +195,17 @@ assert.equal(navState.active,'luxwash','The Open CRM button must land on the Lux
 assert.equal(navState.crmMode,'crm','The Open CRM button must activate CRM, not Reception AI');
 assert.equal(byId('lwMuseStalePanel').hidden,false,'MUSE must show stale follow-ups inside LuxWash CRM');
 assert.equal(byId('lwMuseStaleList').children.length,1,'Stale contact listing must contain actual sourced lead');
-assert.ok(byId('lwMuseStaleList').children[0].children.some(x=>String(x.textContent).includes('Garage Met Oude Datum')));
+const staleCard=byId('lwMuseStaleList').children[0];
+assert.equal(staleCard.className,'lw-stale-row','Records need a separated, readable card');
+const staleHeading=staleCard.children[0],staleFields=staleCard.children[1];
+assert.equal(staleHeading.className,'lw-stale-heading');
+assert.ok(staleHeading.children.some(x=>String(x.textContent).includes('Garage Met Oude Datum')),'Name must be visible on a separate heading line');
+assert.equal(staleFields.className,'lw-stale-fields');
+assert.equal(staleFields.children.length,3,'Show date, last outbound and status as three independently labeled fields');
+assert.deepEqual(staleFields.children.map(x=>x.children[0].textContent),['Oude opvolgdatum','Laatst uitgaand contact','CRM-status']);
+assert.ok(staleFields.children.every(x=>x.children[1].textContent),'Each field must have a real value');
+assert.ok(html.includes('#lwMuseStaleList .lw-stale-row'),'Stale cards must have dedicated CSS outside the Muse panel');
+assert.ok(html.includes('@media(max-width:700px){#lwMuseStaleList .lw-stale-fields{grid-template-columns:1fr}'),'Cards must be readable on phones');
 assert.equal(saves.length,0,'CRM hygiene shortcut must not stage outreach or write data');
 assert.equal(renderCalls,0,'Switching CRM mode must not trigger an unnecessary assistant rerender');
 
