@@ -17,7 +17,7 @@ globalThis.fetch=async (input,opts={})=>{
     assert.equal(opts.redirect,'manual');
     if(pricesUnavailable)return new Response('Prijslijst tijdelijk niet bereikbaar',{status:503,headers:{'Content-Type':'text/html'}});
     const html='<html><body><h1>Prijzen LuxWash</h1>'
-    +'<h2>Clean &amp; Shine — Sedan</h2><p>Handwas exterieur. €59</p>'
+    +'<h2>Clean &amp; Shine &mdash; Sedan</h2><p>Handwas exterieur. €59</p>'
     +'<h2>Clean &amp; Shine — Break/SUV</h2><p>€69</p>'
     +'<h2>Clean &amp; Shine — Kleine bestelwagen</h2><p>€79</p>'
     +'<h2>COMBI — INTERIEUR + EXTERIEUR</h2><p>vanaf €109</p>'
@@ -60,7 +60,7 @@ globalThis.fetch=async (input,opts={})=>{
   }
   throw Error('Unexpected auth path');
 };
-const env={AI:{async run(model,options){modelCalls++;assert.ok(model.includes('llama'));assert.equal(options.messages.at(-1).content,'Dag JARVIS');
+const env={AI:{async run(model,options){modelCalls++;assert.ok(model.includes('llama'));assert.ok(['Dag JARVIS','Wat kost Muse?'].includes(options.messages.at(-1).content),'Unexpected AI prompt');
 assert.ok(options.messages[0].content.includes('JARVIS GOD MODE'));
 assert.ok(options.messages[0].content.includes('EERST WAARHEID'));
 assert.ok(options.messages[0].content.includes('www.luxwash.online/prijzen'));
@@ -149,6 +149,9 @@ assert.ok(inaccessible.includes('geen oude of verzonnen bedragen'),inaccessible)
 assert.ok(!inaccessible.includes('€'),'Never invent a price if the official source is unavailable');
 pricesUnavailable=false;
 assert.equal(priceCalls,3,'Every price answer must fetch the official site again');
-assert.equal(modelCalls,2,'Known schedule and tariff answers must bypass AI');
+const personalPrice=(await (await run('/api/chat',post([{role:'user',content:'Wat kost Muse?'}]))).json()).response;
+assert.ok(personalPrice.includes('Dag! AI antwoordt.'),'Personal cost queries must reach the AI rather than LuxWash tariffs');
+assert.equal(priceCalls,3,'Unrelated price question must never fetch LuxWash tariffs');
+assert.equal(modelCalls,3,'Known schedule and LuxWash tariff answers bypass AI, unrelated prices do not');
 assert.equal((await run('/missing')).status,404);
 console.log('JARVIS v1.3.8 tests OK: JWT auth, admin membership, denied access, AI response, invalid inputs, front-end JS syntax, PWA routes.');
