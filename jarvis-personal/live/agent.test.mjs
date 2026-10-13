@@ -22,6 +22,8 @@ assert.ok(controller.includes("status:'queued'"),'Must require owner approval');
 assert.ok(controller.includes("kind==='draft'"),'Draft capability missing');
 assert.ok(controller.includes("'/api/chat'"),'Draft must invoke protected model');
 assert.ok(controller.includes('crypto.randomUUID()'),'Idempotency key missing');
+assert.ok(html.includes('id="agentPlan"'),'Autonomous planning UI missing');
+assert.ok(controller.includes('een bruikbaar stappenplan'),'Planner must produce reviewable steps');
 assert.ok(controller.includes('textContent'),'DOM content must be escaped');
 assert.ok(!controller.includes('service_role'),'No privileged secrets in browser');
 assert.ok(!controller.includes('/send-message'),'Do not claim outbound messaging');
