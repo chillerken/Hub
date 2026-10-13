@@ -35,6 +35,11 @@ assert.ok(controller.includes("plan_progress:next"),'Ticking a step must persist
 assert.ok(controller.includes("status=eq.queued"),'Checklist must not be writable after closing');
 assert.ok(controller.includes('Plan afgerond'),'Plan completion action missing');
 assert.ok(controller.includes('geen bedrijfsnamen'),'Prospecting prompt must ban invented leads');
+assert.ok(controller.includes('looksLikeLeadGoal(title)'),'Lead-intent must be recognized');
+assert.ok(controller.includes("byId('agentKind').value='plan'"),'Lead-intent must auto select plan');
+assert.ok(controller.includes("stepsFromPlan(objective).length<2"),'Reject plans with no actionable steps');
+assert.ok(controller.includes("kind==='reminder'&&looksLikeLeadGoal(title)"),'Reject prospecting reminders');
+
 assert.ok(controller.includes('textContent'),'DOM content must be escaped');
 assert.ok(!controller.includes('service_role'),'No privileged secrets in browser');
 assert.ok(!controller.includes('/send-message'),'Do not claim outbound messaging');
