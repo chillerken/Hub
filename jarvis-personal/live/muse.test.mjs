@@ -70,7 +70,7 @@ const byId=id=>{
  return nodes.get(id);
 };
 const fetch=async (input,options={})=>{
- const url=new URL(input);
+ const url=new URL(input,'https://jarvis-test.example');
  externalRequests.push({url:url.href,method:options.method||'GET',headers:options.headers||{}});
  assert.ok(url.hostname==='nahwlhptgdkwhjcfkhkt.supabase.co'||url.hostname==='jarvis-test.example');
  if(url.hostname==='jarvis-test.example'){
