@@ -1,0 +1,49 @@
+name: Deploy JARVIS Muse Preview
+on:
+  push:
+    branches: ['feature/jarvis-muse-agent-v1']
+    paths:
+      - 'jarvis-personal/live/**'
+      - '.github/workflows/jarvis-muse-preview-deploy.yml'
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify Worker syntax and historical JARVIS contracts
+        run: |
+          node --check jarvis-personal/live/worker.js
+          node jarvis-personal/live/test.mjs
+          node jarvis-personal/live/agent.test.mjs
+          node jarvis-personal/live/muse.test.mjs
+      - name: Verify Cloudflare preview deployment credentials are present
+        id: authorize
+        env:
+          CF_DEPLOY_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -n "$CF_DEPLOY_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "A Cloudflare preview deploy credential is configured."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Preview deploy skipped: CLOUDFLARE_API_TOKEN secret not configured in this repository."
+          fi
+      - name: Deploy ONLY jarvis-gertjan-personal-agent-preview
+        if: steps.authorize.outputs.enabled == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: '7ea40a82f166846549c688cff5686964'
+          workingDirectory: jarvis-personal/live
+          command: deploy --config wrangler.preview.toml
+      - name: Check preview Worker health after deployment
+        if: steps.authorize.outputs.enabled == 'true'
+        run: |
+          curl --fail --silent --show-error --retry 3 --retry-delay 3 \
+            "https://jarvis-gertjan-personal-agent-preview.redant-gj.workers.dev/api/health" \
+            | node -e "let data='';process.stdin.on('data',d=>data+=d);process.stdin.on('end',()=>{const h=JSON.parse(data);if(!h.ok||!h.aiConfigured)process.exit(1);console.log('Preview health OK',h.version)})"
