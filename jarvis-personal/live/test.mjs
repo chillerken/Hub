@@ -161,7 +161,7 @@ assert.ok(!html.includes('id="saveKey"'));
 assert.ok(!html.includes('Persoonlijke AI-toegangscode'));
 for(const [,js] of html.matchAll(/<script>([\s\S]*?)<\/script>/g))new Script(js,{filename:'jarvis-inline.js'});
 assert.ok(page.headers.get('Content-Security-Policy').includes('ndecxbsrxspkuxjsbndq.supabase.co'));
-for(const [path,substring] of [['/manifest.webmanifest','JARVIS Personal OS'],['/sw.js','jarvis-personal-v139'],['/icon.svg','<svg']]){
+for(const [path,substring] of [['/manifest.webmanifest','JARVIS Personal OS'],['/sw.js','jarvis-personal-v140-muse'],['/icon.svg','<svg']]){
   const r=await run(path);assert.equal(r.status,200);assert.ok((await r.text()).includes(substring));
 }
 // Both dates must read the right tenant and not hallucinate appointments.
