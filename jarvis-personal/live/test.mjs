@@ -138,7 +138,7 @@ assert.ok(html.includes('AI niet aangemeld'));
 assert.ok(html.includes('AI getest en actief'));
 assert.ok(html.includes('requestAI(messages,context)'));
 assert.ok(!html.includes('● Lokaal'));
-assert.ok(html.includes('PERSONAL OS · V1.3.9 · GOD MODE'));
+assert.ok(html.includes('PERSONAL OS · V1.4.0 MUSE · GOD MODE'));
 assert.ok(html.includes('id="lwCrmComms"'));
 assert.ok(html.includes('id="lwWhatsapp"'));
 assert.ok(html.includes('id="lwEmails"'));
