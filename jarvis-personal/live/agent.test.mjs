@@ -50,7 +50,7 @@ assert.ok(controller.includes("fetch('/api/mission'"),'Browser must use same-ori
 assert.ok(!controller.includes("fetch(BASE+'/functions/v1/jarvis-orchestrator'"),'Browser must not invoke cross-origin Edge Function directly');
 assert.ok(!controller.includes("fetch('/api/mission'")===false,'Mission Control must call the proxy');
 assert.ok(controller.includes("data?.ok!==true"),'Orchestrator failures must be explicit');
-assert.ok(controller.includes("if(jwt()!==token)"),'Session must be unchanged before storing recommendations');
+assert.ok(controller.includes("jwt()!==token||crmJwt()!==crmToken"),'Both sessions must be unchanged before storing recommendations');
 assert.ok(controller.includes("status:'pending_approval'"),'Mission must stage proposals without executing them');
 assert.ok(controller.includes('resolution=ignore-duplicates'),'Repeated analysis must avoid duplicate tasks');
 assert.ok(controller.includes("crypto.subtle.digest('SHA-256'"),'Mission keys must be deterministic');
