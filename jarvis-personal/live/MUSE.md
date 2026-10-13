@@ -54,9 +54,9 @@ als echte klantberichten of werkelijk uitgevoerde acties worden geïnterpreteerd
 - De deploymentworkflow `.github/workflows/jarvis-muse-preview-deploy.yml`
   is gelimiteerd tot de featurebranch en de hierboven genoemde preview Worker.
   Ze test eerst alle JARVIS-scripts, controleert of het secret beschikbaar is,
-  en slaat deployment over als het secret ontbreekt.
+  en stopt expliciet met een fout als het secret ontbreekt (geen schijnbaar geslaagde publicatie).
 - Na het instellen van het secret moet de geautoriseerde workflow opnieuw
-  worden gestart (GitHub Actions → Deploy JARVIS Muse Preview → opnieuw draaien),
+  worden gestart (GitHub Actions → Deploy JARVIS Muse Preview → Run workflow),
   of moet een nieuwe commit op de featurebranch worden gedaan.
 - Controle na deployment: `/api/health` moet `"version":"1.4.0-muse"`
   én `"aiConfigured":true` tonen. De homepage moet `✦ MUSE Dagcentrum` tonen.
