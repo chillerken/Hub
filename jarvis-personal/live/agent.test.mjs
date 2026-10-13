@@ -43,4 +43,18 @@ assert.ok(controller.includes("kind==='reminder'&&looksLikeLeadGoal(title)"),'Re
 assert.ok(controller.includes('textContent'),'DOM content must be escaped');
 assert.ok(!controller.includes('service_role'),'No privileged secrets in browser');
 assert.ok(!controller.includes('/send-message'),'Do not claim outbound messaging');
+assert.ok(html.includes('id="jarvisMissionPanel"'),'Mission Control UI missing');
+assert.ok(html.includes('id="jarvisMissionRun"'),'Mission analysis button missing');
+assert.ok(html.includes('id="jarvisMissionStage"'),'Safe staging button missing');
+assert.ok(controller.includes("'/functions/v1/jarvis-orchestrator'"),'Must call existing orchestrator, not invent a new backend');
+assert.ok(controller.includes("data?.ok!==true"),'Orchestrator failures must be explicit');
+assert.ok(controller.includes("if(jwt()!==token)"),'Session must be unchanged before storing recommendations');
+assert.ok(controller.includes("status:'pending_approval'"),'Mission must stage proposals without executing them');
+assert.ok(controller.includes('resolution=ignore-duplicates'),'Repeated analysis must avoid duplicate tasks');
+assert.ok(controller.includes("crypto.subtle.digest('SHA-256'"),'Mission keys must be deterministic');
+assert.ok(controller.includes('missionRequestId'),'Mission idempotency missing');
+assert.ok(controller.includes("latestMission.plan.slice(0,3)"),'Limit auto staged tasks');
+assert.ok(controller.includes('geen acties uitgevoerd'),'Never overclaim outbound execution');
+assert.ok(!controller.includes("service_role"),'Never expose service role in agent controller');
+
 console.log('JARVIS agent smoke tests passed: HTML, JS syntax, approvals, storage, audit, draft workflow, no outbound.');
