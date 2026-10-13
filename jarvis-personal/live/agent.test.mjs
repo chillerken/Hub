@@ -46,7 +46,9 @@ assert.ok(!controller.includes('/send-message'),'Do not claim outbound messaging
 assert.ok(html.includes('id="jarvisMissionPanel"'),'Mission Control UI missing');
 assert.ok(html.includes('id="jarvisMissionRun"'),'Mission analysis button missing');
 assert.ok(html.includes('id="jarvisMissionStage"'),'Safe staging button missing');
-assert.ok(controller.includes("'/functions/v1/jarvis-orchestrator'"),'Must call existing orchestrator, not invent a new backend');
+assert.ok(controller.includes("fetch('/api/mission'"),'Browser must use same-origin authenticated mission endpoint');
+assert.ok(!controller.includes("fetch(BASE+'/functions/v1/jarvis-orchestrator'"),'Browser must not invoke cross-origin Edge Function directly');
+assert.ok(!controller.includes("fetch('/api/mission'")===false,'Mission Control must call the proxy');
 assert.ok(controller.includes("data?.ok!==true"),'Orchestrator failures must be explicit');
 assert.ok(controller.includes("if(jwt()!==token)"),'Session must be unchanged before storing recommendations');
 assert.ok(controller.includes("status:'pending_approval'"),'Mission must stage proposals without executing them');
