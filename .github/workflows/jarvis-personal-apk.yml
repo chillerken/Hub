@@ -1,0 +1,49 @@
+name: JARVIS Personal APK Build
+on:
+  push:
+    branches: ['feature/jarvis-personal-android-v1']
+  pull_request:
+    paths: ['.github/workflows/jarvis-personal-apk.yml']
+  workflow_dispatch:
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Generate Android project
+        run: |
+          python3 - <<'PY'
+          import json, pathlib
+          files=json.loads(r'''{"settings.gradle":"pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }\ndependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }\nrootProject.name = 'JarvisPersonal'\ninclude ':app'\n","build.gradle":"plugins { id 'com.android.application' version '8.7.3' apply false }\n","gradle.properties":"org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8\nandroid.useAndroidX=true\n","app/build.gradle":"plugins { id 'com.android.application' }\nandroid { namespace 'be.jarvis.personal'; compileSdk 35\n defaultConfig { applicationId 'be.jarvis.personal'; minSdk 26; targetSdk 35; versionCode 6; versionName '1.3.8' }\n buildTypes { release { minifyEnabled false }; debug { minifyEnabled false } }\n compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }\n}\n","app/src/main/res/values/styles.xml":"<resources><style name=\"AppTheme\" parent=\"android:style/Theme.Material.NoActionBar\"><item name=\"android:statusBarColor\">#070f20</item><item name=\"android:navigationBarColor\">#070f20</item></style></resources>","app/src/main/AndroidManifest.xml":"<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"><uses-permission android:name=\"android.permission.INTERNET\"/><queries><intent><action android:name=\"android.speech.RecognitionService\"/></intent></queries><application android:label=\"JARVIS Personal\" android:allowBackup=\"false\" android:usesCleartextTraffic=\"false\" android:theme=\"@style/AppTheme\"><activity android:name=\".MainActivity\" android:exported=\"true\"><intent-filter><action android:name=\"android.intent.action.MAIN\"/><category android:name=\"android.intent.category.LAUNCHER\"/></intent-filter></activity></application></manifest>","app/src/main/java/be/jarvis/personal/MainActivity.java":"package be.jarvis.personal;\nimport android.app.Activity;import android.os.Bundle;import android.content.Intent;import android.net.Uri;\nimport android.webkit.WebView;import android.webkit.WebChromeClient;import android.webkit.WebViewClient;import android.webkit.WebResourceRequest;import android.webkit.JavascriptInterface;\nimport android.speech.RecognizerIntent;import android.speech.tts.TextToSpeech;import java.util.ArrayList;import java.util.Locale;\npublic class MainActivity extends Activity implements TextToSpeech.OnInitListener {\n static final String HOST=\"jarvis-gertjan-personal.redant-gj.workers.dev\";\n WebView web;TextToSpeech tts;\n @Override public void onCreate(Bundle b){super.onCreate(b);WebView.setWebContentsDebuggingEnabled(false);web=new WebView(this);setContentView(web);\n web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);web.getSettings().setJavaScriptCanOpenWindowsAutomatically(false);web.getSettings().setSupportMultipleWindows(false);\n web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(false);\n web.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);\n web.setWebChromeClient(new WebChromeClient());web.setWebViewClient(new WebViewClient(){\n @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest req){Uri u=req.getUrl();if(\"https\".equals(u.getScheme())&&HOST.equals(u.getHost()))return false;try{startActivity(new Intent(Intent.ACTION_VIEW,u));}catch(Exception ignored){}return true;}\n });web.addJavascriptInterface(new Bridge(),\"JarvisNative\");tts=new TextToSpeech(this,this);web.loadUrl(\"https://\"+HOST+\"/\");}\n public class Bridge {\n @JavascriptInterface public void startListening(){runOnUiThread(()->beginSpeech());}\n @JavascriptInterface public void speak(String s){runOnUiThread(()->{if(tts!=null)tts.speak(s.substring(0,Math.min(s.length(),1200)),TextToSpeech.QUEUE_FLUSH,null,\"jarvis-voice\");});}\n }\n void beginSpeech(){try{Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,\"nl-BE\");i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,1);startActivityForResult(i,42);}catch(Exception e){js(\"jarvisNativeRecognitionError\",\"Android spraakherkenning niet beschikbaar\");}}\n @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==42){if(result==RESULT_OK&&data!=null){ArrayList<String> list=data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);if(list!=null&&!list.isEmpty()){js(\"jarvisNativeRecognitionResult\",list.get(0));return;}}js(\"jarvisNativeRecognitionError\",\"Geen spraak herkend\");}}\n void js(String callback,String value){web.evaluateJavascript(\"window.\"+callback+\"(\"+org.json.JSONObject.quote(value)+\")\",null);}\n @Override public void onInit(int s){if(s==TextToSpeech.SUCCESS&&tts!=null){int r=tts.setLanguage(Locale.forLanguageTag(\"nl-BE\"));if(r<0)tts.setLanguage(new Locale(\"nl\"));}}\n @Override protected void onDestroy(){if(tts!=null){tts.stop();tts.shutdown();}web.destroy();super.onDestroy();}\n}"}''')
+          for path,contents in files.items():
+           p=pathlib.Path('jarvis-personal/android')/path
+           p.parent.mkdir(parents=True,exist_ok=True)
+           p.write_text(contents,encoding='utf-8')
+          PY
+      - name: Test live Worker without network
+        run: node jarvis-personal/live/test.mjs
+      - name: Build APK
+        working-directory: jarvis-personal/android
+        run: gradle :app:assembleDebug --no-daemon
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-personal-debug-apk
+          path: jarvis-personal/android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Upload exact source used for build
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-personal-v11-source
+          path: |
+            jarvis-personal/android/
+            jarvis-personal/live/worker.js
+            jarvis-personal/live/test.mjs
