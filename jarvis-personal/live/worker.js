@@ -32,31 +32,99 @@ if(u.pathname==='/api/mission'){
     console.warn('JARVIS mission auth unavailable',e?.name||'Error');
     return send({error:'Kan momenteel geen verbinding maken met Reception AI. Probeer later opnieuw.',code:'AUTH_NETWORK'},503);
   }
-  // Alleen deze vaste Edge Function. De browser praat uitsluitend met zijn eigen domein,
-  // zodat CORS/redirects en browserfilters de analyse niet meer rechtstreeks kunnen blokkeren.
+  // Authenticeer beide databronnen apart. Alleen RLS-beveiligde GET-verzoeken.
+  const crmBase='https://nahwlhptgdkwhjcfkhkt.supabase.co';
+  const crmKey='sb_publishable_x_9D7Hrrq5R5OYJfnxKsUg_buzI2PPR';
+  const crmToken=req.headers.get('X-Luxwash-Crm-Token')||'';
+  const safe=(x,max=120)=>String(x??'').trim().slice(0,max);
+  const isUuid=x=>typeof x==='string'&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(x);
+  const internal=(x,crm=false)=>{
+    const name=safe(crm?(x.company||x.name):x.name,200);
+    return x.is_test===true||/@luxwash\.online$/i.test(safe(x.email,200))
+      || /(?:^|[_ -])(demo|test)(?:$|[_ -])/i.test(safe(x.source,100))
+      || /^(lux\s*wash(?: test)?|gert.?jan(?: redant)?|test(?: klant| lead)?)$/i.test(name)
+      || (!crm&&/bedrijf:\s*lux\s*wash\b/i.test(safe(x.summary,500)));
+  };
+  const getRows=async(baseUrl,path,h,limit=540000)=>{
+    const r=await fetch(baseUrl+path,{headers:h,redirect:'manual',signal:AbortSignal.timeout(14000)});
+    if(!r.ok)throw Error('SOURCE_HTTP_'+r.status);
+    if(Number(r.headers.get('content-length')||0)>limit)throw Error('SOURCE_TOO_LARGE');
+    const text=await r.text();if(text.length>limit)throw Error('SOURCE_TOO_LARGE');
+    const list=JSON.parse(text);if(!Array.isArray(list))throw Error('SOURCE_INVALID');
+    return list;
+  };
   try{
-    const upstream=await fetch(base+'/functions/v1/jarvis-orchestrator',{
-      method:'POST',headers:{...headers,'Content-Type':'application/json'},
-      body:'{}',redirect:'manual',signal:AbortSignal.timeout(25000)
-    });
-    if(upstream.status>=300&&upstream.status<400)
-      return send({error:'Supabase stuurt Mission Control onverwacht door. Controleer Edge Function routing.',code:'UPSTREAM_REDIRECT'},502);
-    if(Number(upstream.headers.get('content-length')||0)>130000)
-      return send({error:'De analyserespons is te groot.',code:'UPSTREAM_TOO_LARGE'},502);
-    const body=await upstream.text();
-    if(body.length>130000)return send({error:'De analyserespons is te groot.',code:'UPSTREAM_TOO_LARGE'},502);
-    let result=null;try{result=JSON.parse(body)}catch{}
-    if(!upstream.ok){
-      const reason=typeof result?.error==='string'?result.error:'Reception AI kan de analyse niet uitvoeren';
-      return send({error:reason.slice(0,220),code:'ORCHESTRATOR_HTTP_'+upstream.status},upstream.status>=400&&upstream.status<600?upstream.status:502);
+    const receptionRows=await getRows(base,'/rest/v1/leads?select=id,name,email,phone,source,status,score,summary,contact_consent_at'
+      +'&organization_id=eq.'+org+'&order=created_at.desc&limit=250',headers);
+    const openTasks=await getRows(base,'/rest/v1/tasks?select=id,status&organization_id=eq.'+org
+      +'&status=eq.open&order=created_at.desc&limit=200',headers,130000);
+    const external=receptionRows.filter(x=>!internal(x));
+    const warm=external.filter(x=>Number(x.score||0)>=60&&!['won','lost'].includes(safe(x.status).toLowerCase())
+      &&safe(x.name)&&!/^websitebezoeker$/i.test(safe(x.name)));
+    const reception={connected:true,total:receptionRows.length,excluded_internal:receptionRows.length-external.length,
+      anonymous:external.filter(x=>!safe(x.name)||/^websitebezoeker$/i.test(safe(x.name))).length,
+      warm:warm.length,actionable:warm.filter(x=>(safe(x.email)||safe(x.phone))&&x.contact_consent_at).length,
+      missing_consent:warm.filter(x=>!x.contact_consent_at).length,open_tasks:openTasks.length,
+      truncated:receptionRows.length>=250||openTasks.length>=200};
+    let crm={connected:false,requires_login:true,source:'luxwash_crm',stats:null,prospects:[]},plan=[];
+    if(crmToken){
+      if(!crmToken.startsWith('eyJ')||crmToken.length>4300||/\s/.test(crmToken))
+        return send({error:'Ongeldige LuxWash CRM-sessie. Meld je opnieuw aan.',code:'CRM_TOKEN_INVALID'},401);
+      const h={apikey:crmKey,Authorization:'Bearer '+crmToken,'Cache-Control':'no-store'};
+      const u=await fetch(crmBase+'/auth/v1/user',{headers:h,redirect:'manual',signal:AbortSignal.timeout(14000)});
+      if(!u.ok)return send({error:'Je LuxWash CRM-sessie is verlopen. Meld je opnieuw aan.',code:'CRM_LOGIN_REQUIRED'},401);
+      const user=await u.json();if(!isUuid(user?.id))return send({error:'CRM-gebruiker niet geverifieerd',code:'CRM_AUTH_INVALID'},401);
+      const members=await getRows(crmBase,'/rest/v1/luxwash_app_members?select=user_id,role,active&user_id=eq.'
+        +encodeURIComponent(user.id)+'&active=is.true&limit=3',h,30000);
+      if(!members.some(m=>m.user_id===user.id&&m.active===true&&['owner','admin','operator','staff'].includes(m.role)))
+        return send({error:'Geen toegangsrechten voor dit LuxWash CRM',code:'CRM_ACCESS_DENIED'},403);
+      const rows=await getRows(crmBase,'/rest/v1/leads?select=id,company,name,email,phone,city,source,status,pipeline_stage,commercial_score,consent_basis,opted_out,last_outbound_at,last_contact_at,is_test,created_at'
+        +'&order=created_at.desc&limit=300',h);
+      const outside=rows.filter(x=>!internal(x,true));
+      const businesses=outside.filter(x=>safe(x.company));
+      const blocked=x=>x.opted_out===true||['not_interested','customer','won','lost'].includes(safe(x.pipeline_stage||x.status).toLowerCase());
+      const eligible=businesses.filter(x=>!blocked(x)&&!x.last_outbound_at&&!x.last_contact_at
+        &&!['email_sent','contacted','follow_up','contact_planned'].includes(safe(x.pipeline_stage).toLowerCase()));
+      eligible.sort((a,b)=>Number(b.commercial_score||0)-Number(a.commercial_score||0)
+        || Date.parse(b.created_at||'1970-01-01')-Date.parse(a.created_at||'1970-01-01'));
+      const prospects=eligible.filter(x=>isUuid(x.id)).slice(0,5).map(x=>({
+        id:x.id,company:safe(x.company,130),city:safe(x.city,80),
+        stage:safe(x.pipeline_stage||x.status,50),
+        score:Number.isFinite(Number(x.commercial_score))?Number(x.commercial_score):null,
+        has_contact:Boolean(safe(x.email)||safe(x.phone)),
+        contact_basis_recorded:Boolean(safe(x.consent_basis))
+      }));
+      crm={connected:true,requires_login:false,source:'luxwash_crm',
+        stats:{total:rows.length,business:businesses.length,excluded_internal:rows.length-outside.length,
+          opted_out:businesses.filter(x=>x.opted_out===true).length,
+          blocked:businesses.filter(blocked).length,not_contacted:eligible.length,truncated:rows.length>=300},
+        prospects};
+      plan=prospects.map(x=>({
+        source:'luxwash_crm',lead_id:x.id,verified:true,agent:'LuxWash Lead Agent',priority:'high',
+        action:'Controleer prospect '+x.company+(x.city?' ('+x.city+')':''),
+        reason:'LuxWash CRM · '+(x.stage||'status onbekend')+' · '+(x.contact_basis_recorded?
+          'contactbasis geregistreerd maar te controleren':'contactbasis nog te controleren')
+          +' · geen uitgaand contact geregistreerd. Geen bericht zonder jouw controle.'
+      }));
     }
-    if(!result||result.ok!==true||!Array.isArray(result.plan)||typeof result.stats!=='object'||!result.stats)
-      return send({error:'Reception AI stuurde geen bruikbare prioriteitenanalyse terug.',code:'INVALID_ORCHESTRATOR_RESPONSE'},502);
-    return send({ok:true,summary:String(result.summary||'').slice(0,1600),
-      stats:result.stats,plan:result.plan.slice(0,5)});
+    const summary=crm.connected
+      ?'Twee afzonderlijke databronnen gecontroleerd. LuxWash CRM: '+crm.stats.not_contacted
+       +' zakelijke records zonder geregistreerd contact; '+crm.stats.excluded_internal
+       +' interne records uitgesloten. De toestemming en contacthistoriek moeten per bedrijf worden nagekeken.'
+      :'Reception AI gecontroleerd: '+reception.excluded_internal
+       +' interne/demo-records uitgesloten. Meld je ook aan bij LuxWash CRM voor echte prospectievoorstellen. Zonder CRM-login geen verkoopvoorstellen.';
+    return send({ok:true,summary,
+      stats:{leads:reception.total,warm:reception.warm,actionable:reception.actionable,
+        open_tasks:reception.open_tasks,missing_consent:reception.missing_consent,
+        excluded_internal:reception.excluded_internal},
+      reception,crm,plan});
   }catch(e){
-    console.warn('JARVIS mission upstream unavailable',e?.name||'Error');
-    return send({error:'De orchestrator is momenteel niet bereikbaar vanuit JARVIS.',code:'ORCHESTRATOR_NETWORK'},503);
+    const code=safe(e?.message,65);
+    console.warn('JARVIS mission source read failed',e?.name||'Error',code);
+    const denied=/SOURCE_HTTP_(401|403)/.test(code);
+    return send({error:denied?'Geen toegang tot een van de CRM-bronnen. Controleer je aanmelding.':
+      'Beveiligde CRM-analyse tijdelijk niet beschikbaar; er is niets gewijzigd.',
+      code:denied?'SOURCE_ACCESS_DENIED':'DUAL_SOURCE_READ_FAILED'},denied?403:503);
   }
 }
 
