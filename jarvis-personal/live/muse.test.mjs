@@ -270,7 +270,7 @@ assert.ok(byId('museStatus').textContent.includes('Vernieuw'));
 crmToken='eyJ-crm-staff';
 await hooks.museRun();
 hooks.museSelect(hooks.snapshot().actions.find(x=>x.kind==='hygiene'));
-hooks.musePrepareCorrection(hooks.snapshot().staleRows[0]);
+hooks.musePrepareCorrection(hooks.snapshot().staleRows.find(x=>x.id===outdatedId));
 byId('lwMuseReason').value='Contacthistoriek controleren; oude deadline was vóór laatst verzonden bericht.';
 assert.equal(corrected,0,'Draft remains read-only');
 await hooks.museApplyCorrection();
