@@ -41,7 +41,7 @@ const crmLeads=[
   pipeline_stage:'email_sent',follow_up_at:iso(-48*3600000),opted_out:false,is_test:false,commercial_score:90},
  {id:outdatedId,name:'Reeds gecontacteerd',company:'Garage Met Oude Datum',source:'luxscout',status:'new',
   pipeline_stage:'email_sent',follow_up_at:iso(-72*3600000),
-  last_outbound_at:iso(-8*3600000),opted_out:false,is_test:false,commercial_score:99},
+  last_outbound_at:iso(-8*3600000),updated_at:iso(-6*3600000),opted_out:false,is_test:false,commercial_score:99},
  {id:'44444444-4444-4444-8444-444444444444',name:'Gert Jan',company:'LuxWash',email:'info@luxwash.online',
   pipeline_stage:'analyzed',follow_up_at:iso(-72*3600000),opted_out:false,is_test:false,commercial_score:100},
  {id:'55555555-5555-4555-8555-555555555555',name:'Uitgeschreven',company:'Garage Geen Contact',
@@ -59,7 +59,7 @@ const handlers=new Map(),nodes=new Map(),calls=[],saves=[],externalRequests=[],s
 const navState={active:'agent',crmMode:'reception'};
 const navButton={click(){navState.active='luxwash'}};
 const taskNavButton={click(){navState.active='tasks'}};
-let refreshed=0;
+let refreshed=0,corrected=0;
 const node=(tag='div',content='')=>({
  tag,textContent:String(content??''),className:'',disabled:false,hidden:false,children:[],listeners:{},value:'',
  append(...parts){this.children.push(...parts);},
@@ -84,6 +84,19 @@ const fetch=async (input,options={})=>{
  if(url.hostname==='jarvis-test.example'){
   assert.equal(url.pathname,'/api/chat');
   return Response.json({response:'1. Controleer de CRM-fout. 2. Bekijk de afspraak. 3. Beoordeel de opvolging.'});
+ }
+ if(url.pathname==='/rest/v1/rpc/jarvis_muse_correct_stale_followup'){
+  assert.equal(options.method,'POST');
+  assert.equal(options.headers.Authorization,'Bearer '+crmToken);
+  const input=JSON.parse(options.body);
+  assert.equal(input.p_lead_id,outdatedId);
+  assert.equal(input.p_expected_last_outbound_at,crmLeads[1].last_outbound_at);
+  assert.equal(input.p_expected_updated_at,crmLeads[1].updated_at);
+  assert.equal(input.p_decision,'clear_stale_deadline');
+  assert.equal(input.p_new_follow_up_at,null);
+  assert.ok(input.p_reason.length>=12);
+  corrected++;
+  return Response.json({ok:true,lead_id:outdatedId,decision:input.p_decision,audit_logged:true,outbound_sent:false});
  }
  assert.equal(options.method,'GET');
  assert.equal(options.headers.Authorization,'Bearer '+crmToken);
@@ -151,7 +164,7 @@ const sandbox={
  AbortController,setTimeout,clearTimeout,Response,SpeechSynthesisUtterance:function(t){this.text=t;this.lang='';},
  console
 };
-runInNewContext(museCode+'\nthis.museTestHooks={museRun,museSelect,museCommit,museAi,museFindings,clear:museClear,snapshot:()=>museSnapshot};',sandbox,{filename:'muse-control.js'});
+runInNewContext(museCode+'\nthis.museTestHooks={museRun,museSelect,museCommit,museAi,museFindings,clear:museClear,snapshot:()=>museSnapshot,musePrepareCorrection,museApplyCorrection};',sandbox,{filename:'muse-control.js'});
 const hooks=sandbox.museTestHooks;
 assert.equal(typeof handlers.get('museRun.click'),'function');
 // Execute the actual authenticated-mode notification listener from the JARVIS
@@ -207,6 +220,16 @@ assert.ok(staleFields.children.every(x=>x.children[1].textContent),'Each field m
 assert.ok(html.includes('#lwMuseStaleList .lw-stale-row'),'Stale cards must have dedicated CSS outside the Muse panel');
 assert.ok(html.includes('@media(max-width:700px){#lwMuseStaleList .lw-stale-fields{grid-template-columns:1fr}'),'Cards must be readable on phones');
 assert.equal(saves.length,0,'CRM hygiene shortcut must not stage outreach or write data');
+assert.ok(html.includes('id="lwMuseCorrection"'),'Secure CRM correction form must be visible per prospect');
+const editButton=staleCard.children[2];
+assert.ok(editButton.textContent.includes('CRM-correctie'));
+editButton.listeners.click();
+assert.equal(byId('lwMuseCorrection').hidden,false,'Prepare correction only after explicit prospect selection');
+assert.equal(corrected,0,'Selecting a prospect must not modify CRM');
+await hooks.museApplyCorrection();
+assert.equal(corrected,0,'Blank reason must never modify CRM');
+handlers.get('lwMuseCancelCorrection.click')();
+assert.equal(byId('lwMuseCorrection').hidden,true,'Cancel must hide form without writes');
 assert.equal(renderCalls,0,'Switching CRM mode must not trigger an unnecessary assistant rerender');
 
 hooks.museSelect(snap.actions.find(x=>x.kind==='error'));
@@ -242,5 +265,18 @@ crmToken='eyJ-different-login';
 fakeWindow.dispatchEvent({type:'jarvis-auth-changed'});
 assert.equal(hooks.snapshot(),null,'Logout or account change must invalidate stale Muse results');
 assert.ok(byId('museStatus').textContent.includes('Vernieuw'));
+
+// Separate explicit owner confirmation should perform a single auditable RPC call.
+crmToken='eyJ-crm-staff';
+await hooks.museRun();
+hooks.museSelect(hooks.snapshot().actions.find(x=>x.kind==='hygiene'));
+hooks.musePrepareCorrection(hooks.snapshot().staleRows[0]);
+byId('lwMuseReason').value='Contacthistoriek controleren; oude deadline was vóór laatst verzonden bericht.';
+assert.equal(corrected,0,'Draft remains read-only');
+await hooks.museApplyCorrection();
+assert.equal(corrected,1,'Explicit confirmation invokes exactly one correction RPC');
+assert.ok(byId('museStatus').textContent.includes('bevestigd door Supabase'));
+assert.equal(hooks.snapshot(),null,'Correction invalidates stale cached briefing');
+assert.equal(saves.length,2,'No external contact or new JARVIS task created');
 
 console.log('MUSE integration tests OK: CRM navigation stays on LuxWash, actual stale lead listing visible, no forced Assistent tab, dual auth protection, lead freshness and no outbound.');
