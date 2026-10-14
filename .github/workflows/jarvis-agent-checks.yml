@@ -1,0 +1,27 @@
+name: JARVIS Agent Checks
+on:
+  push:
+    branches: ['feature/jarvis-muse-agent-v1']
+  pull_request:
+    paths:
+      - 'jarvis-personal/live/**'
+      - '.github/workflows/jarvis-agent-checks.yml'
+  workflow_dispatch:
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse worker module
+        run: node --check jarvis-personal/live/worker.js
+      - name: Check original JARVIS features (offline only)
+        run: node jarvis-personal/live/test.mjs
+      - name: Check agent UI and approval gating (offline only)
+        run: node jarvis-personal/live/agent.test.mjs
+      - name: Check Muse daily brief, source separation and confirmation (offline only)
+        run: node jarvis-personal/live/muse.test.mjs
