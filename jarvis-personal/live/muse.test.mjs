@@ -274,7 +274,7 @@ hooks.musePrepareCorrection(hooks.snapshot().staleRows[0]);
 byId('lwMuseReason').value='Contacthistoriek controleren; oude deadline was vóór laatst verzonden bericht.';
 assert.equal(corrected,0,'Draft remains read-only');
 await hooks.museApplyCorrection();
-assert.equal(corrected,1,'Explicit confirmation invokes exactly one correction RPC');
+assert.equal(corrected,1,'Explicit confirmation invokes exactly one correction RPC; status: '+byId('lwMuseCorrectionStatus').textContent+'; muse: '+byId('museStatus').textContent);
 assert.ok(byId('museStatus').textContent.includes('bevestigd door Supabase'));
 assert.equal(hooks.snapshot(),null,'Correction invalidates stale cached briefing');
 assert.equal(saves.length,2,'No external contact or new JARVIS task created');
