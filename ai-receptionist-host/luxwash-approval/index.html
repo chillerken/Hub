@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>LuxWash · Veilige goedkeuringen</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#f7f7f5;background:#0f1115}
+*{box-sizing:border-box}body{margin:0}header{background:#17191f;border-bottom:1px solid #34343a;padding:20px max(18px,calc((100vw - 1020px)/2))}
+header b{color:#e8c778;letter-spacing:.05em;font-size:21px}header span{display:block;color:#b7b4aa;font-size:12px;margin-top:4px}
+main{max-width:1020px;padding:24px 18px;margin:auto}h1{font-size:clamp(23px,4.5vw,34px);font-weight:650;margin:0 0 10px}h2{font-size:18px}p{line-height:1.5;color:#bcbcbc}
+.card{background:#1b1e24;border:1px solid #333740;border-radius:16px;padding:22px;margin:14px 0}
+label{display:block;font-size:13px;color:#dbd9d2;margin:16px 0 5px}input{display:block;width:100%;background:#101218;border:1px solid #555864;border-radius:10px;padding:13px;color:white;font-size:16px}
+button{background:#d4b368;color:#131313;border:0;border-radius:10px;padding:12px 16px;font:600 14px system-ui;cursor:pointer;margin-top:10px}
+button:disabled{opacity:.45;cursor:not-allowed}.sub{background:#30343c;color:#f0f0f0}.danger{background:#6d3939;color:#fff}
+.flex{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.space{justify-content:space-between}
+.small{font-size:12px;color:#aeb1b9}.muted{color:#ccc}.notice{border:1px solid #8b784b;padding:12px;border-radius:10px;color:#e5d4a5;background:#2a251b}
+.item{padding:16px 0;border-top:1px solid #393b42}.item:first-child{border-top:0}.title{font-weight:650;margin-bottom:6px}
+.kv{font-size:13px;color:#c3c2c8;line-height:1.65}.status{display:inline-block;padding:4px 8px;background:#333942;border-radius:8px;font-size:12px}
+#status{min-height:25px;margin-top:15px;color:#dbc386}.hidden{display:none}.count{font-size:32px;font-weight:750;color:#d7ba74}
+</style></head><body>
+<header><b>LUXWASH</b><span>Persoonsgebonden goedkeuringen · Betaal- en klantgegevens worden niet gewijzigd</span></header>
+<main>
+<h1>Veilig opvolgen</h1>
+<p>Alleen aangemelde LuxWash-medewerkers met de juiste rol kunnen opvolging beoordelen. Goedkeuring bereidt uitsluitend een beslissing voor; er wordt <strong>niets automatisch verzonden</strong>.</p>
+<section id="login" class="card">
+<h2>Aanmelden met uw eigen Supabase-account</h2>
+<p>Gebruik de bestaande LuxWash-gebruikersaccount. De oude gedeelde dashboardcode werkt hier bewust niet.</p>
+<form id="passwordForm"><label for="email">E-mailadres</label><input id="email" type="email" autocomplete="username" required>
+<label for="password">Wachtwoord</label><input id="password" type="password" autocomplete="current-password" required>
+<button type="submit">Aanmelden</button></form>
+<details><summary class="small" style="cursor:pointer;margin-top:20px">Aanmelden met een e-mailcode</summary>
+<p class="small">Alleen als uw Supabase-project e-mailcodes verstuurt (bij sommige instellingen wordt een aanmeldlink verstuurd).</p>
+<button class="sub" id="requestCode">Stuur e-mailcode naar bovenstaand adres</button>
+<label for="otp">Code uit e-mail</label><input id="otp" inputmode="numeric" autocomplete="one-time-code" placeholder="Eenmalige code">
+<button class="sub" id="verifyCode">Code verifiëren</button></details>
+</section>
+<section id="dashboard" class="hidden">
+<div class="card flex space"><div><h2 style="margin:0">Reviewcentrum</h2><div class="small">Aangemeld via Supabase Auth · goedkeurder wordt aan actie gekoppeld</div></div>
+<div class="flex"><button id="reload" class="sub">Vernieuwen</button><button id="logout" class="sub">Afmelden</button></div></div>
+<div class="notice">Extern versturen staat uit. Berichten die al via LuxScout zijn verstuurd, tellen niet automatisch als afgeronde opvolging.</div>
+<div class="flex"><div class="card" style="flex:1"><div class="small">Warme leads</div><div class="count" id="warmCount">—</div></div>
+<div class="card" style="flex:1"><div class="small">Achterstallige follow-ups</div><div class="count" id="followCount">—</div></div></div>
+<div class="card"><h2>Warme leads voor beoordeling</h2><div id="warmList"></div></div>
+<div class="card"><h2>Andere achterstallige opvolging</h2><div id="followList"></div></div>
+</section><div id="status" role="status" aria-live="polite"></div>
+</main>
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+let config=null, token=null, expires=0;
+const status = msg => {$("status").textContent=msg;};
+const el=(tag,cls,text)=>{const x=document.createElement(tag);if(cls)x.className=cls;if(text!=null)x.textContent=String(text);return x;};
+const humanMessage = reason=>({
+ "missing_contact_basis":"Contactgrondslag ontbreekt",
+ "unverified_contact_basis":"Contactgrondslag niet geverifieerd",
+ "approval_actor_not_recorded":"Historische goedkeurder ontbreekt",
+ "possible_prior_send_needs_reconciliation":"Mogelijk eerder bericht verzonden",
+ "test_lead_no_dispatch":"Testlead – verzending geblokkeerd",
+ "opted_out_no_dispatch":"Uitgeschreven – niet contacteren",
+ "manual_dispatch_review":"Handmatige controle vereist",
+ "unlinked_customer_requires_review":"Klantkoppeling ontbreekt",
+ "manual_followup_review":"Handmatige opvolging vereist"
+})[reason]||String(reason||"Onbekend");
+async function json(url,options={}){
+ const r=await fetch(url,{...options,cache:"no-store"});
+ const data=await r.json().catch(()=>({}));
+ if(!r.ok){throw new Error(data?.error_description||data?.msg||data?.message||data?.error||"HTTP "+r.status);}
+ return data;
+}
+function authHeaders(){return {"apikey":config.anonKey,"Authorization":"Bearer "+token,"Content-Type":"application/json"};}
+async function rpc(name,args={}){
+ if(!token||Date.now()>expires-10000){exit();throw new Error("De sessie is verlopen; meld opnieuw aan.");}
+ return json(config.url+"/rest/v1/rpc/"+name,{method:"POST",headers:authHeaders(),body:JSON.stringify(args)});
+}
+function enter(session){
+ if(!session?.access_token||!session?.expires_in) throw new Error("Geen geldige Supabase Auth-sessie ontvangen");
+ token=session.access_token;expires=Date.now()+Number(session.expires_in)*1000;
+ $("password").value="";$("otp").value="";
+ $("login").classList.add("hidden");$("dashboard").classList.remove("hidden");load().catch(e=>{status(e.message);exit();});
+}
+function exit(){token=null;expires=0;$("dashboard").classList.add("hidden");$("login").classList.remove("hidden");}
+async function load(){
+ status("Controlerijen laden…");
+ const data=await rpc("luxwash_identity_review_queue_v1");
+ if(data.ok!==true) throw new Error("Geen toegang tot de LuxWash-goedkeuringswachtrij");
+ const items=Array.isArray(data.warm_leads)?data.warm_leads:[];
+ $("warmCount").textContent=items.length;
+ const follow=data.overdue_followups||{};
+ $("followCount").textContent=Object.values(follow).reduce((s,n)=>s+Number(n||0),0);
+ const list=$("warmList");list.replaceChildren();
+ if(!items.length)list.append(el("p","muted","Geen warme leads ter beoordeling."));
+ for(const i of items){
+  const item=el("div","item");
+  item.append(el("div","title",(i.company||i.lead_name||"Onbekende lead")+" · "+(i.service||"dienst onbekend")));
+  item.append(el("div","status",humanMessage(i.review_reason)));
+  item.append(el("div","kv","Mogelijk eerder verstuurd: "+(i.existing_sent_since_task||0)+
+   " · LuxScout-prospectie: "+(i.possible_prospecting_messages||0)+
+   " · Taakspecifiek verzendbewijs: "+(i.receipts_linked_to_exact_task||0)));
+  if(i.actions_waiting_for_approval>0 && i.pending_action_id){
+    const row=el("div","flex");
+    const reject=el("button","danger","Niet contacteren / afwijzen");
+    reject.onclick=()=>decide(i.pending_action_id,"reject","Afwijzen");
+    row.append(reject);
+    const approve=el("button","","Goedkeuren (zonder verzending)");
+    const safe = i.review_reason==="manual_dispatch_review" &&
+                 i.contact_basis==="legitimate_interest_b2b" &&
+                 Number(i.existing_sent_since_task||0)===0;
+    approve.disabled=!safe;
+    approve.title=safe?"Alleen beslissing vastleggen":"Contactgrondslag, historie of goedkeuring moet eerst gecontroleerd worden";
+    approve.onclick=()=>decide(i.pending_action_id,"approve","Goedkeuren");
+    row.append(approve);item.append(row);
+  }
+  list.append(item);
+ }
+ const summary=$("followList");summary.replaceChildren();
+ for(const [k,n] of Object.entries(follow))summary.append(el("p","kv",humanMessage(k)+": "+n));
+ status("Overzicht bijgewerkt. Geen klantberichten verzonden.");
+}
+async function decide(id,decision,label){
+ if(!confirm(label+"? De beslissing wordt met uw eigen gebruikersidentiteit vastgelegd. Er wordt geen bericht verzonden."))return;
+ try{
+  const d=await rpc("luxwash_identity_review_decide_v1",{p_action_id:id,p_decision:decision});
+  if(d?.ok===true) {status("Beslissing geregistreerd. Geen bericht verzonden.");await load();}
+  else status("De beslissing kon niet worden bevestigd");
+ }catch(e){status("Geblokkeerd: "+e.message);}
+}
+$("passwordForm").onsubmit=async event=>{
+ event.preventDefault();
+ status("Persoonlijke aanmelding controleren…");
+ try{
+  if(!config)config=await json(new URL("https://nahwlhptgdkwhjcfkhkt.supabase.co/functions/v1/luxwash-ai-approval/config").href);
+  const session=await json(config.url+"/auth/v1/token?grant_type=password",{
+   method:"POST",headers:{"apikey":config.anonKey,"Content-Type":"application/json"},
+   body:JSON.stringify({email:$("email").value.trim(),password:$("password").value})
+  });
+  enter(session);
+ }catch(e){status("Aanmelden mislukt: "+e.message);}
+};
+$("requestCode").onclick=async()=>{
+ try{
+  if(!config)config=await json(new URL("https://nahwlhptgdkwhjcfkhkt.supabase.co/functions/v1/luxwash-ai-approval/config").href);
+  await json(config.url+"/auth/v1/otp",{method:"POST",
+  headers:{"apikey":config.anonKey,"Content-Type":"application/json"},
+  body:JSON.stringify({email:$("email").value.trim(),create_user:false})});
+  status("Aanmeldverzoek verstuurd. Controleer uw e-mail; het e-mailtemplate bepaalt of u een code of link ontvangt.");
+ }catch(e){status("Aanmelden via e-mail niet beschikbaar: "+e.message);}
+};
+$("verifyCode").onclick=async()=>{
+ try{
+  if(!config)config=await json(new URL("https://nahwlhptgdkwhjcfkhkt.supabase.co/functions/v1/luxwash-ai-approval/config").href);
+  const data=await json(config.url+"/auth/v1/verify",{method:"POST",
+    headers:{"apikey":config.anonKey,"Content-Type":"application/json"},
+    body:JSON.stringify({email:$("email").value.trim(),token:$("otp").value.trim(),type:"email"})});
+  enter(data);
+ }catch(e){status("Code niet geldig: "+e.message);}
+};
+$("reload").onclick=()=>load().catch(e=>status(e.message));
+$("logout").onclick=()=>{exit();status("Afgemeld. De toegangstoken is niet op dit apparaat opgeslagen.");};
+window.addEventListener("pagehide",()=>{token=null;});
+})();
+</script></body></html>
