@@ -86,6 +86,8 @@ The existing AI Studio preview is useful for editing, but the production host mu
 
 The built-in rate limiter uses in-memory state. It resets when a server process restarts and is not shared across multiple instances. Before exposing the app publicly, add a durable shared rate limiter or platform-level rate limiting, cap the service's maximum instances, and configure Google API quota/billing alerts. The password gate and in-memory limits are not a substitute for platform-level abuse protection.
 
+The current dependency audit still reports one low-severity esbuild advisory affecting esbuild's own Windows development server. This project uses Vite middleware rather than esbuild's standalone serve mode, and the local development server binds to 127.0.0.1. The CI gate blocks high-severity advisories; the low advisory is documented rather than forcing an unverified Vite/esbuild major-version combination.
+
 ## Tests
 
 Run npm test and npm run build.
