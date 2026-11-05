@@ -83,9 +83,16 @@ export function isSameOrigin(req) {
 }
 
 export function getClientIp(req) {
+  // Prefer Express' resolved client IP. The server sets a one-proxy trust
+  // boundary so arbitrary leftmost X-Forwarded-For values are not trusted.
+  if (typeof req.ip === "string" && req.ip.trim()) return req.ip.trim();
+
+  const realIp = req.headers?.["x-real-ip"];
+  if (typeof realIp === "string" && realIp.trim()) return realIp.trim();
+
   const forwarded = req.headers?.["x-forwarded-for"];
   if (typeof forwarded === "string" && forwarded.trim()) return forwarded.split(",")[0].trim();
-  return String(req.headers?.["x-real-ip"] || "unknown");
+  return "unknown";
 }
 
 export function passwordMatches(supplied, configured) {
