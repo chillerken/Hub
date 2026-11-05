@@ -21,6 +21,10 @@ import {
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(rootDir, ".env.local") });
 dotenv.config({ path: path.join(rootDir, ".env") });
+
+const isProduction = process.argv.includes("--production") ||
+  (!process.argv.includes("--dev") && process.env.NODE_ENV === "production");
+if (isProduction) process.env.NODE_ENV = "production";
 const app = express();
 const httpServer = createServer(app);
 const allowedModels = new Set(["gemini-3-flash-preview", "gemini-3.1-pro-preview"]);
@@ -35,12 +39,13 @@ app.use((req, res, next) => {
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader("Cache-Control", "no-store");
-  if (process.env.NODE_ENV === "production") {
+  if (isProduction) {
     res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   }
   next();
 });
-app.use(express.json({ limit: "8mb" }));
+app.use("/api/auth", express.json({ limit: "8kb" }));
+app.use("/api/gemini", express.json({ limit: "8mb" }));
 
 function requireSameOrigin(req, res) {
   if (isSameOrigin(req)) return true;
@@ -140,14 +145,22 @@ app.post("/api/gemini/generate", async (req, res) => {
     }
   }
 
-  const model = allowedModels.has(req.body?.model) ? req.body.model : "gemini-3-flash-preview";
+  const model = req.body?.model ?? "gemini-3-flash-preview";
+  if (typeof model !== "string" || !allowedModels.has(model)) {
+    res.status(400).json({ error: "The selected Gemini model is not supported." });
+    return;
+  }
 
   try {
     const ai = new GoogleGenAI({ apiKey });
     const contents = image
       ? { parts: [{ text: prompt }, { inlineData: { mimeType: image.mimeType, data: image.data } }] }
       : prompt;
-    const response = await ai.models.generateContent({ model, contents });
+    const response = await ai.models.generateContent({
+      model,
+      contents,
+      config: { maxOutputTokens: 8192 }
+    });
     const text = response.text;
     if (typeof text !== "string" || !text.trim()) {
       res.status(502).json({ error: "Gemini returned an empty response." });
@@ -235,11 +248,34 @@ app.post("/api/gemini/video", async (req, res) => {
       return;
     }
 
-    const videoBytes = Buffer.from(await download.arrayBuffer());
-    if (!videoBytes.length || videoBytes.length > 50 * 1024 * 1024) {
+    const maxVideoBytes = 50 * 1024 * 1024;
+    const declaredLength = Number(download.headers.get("content-length") || 0);
+    if (declaredLength > maxVideoBytes || !download.body) {
+      await download.body?.cancel().catch(() => {});
       res.status(502).json({ error: "The generated video is empty or exceeds the 50 MB delivery limit." });
       return;
     }
+
+    const reader = download.body.getReader();
+    const chunks = [];
+    let totalBytes = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxVideoBytes) {
+        await reader.cancel().catch(() => {});
+        res.status(502).json({ error: "The generated video exceeds the 50 MB delivery limit." });
+        return;
+      }
+      chunks.push(Buffer.from(value));
+    }
+
+    if (!totalBytes) {
+      res.status(502).json({ error: "The video provider returned an empty file." });
+      return;
+    }
+    const videoBytes = Buffer.concat(chunks, totalBytes);
 
     res.status(200);
     res.setHeader("Content-Type", "video/mp4");
@@ -276,7 +312,18 @@ if (process.env.NODE_ENV === "production") {
   app.use(vite.middlewares);
 }
 
-const bindHost = process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1";
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+  const status = Number(error?.status || error?.statusCode);
+  if (status === 413) {
+    res.status(413).json({ error: "The request is too large. Reduce the prompt or image size." });
+    return;
+  }
+  console.error("Request processing failed:", error?.name || "unknown");
+  res.status(400).json({ error: "The request could not be processed." });
+});
+
+const bindHost = isProduction ? "0.0.0.0" : "127.0.0.1";
 httpServer.listen(port, bindHost, () => {
   console.log("GOD MODE server listening on port " + port);
 });
