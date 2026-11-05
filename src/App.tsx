@@ -34,7 +34,6 @@ import {
   Tablet
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI, GenerateContentResponse, Modality } from "@google/genai";
 import ReactMarkdown from 'react-markdown';
 import JSZip from 'jszip';
 import { clsx, type ClassValue } from 'clsx';
@@ -105,7 +104,137 @@ const GradientButton = ({ children, onClick, className, disabled, loading }: {
   </button>
 );
 
+
+function PrivateAccessGate({ checking, onLogin }: { checking: boolean; onLogin: (password: string) => Promise<void> }) {
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await onLogin(password);
+      setPassword("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign-in failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-6">
+      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
+            <Zap className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">GOD MODE</h1>
+            <p className="text-[10px] text-indigo-400 font-mono tracking-widest uppercase">Private workspace</p>
+          </div>
+        </div>
+        <h2 className="text-2xl font-semibold mb-2">Secure sign-in</h2>
+        <p className="text-sm text-gray-400 leading-relaxed mb-6">
+          Gemini requests run through the server. Your provider API key is never sent to this browser.
+        </p>
+        {checking ? (
+          <div className="flex items-center gap-3 text-sm text-gray-400">
+            <Loader2 className="w-4 h-4 animate-spin" /> Checking your private session…
+          </div>
+        ) : (
+          <form onSubmit={submit} className="space-y-4">
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Private access password"
+              maxLength={256}
+              required
+              className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none transition focus:border-indigo-500/60"
+            />
+            {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+            <button
+              type="submit"
+              disabled={busy || !password}
+              className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-3 text-sm font-semibold transition hover:from-indigo-500 hover:to-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {busy ? "Unlocking…" : "Unlock GOD MODE"}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+async function compressImageToDataUrl(file: File): Promise<string> {
+  const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error("Use a JPG, PNG or WEBP image.");
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    throw new Error("The original image must be smaller than 20 MB.");
+  }
+
+  let source: ImageBitmap | HTMLImageElement | null = null;
+  let temporaryUrl: string | null = null;
+
+  try {
+    if (typeof createImageBitmap === "function") {
+      source = await createImageBitmap(file);
+    } else {
+      temporaryUrl = URL.createObjectURL(file);
+      source = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error("The selected image could not be opened."));
+        image.src = temporaryUrl!;
+      });
+    }
+
+    const width = source.width || (source as HTMLImageElement).naturalWidth;
+    const height = source.height || (source as HTMLImageElement).naturalHeight;
+    if (!width || !height) throw new Error("The selected image has invalid dimensions.");
+
+    const renderJpeg = async (maxDimension: number, quality: number): Promise<Blob | null> => {
+      const scale = Math.min(1, maxDimension / Math.max(width, height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(width * scale));
+      canvas.height = Math.max(1, Math.round(height * scale));
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Image compression is unavailable in this browser.");
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(source as CanvasImageSource, 0, 0, canvas.width, canvas.height);
+      return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    };
+
+    let blob = await renderJpeg(1920, 0.8);
+    if (!blob) throw new Error("The image could not be prepared.");
+    if (blob.size > 4 * 1024 * 1024) blob = await renderJpeg(1440, 0.65);
+    if (!blob || blob.size > 4 * 1024 * 1024) {
+      throw new Error("The compressed image is still too large. Choose a smaller photo.");
+    }
+
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("Could not read the prepared image."));
+      reader.readAsDataURL(blob);
+    });
+  } finally {
+    if (source && "close" in source && typeof source.close === "function") source.close();
+    if (temporaryUrl) URL.revokeObjectURL(temporaryUrl);
+  }
+}
+
 export default function App() {
+  const [authState, setAuthState] = useState<'checking' | 'anonymous' | 'authenticated'>('checking');
+  const [uploadError, setUploadError] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('chat');
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
   const [isLoading, setIsLoading] = useState(false);
@@ -133,25 +262,72 @@ export default function App() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // --- AI Logic ---
+  useEffect(() => {
+    let active = true;
+    fetch("/api/auth", { credentials: "same-origin", cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Session check failed.");
+        return data;
+      })
+      .then((data) => {
+        if (active) setAuthState(data.authenticated ? "authenticated" : "anonymous");
+      })
+      .catch(() => {
+        if (active) setAuthState("anonymous");
+      });
+    return () => { active = false; };
+  }, []);
 
-  const getAI = () => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const handleLogin = async (password: string) => {
+    const response = await fetch("/api/auth", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "login", password })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Sign-in failed.");
+    setAuthState("authenticated");
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "logout" })
+      });
+    } finally {
+      setAuthState("anonymous");
+      setMessages([]);
+    }
+  };
+
+
+
+  // --- AI Logic ---
 
   const callGemini = async (prompt: string, image?: string) => {
     setIsLoading(true);
     try {
-      const ai = getAI();
-      const model = ai.models.generateContent({
-        model: aiModel,
-        contents: image 
-          ? { parts: [{ text: prompt }, { inlineData: { mimeType: "image/jpeg", data: image.split(',')[1] } }] }
-          : prompt,
+      const response = await fetch("/api/gemini/generate", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, image, model: aiModel })
       });
-      const response = await model;
-      return response.text;
+      const data = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        setAuthState("anonymous");
+        throw new Error("Your session has expired. Sign in again.");
+      }
+      if (!response.ok) throw new Error(data.error || "Gemini request failed.");
+      return typeof data.text === "string" ? data.text : "";
     } catch (error) {
       console.error("Gemini Error:", error);
-      return "Error: Failed to connect to AI. Please check your API key and connection.";
+      return "Error: " + (error instanceof Error ? error.message : "Gemini request failed.");
     } finally {
       setIsLoading(false);
     }
@@ -199,40 +375,33 @@ export default function App() {
   };
 
   const handleVideoGeneration = async () => {
-    if (!videoPrompt) return;
+    if (!videoPrompt.trim()) return;
     setIsLoading(true);
+    setUploadError("");
     try {
-      const ai = getAI();
-      let operation = await ai.models.generateVideos({
-        model: 'veo-3.1-fast-generate-preview',
-        prompt: videoPrompt,
-        image: uploadedImage ? {
-          imageBytes: uploadedImage.split(',')[1],
-          mimeType: 'image/jpeg'
-        } : undefined,
-        config: {
-          numberOfVideos: 1,
-          resolution: '720p',
-          aspectRatio: '16:9'
-        }
+      const response = await fetch("/api/gemini/video", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: videoPrompt, image: uploadedImage })
       });
-
-      while (!operation.done) {
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        operation = await ai.operations.getVideosOperation({ operation });
+      if (response.status === 401) {
+        setAuthState("anonymous");
+        throw new Error("Your session has expired. Sign in again.");
       }
-
-      const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
-      if (downloadLink) {
-        const response = await fetch(downloadLink, {
-          method: 'GET',
-          headers: { 'x-goog-api-key': process.env.GEMINI_API_KEY! },
-        });
-        const blob = await response.blob();
-        setGeneratedVideoUrl(URL.createObjectURL(blob));
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Video generation failed.");
       }
+      const blob = await response.blob();
+      const nextUrl = URL.createObjectURL(blob);
+      setGeneratedVideoUrl((previous) => {
+        if (previous) URL.revokeObjectURL(previous);
+        return nextUrl;
+      });
     } catch (error) {
       console.error("Video Generation Error:", error);
+      setUploadError(error instanceof Error ? error.message : "Video generation failed.");
     } finally {
       setIsLoading(false);
     }
@@ -251,14 +420,27 @@ export default function App() {
     a.click();
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setUploadedImage(reader.result as string);
-      reader.readAsDataURL(file);
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputElement = e.target;
+    const file = inputElement.files?.[0];
+    inputElement.value = "";
+    if (!file) return;
+    try {
+      const prepared = await compressImageToDataUrl(file);
+      setUploadedImage(prepared);
+      setUploadError("");
+      setGeneratedVideoUrl((previous) => {
+        if (previous) URL.revokeObjectURL(previous);
+        return null;
+      });
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Image upload failed.");
     }
   };
+
+  if (authState !== "authenticated") {
+    return <PrivateAccessGate checking={authState === "checking"} onLogin={handleLogin} />;
+  }
 
   // --- UI Sections ---
 
@@ -370,11 +552,14 @@ export default function App() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-medium text-emerald-400 uppercase tracking-wider">System Online</span>
+              <span className="text-[10px] font-medium text-emerald-400 uppercase tracking-wider">Private Session</span>
             </div>
+            <button onClick={handleLogout} className="rounded-lg border border-white/10 px-3 py-2 text-[10px] uppercase tracking-wider text-gray-300 hover:bg-white/10">Lock</button>
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 border border-white/20" />
           </div>
         </header>
+
+        {uploadError && <div role="alert" className="mx-6 mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{uploadError}<button onClick={() => setUploadError("")} className="ml-3 underline">Dismiss</button></div>}
 
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
@@ -502,7 +687,7 @@ export default function App() {
                             <h3 className="text-lg font-bold">Upload Photo</h3>
                             <p className="text-sm text-gray-400">Drag and drop or click to browse</p>
                           </div>
-                          <input type="file" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" />
+                          <input type="file" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" accept="image/jpeg,image/png,image/webp" />
                         </>
                       )}
                     </GlassPanel>
@@ -546,7 +731,7 @@ export default function App() {
                           <p>Upload an image for analysis</p>
                         </div>
                       )}
-                      <input type="file" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                      <input type="file" onChange={handleImageUpload} accept="image/jpeg,image/png,image/webp" className="absolute inset-0 opacity-0 cursor-pointer" />
                     </GlassPanel>
                     <GradientButton onClick={handleVisionAnalysis} disabled={!uploadedImage} loading={isLoading} className="w-full">
                       Start Visual Analysis
@@ -712,7 +897,7 @@ export default function App() {
                             className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 focus:outline-none focus:border-indigo-500/50"
                           />
                         </div>
-                        <input type="file" id="video-ref" onChange={handleImageUpload} className="hidden" />
+                        <input type="file" id="video-ref" onChange={handleImageUpload} accept="image/jpeg,image/png,image/webp" className="hidden" />
                         <button 
                           onClick={() => document.getElementById('video-ref')?.click()}
                           className="p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-colors"
