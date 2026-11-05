@@ -323,7 +323,7 @@ app.post("/api/gemini/video", async (req, res) => {
 });
 
 const port = Number(process.env.PORT || 3000);
-if (process.env.NODE_ENV === "production") {
+if (isProduction) {
   const distDir = path.join(rootDir, "dist");
   app.use(express.static(distDir));
   app.get("*", (req, res) => {
