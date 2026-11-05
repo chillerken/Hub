@@ -94,7 +94,7 @@ The current dependency audit still reports one low-severity esbuild advisory aff
 
 Run npm test and npm run build.
 
-GitHub Actions checks session signing, expiry, same-origin protection, image validation and confirms that the browser source and Vite config do not contain Gemini credentials or direct Google SDK calls.
+The test suite also starts the local Node server with temporary test-only secrets and verifies the login/session/logout flow, cross-origin rejection and fail-closed behavior when no Gemini key is configured. GitHub Actions checks session signing, expiry, origin protection, image validation and confirms that the browser source and Vite config do not contain Gemini credentials or direct Google SDK calls.
 
 ## Secret handling
 
