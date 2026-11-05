@@ -27,6 +27,8 @@ const allowedModels = new Set(["gemini-3-flash-preview", "gemini-3.1-pro-preview
 const VIDEO_MODEL = "veo-3.1-fast-generate-preview";
 
 app.disable("x-powered-by");
+// Trust only the nearest hosting proxy when resolving req.ip for throttling.
+app.set("trust proxy", 1);
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
