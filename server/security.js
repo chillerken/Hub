@@ -74,9 +74,15 @@ export function isSameOrigin(req) {
   const origin = req.headers?.origin;
   const forwardedHost = req.headers?.["x-forwarded-host"];
   const host = forwardedHost || req.headers?.host;
-  if (!origin || !host) return false;
+  const forwardedProto = String(req.headers?.["x-forwarded-proto"] || "").split(",")[0].trim();
+  const protocol = String(req.protocol || forwardedProto).replace(/:$/, "").toLowerCase();
+  if (!origin || !host || !protocol) return false;
   try {
-    return new URL(origin).host.toLowerCase() === String(host).split(",")[0].trim().toLowerCase();
+    const originUrl = new URL(origin);
+    const requestHost = String(host).split(",")[0].trim().toLowerCase();
+    return originUrl.host.toLowerCase() === requestHost &&
+      originUrl.protocol === protocol + ":" &&
+      (protocol === "https" || protocol === "http");
   } catch {
     return false;
   }
