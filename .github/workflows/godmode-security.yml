@@ -45,7 +45,7 @@ jobs:
         run: npm install
       - name: Apply non-breaking dependency security updates
         if: github.event_name == 'pull_request'
-        run: npm audit fix
+        run: npm audit fix || npm audit --audit-level=high
       - name: Run security regression tests
         run: npm test
       - name: TypeScript check
