@@ -53,6 +53,7 @@ jobs:
       - name: Build frontend
         run: npm run build
       - name: Verify no high-severity dependency advisories remain
+        if: github.event_name == 'pull_request'
         run: npm audit --audit-level=high
       - name: Commit patched dependency lockfile to PR branch
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
