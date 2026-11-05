@@ -10,7 +10,7 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "start": "node server.js --production",
-    "test": "node --test tests/godmode-*.test.mjs"
+    "test": "node --test tests/godmode-security.test.mjs tests/godmode-server-smoke.test.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
