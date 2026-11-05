@@ -1,0 +1,44 @@
+name: GOD MODE Security Checks
+
+on:
+  push:
+    branches: ["main", "security/server-side-gemini-proxy"]
+    paths:
+      - "src/App.tsx"
+      - "vite.config.ts"
+      - "server.js"
+      - "server/**"
+      - "tests/godmode-security.test.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".env.example"
+      - ".github/workflows/godmode-security.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "src/App.tsx"
+      - "vite.config.ts"
+      - "server.js"
+      - "server/**"
+      - "tests/godmode-security.test.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".env.example"
+      - ".github/workflows/godmode-security.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Run security regression tests
+        run: npm test
+      - name: Build frontend
+        run: npm run build
