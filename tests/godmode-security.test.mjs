@@ -8,6 +8,7 @@ import {
   verifySessionValue,
   isSameOrigin,
   parseImageDataUrl,
+  getClientIp,
   takeRateLimit
 } from "../server/security.js";
 
@@ -45,6 +46,14 @@ test("image data URL validation accepts JPEG and rejects unsupported or oversize
   assert.equal(parsed?.data, jpeg);
   assert.equal(parseImageDataUrl("data:image/svg+xml;base64," + jpeg), null);
   assert.equal(parseImageDataUrl("data:image/jpeg;base64," + jpeg, 2), null);
+});
+
+
+test("login throttling prefers the trusted proxy-resolved client IP", () => {
+  assert.equal(getClientIp({
+    ip: "203.0.113.10",
+    headers: { "x-forwarded-for": "198.51.100.99, 203.0.113.10" }
+  }), "203.0.113.10");
 });
 
 test("rate limiter blocks requests above the configured threshold", () => {
