@@ -274,6 +274,7 @@ if (process.env.NODE_ENV === "production") {
   app.use(vite.middlewares);
 }
 
-httpServer.listen(port, "0.0.0.0", () => {
+const bindHost = process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1";
+httpServer.listen(port, bindHost, () => {
   console.log("GOD MODE server listening on port " + port);
 });
