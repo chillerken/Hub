@@ -26,21 +26,43 @@ on:
       - ".env.example"
       - ".github/workflows/godmode-security.yml"
 
+permissions:
+  contents: write
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
       - name: Install dependencies
         run: npm install
+      - name: Apply non-breaking dependency security updates
+        if: github.event_name == 'pull_request'
+        run: npm audit fix
       - name: Run security regression tests
         run: npm test
       - name: TypeScript check
         run: npm run lint
       - name: Build frontend
         run: npm run build
+      - name: Verify no high-severity dependency advisories remain
+        run: npm audit --audit-level=high
+      - name: Commit patched dependency lockfile to PR branch
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          if ! git diff --quiet -- package-lock.json package.json; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add package-lock.json package.json
+            git commit -m 'chore: patch npm audit dependencies'
+            git push origin "HEAD:${BRANCH}"
+          fi
