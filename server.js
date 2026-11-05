@@ -24,7 +24,7 @@ dotenv.config({ path: path.join(rootDir, ".env") });
 
 const isProduction = process.argv.includes("--production") ||
   (!process.argv.includes("--dev") && process.env.NODE_ENV === "production");
-if (isProduction) process.env.NODE_ENV = "production";
+process.env.NODE_ENV = isProduction ? "production" : "development";
 const app = express();
 const httpServer = createServer(app);
 const allowedModels = new Set(["gemini-3-flash-preview", "gemini-3.1-pro-preview"]);
@@ -73,6 +73,45 @@ function enforceLimit(req, res, key, limit, windowMs) {
   res.setHeader("Retry-After", String(result.retryAfterSeconds));
   res.status(429).json({ error: "Usage limit reached. Please try again later." });
   return false;
+}
+
+function isAllowedVideoUrl(url) {
+  return url.protocol === "https:" &&
+    !url.username && !url.password &&
+    (!url.port || url.port === "443") &&
+    ["generativelanguage.googleapis.com", "storage.googleapis.com"].includes(url.hostname);
+}
+
+async function fetchGoogleVideo(startUrl, apiKey) {
+  let currentUrl = startUrl;
+  const signal = AbortSignal.timeout(60_000);
+
+  for (let redirectCount = 0; redirectCount <= 3; redirectCount += 1) {
+    if (!isAllowedVideoUrl(currentUrl)) {
+      throw new Error("The video provider returned an unsupported download location.");
+    }
+
+    const headers = currentUrl.hostname === "generativelanguage.googleapis.com"
+      ? { "x-goog-api-key": apiKey }
+      : {};
+    const response = await fetch(currentUrl, {
+      method: "GET",
+      headers,
+      redirect: "manual",
+      signal
+    });
+
+    if (response.status < 300 || response.status >= 400) return response;
+
+    const location = response.headers.get("location");
+    await response.body?.cancel().catch(() => {});
+    if (!location || redirectCount === 3) {
+      throw new Error("The video provider returned an invalid redirect.");
+    }
+    currentUrl = new URL(location, currentUrl);
+  }
+
+  throw new Error("The video provider returned too many redirects.");
 }
 
 function sleep(ms) {
@@ -232,17 +271,12 @@ app.post("/api/gemini/video", async (req, res) => {
     }
 
     const videoUrl = new URL(downloadLink);
-    if (videoUrl.protocol !== "https:" ||
-        !["generativelanguage.googleapis.com", "storage.googleapis.com"].includes(videoUrl.hostname)) {
+    if (!isAllowedVideoUrl(videoUrl)) {
       res.status(502).json({ error: "The video provider returned an unsupported download location." });
       return;
     }
 
-    const download = await fetch(videoUrl, {
-      method: "GET",
-      headers: { "x-goog-api-key": apiKey },
-      signal: AbortSignal.timeout(60_000)
-    });
+    const download = await fetchGoogleVideo(videoUrl, apiKey);
     if (!download.ok) {
       res.status(502).json({ error: "The generated video could not be downloaded." });
       return;
