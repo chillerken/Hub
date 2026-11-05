@@ -1,4 +1,6 @@
 import express from "express";
+import dotenv from "dotenv";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +19,8 @@ import {
 } from "./server/security.js";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(rootDir, ".env.local") });
+dotenv.config({ path: path.join(rootDir, ".env") });
 const app = express();
 const httpServer = createServer(app);
 const allowedModels = new Set(["gemini-3-flash-preview", "gemini-3.1-pro-preview"]);
@@ -96,7 +100,7 @@ app.post("/api/auth", (req, res) => {
     return;
   }
 
-  const ipHash = getClientIp(req);
+  const ipHash = createHash("sha256").update(getClientIp(req)).digest("hex");
   const rateKey = "login:" + ipHash;
   if (!enforceLimit(req, res, rateKey, 5, 15 * 60 * 1000)) return;
 
