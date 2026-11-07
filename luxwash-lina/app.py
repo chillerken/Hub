@@ -19,30 +19,61 @@ def transcript_event_id(call_id,event):
     # Deterministic fallback without storing transcript text in identifiers.
     return call_id+':'+hashlib.sha256(json.dumps(event,sort_keys=True).encode()).hexdigest()
 async def bootstrap_bridge(application,attempts=1):
-    for attempt in range(attempts):
+    # Serialize startup retries and incoming-call bootstraps. A sleeping central
+    # Render service can return 429/503 while it wakes; do not race parallel retries.
+    lock=getattr(application.state,'bridge_lock',None)
+    if lock is None:
+        lock=asyncio.Lock()
+        application.state.bridge_lock=lock
+    async with lock:
+        for attempt in range(attempts):
+            try:
+                settings=await asyncio.to_thread(central.bootstrap)
+                if not isinstance(settings,dict) or not settings.get('tools') or not settings.get('instructions'):
+                    raise central.BridgeError('invalid_bootstrap')
+                application.state.bridge_ready=True
+                application.state.bridge_error=''
+                application.state.phone_policy_version=settings.get('policy_version','legacy')
+                application.state.assistant_name=settings.get('assistant_name','Astra')
+                log.info('CRM bridge ready: tools=%s',len(settings['tools']))
+                return settings
+            except Exception as exc:
+                code=exc.code if isinstance(exc,central.BridgeError) else 'unexpected_error'
+                application.state.bridge_ready=False
+                application.state.bridge_error=code
+                log.warning('CRM bridge unavailable: code=%s attempt=%s',code,attempt+1)
+                if not isinstance(exc,central.BridgeError) or not exc.retryable or attempt+1>=attempts:raise
+                await asyncio.sleep(2*(attempt+1))
+
+async def retry_bridge(application):
+    # Render free instances can wake before their upstream central service.
+    # Retry transient 429/5xx/network failures with bounded exponential backoff.
+    delay=10
+    while not getattr(application.state,'bridge_ready',False):
+        await asyncio.sleep(delay)
+        if getattr(application.state,'bridge_ready',False):
+            return
         try:
-            settings=await asyncio.to_thread(central.bootstrap)
-            if not isinstance(settings,dict) or not settings.get('tools') or not settings.get('instructions'):
-                raise central.BridgeError('invalid_bootstrap')
-            application.state.bridge_ready=True
-            application.state.bridge_error=''
-            application.state.phone_policy_version=settings.get('policy_version','legacy')
-            application.state.assistant_name=settings.get('assistant_name','Astra')
-            log.info('CRM bridge ready: tools=%s',len(settings['tools']))
-            return settings
+            await bootstrap_bridge(application,attempts=1)
+            log.info('CRM bridge recovered after startup retry')
+            return
         except Exception as exc:
-            code=exc.code if isinstance(exc,central.BridgeError) else 'unexpected_error'
-            application.state.bridge_ready=False
-            application.state.bridge_error=code
-            log.warning('CRM bridge unavailable: code=%s attempt=%s',code,attempt+1)
-            if not isinstance(exc,central.BridgeError) or not exc.retryable or attempt+1>=attempts:raise
-            await asyncio.sleep(2*(attempt+1))
+            if not isinstance(exc,central.BridgeError) or not exc.retryable:
+                code=exc.code if isinstance(exc,central.BridgeError) else 'unexpected_error'
+                log.error('CRM bridge retry stopped: code=%s',code)
+                return
+            delay=min(delay*2,60)
+
 @asynccontextmanager
 async def lifespan(app):
+    app.state.bridge_lock=asyncio.Lock()
+    app.state.bridge_retry_task=None
     try:
         await bootstrap_bridge(app,attempts=3)
-    except Exception:
+    except Exception as exc:
         app.state.bridge_ready=False
+        if isinstance(exc,central.BridgeError) and exc.retryable:
+            app.state.bridge_retry_task=asyncio.create_task(retry_bridge(app))
     try:
         response=await asyncio.to_thread(requests.get,'https://api.openai.com/v1/models/'+MODEL,headers={'Authorization':'Bearer '+KEY},timeout=10)
         model_status=response.status_code
@@ -54,6 +85,10 @@ async def lifespan(app):
     app.state.model_error=model_error
     log.info('Astra configuration: openai=%s webhook=%s central_bridge=%s model_status=%s model_error=%s recording=false',bool(KEY),bool(SECRET),app.state.bridge_ready,model_status,model_error)
     yield
+    retry_task=getattr(app.state,'bridge_retry_task',None)
+    if retry_task:
+        retry_task.cancel()
+        await asyncio.gather(retry_task,return_exceptions=True)
     for t in tuple(tasks): t.cancel()
     if tasks: await asyncio.gather(*tasks,return_exceptions=True)
 app=FastAPI(title='LuxWash Astra',version='3.0.0',lifespan=lifespan)
