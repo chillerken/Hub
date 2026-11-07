@@ -18,7 +18,12 @@ def transcript_event_id(call_id,event):
     if event.get('item_id'):return event['item_id']+':'+event['type']
     # Deterministic fallback without storing transcript text in identifiers.
     return call_id+':'+hashlib.sha256(json.dumps(event,sort_keys=True).encode()).hexdigest()
-async def bootstrap_bridge(application,attempts=1):
+def schedule_bridge_retry(application):
+    task=getattr(application.state,'bridge_retry_task',None)
+    if task is None or task.done():
+        application.state.bridge_retry_task=asyncio.create_task(retry_bridge(application))
+
+async def bootstrap_bridge(application,attempts=1,schedule_retry=True):
     # Serialize startup retries and incoming-call bootstraps. A sleeping central
     # Render service can return 429/503 while it wakes; do not race parallel retries.
     lock=getattr(application.state,'bridge_lock',None)
@@ -42,20 +47,23 @@ async def bootstrap_bridge(application,attempts=1):
                 application.state.bridge_ready=False
                 application.state.bridge_error=code
                 log.warning('CRM bridge unavailable: code=%s attempt=%s',code,attempt+1)
-                if not isinstance(exc,central.BridgeError) or not exc.retryable or attempt+1>=attempts:raise
+                if not isinstance(exc,central.BridgeError) or not exc.retryable or attempt+1>=attempts:
+                    if isinstance(exc,central.BridgeError) and exc.retryable and schedule_retry:
+                        schedule_bridge_retry(application)
+                    raise
                 await asyncio.sleep(2*(attempt+1))
 
 async def retry_bridge(application):
-    # Render free instances can wake before their upstream central service.
     # Retry transient 429/5xx/network failures with bounded exponential backoff.
+    # This also recovers when an incoming-call bootstrap fails after startup.
     delay=10
     while not getattr(application.state,'bridge_ready',False):
         await asyncio.sleep(delay)
         if getattr(application.state,'bridge_ready',False):
             return
         try:
-            await bootstrap_bridge(application,attempts=1)
-            log.info('CRM bridge recovered after startup retry')
+            await bootstrap_bridge(application,attempts=1,schedule_retry=False)
+            log.info('CRM bridge recovered after retry')
             return
         except Exception as exc:
             if not isinstance(exc,central.BridgeError) or not exc.retryable:
@@ -70,10 +78,8 @@ async def lifespan(app):
     app.state.bridge_retry_task=None
     try:
         await bootstrap_bridge(app,attempts=3)
-    except Exception as exc:
+    except Exception:
         app.state.bridge_ready=False
-        if isinstance(exc,central.BridgeError) and exc.retryable:
-            app.state.bridge_retry_task=asyncio.create_task(retry_bridge(app))
     try:
         response=await asyncio.to_thread(requests.get,'https://api.openai.com/v1/models/'+MODEL,headers={'Authorization':'Bearer '+KEY},timeout=10)
         model_status=response.status_code
