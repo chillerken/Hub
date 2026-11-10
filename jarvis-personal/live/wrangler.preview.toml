@@ -1,0 +1,9 @@
+# Uitsluitend de aparte, niet-productie JARVIS preview-Worker.
+# Productie-Worker en LuxWash-website worden nooit door deze config geraakt.
+name = "jarvis-gertjan-personal-agent-preview"
+main = "./worker.js"
+compatibility_date = "2026-10-13"
+workers_dev = true
+
+[ai]
+binding = "AI"
