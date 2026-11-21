@@ -74,6 +74,7 @@ console.log("\n[3/4] Lees alleen lokale API-keys en configureer de browserclient
 const status = runSupabase(["status", "-o", "env"]);
 const supabaseUrl = parseEnv(status, "API_URL");
 const anonKey = parseEnv(status, "ANON_KEY");
+const serviceRoleKey = parseEnv(status, "SERVICE_ROLE_KEY");
 const parsedHost = new URL(supabaseUrl).hostname;
 if (!["127.0.0.1", "localhost"].includes(parsedHost)) {
   throw new Error("Veiligheidsstop: Supabase Local gaf geen localhost API-URL terug.");
@@ -90,6 +91,8 @@ const values = new Map(existingEnv.split(/\r?\n/).filter(line => line && !line.s
 }));
 if (!values.has("GEMINI_API_KEY")) values.set("GEMINI_API_KEY", "replace-with-a-separate-development-key");
 if (!values.has("STRIPE_WEBHOOK_SECRET")) values.set("STRIPE_WEBHOOK_SECRET", "whsec_local_test_only");
+// Local-only admin key for integration tests; the file is gitignored and never deployed.
+values.set("SUPABASE_SERVICE_ROLE_KEY", serviceRoleKey);
 writeFileSync(envFile, [...values].map(([key, value]) => `${key}=${value}`).join("\n") + "\n");
 
 
