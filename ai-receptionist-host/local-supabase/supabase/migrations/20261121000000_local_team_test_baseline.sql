@@ -584,73 +584,121 @@ create table "public"."workflow_actions" (
   "max_attempts" integer DEFAULT 5 NOT NULL
 );
 
-alter table "private"."billing_checkout_refs" add constraint "billing_checkout_refs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
 alter table "private"."billing_checkout_refs" add constraint "billing_checkout_refs_pkey" PRIMARY KEY (token_hash);
-
-alter table "private"."billing_checkout_refs" add constraint "billing_checkout_refs_plan_check" CHECK (plan = ANY (ARRAY['starter'::text, 'pro'::text, 'business'::text]));
-
-alter table "private"."integration_credentials" add constraint "integration_credentials_integration_id_fkey" FOREIGN KEY (integration_id) REFERENCES tenant_integrations(id) ON DELETE CASCADE;
-
-alter table "private"."integration_credentials" add constraint "integration_credentials_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
 alter table "private"."integration_credentials" add constraint "integration_credentials_pkey" PRIMARY KEY (integration_id);
 
-alter table "private"."integration_credentials" add constraint "integration_credentials_vault_secret_name_key" UNIQUE (vault_secret_name);
-
-alter table "private"."oauth_states" add constraint "oauth_states_integration_id_fkey" FOREIGN KEY (integration_id) REFERENCES tenant_integrations(id) ON DELETE CASCADE;
-
-alter table "private"."oauth_states" add constraint "oauth_states_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
 alter table "private"."oauth_states" add constraint "oauth_states_pkey" PRIMARY KEY (state_hash);
-
-alter table "private"."oauth_states" add constraint "oauth_states_provider_check" CHECK (provider = 'google_calendar'::text);
-
-alter table "public"."ai_usage_daily" add constraint "ai_usage_daily_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
 alter table "public"."ai_usage_daily" add constraint "ai_usage_daily_pkey" PRIMARY KEY (organization_id, usage_date);
 
-alter table "public"."ai_usage_daily" add constraint "ai_usage_daily_request_count_check" CHECK (request_count >= 0);
-
-alter table "public"."appointments" add constraint "appointments_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
-
-alter table "public"."appointments" add constraint "appointments_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
 alter table "public"."appointments" add constraint "appointments_pkey" PRIMARY KEY (id);
-
-alter table "public"."audit_events" add constraint "audit_events_actor_user_id_fkey" FOREIGN KEY (actor_user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
-
-alter table "public"."audit_events" add constraint "audit_events_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
 alter table "public"."audit_events" add constraint "audit_events_pkey" PRIMARY KEY (id);
 
-alter table "public"."business_profiles" add constraint "business_profiles_lead_capture_mode_check" CHECK (lead_capture_mode = ANY (ARRAY['progressive'::text, 'upfront'::text]));
-
-alter table "public"."business_profiles" add constraint "business_profiles_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
 alter table "public"."business_profiles" add constraint "business_profiles_pkey" PRIMARY KEY (organization_id);
-
-alter table "public"."commercial_learning_snapshots" add constraint "commercial_learning_snapshots_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."commercial_learning_snapshots" add constraint "commercial_learning_snapshots_period_days_check" CHECK (period_days >= 7 AND period_days <= 3650);
 
 alter table "public"."commercial_learning_snapshots" add constraint "commercial_learning_snapshots_pkey" PRIMARY KEY (id);
 
-alter table "public"."conversations" add constraint "conversations_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL;
-
-alter table "public"."conversations" add constraint "conversations_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
 alter table "public"."conversations" add constraint "conversations_pkey" PRIMARY KEY (id);
+
+alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_pkey" PRIMARY KEY (id);
+
+alter table "public"."customer_payments" add constraint "customer_payments_pkey" PRIMARY KEY (id);
+
+alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_pkey" PRIMARY KEY (id);
+
+alter table "public"."handoffs" add constraint "handoffs_pkey" PRIMARY KEY (id);
+
+alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_pkey" PRIMARY KEY (id);
+
+alter table "public"."jarvis_agent_events" add constraint "jarvis_agent_events_pkey" PRIMARY KEY (id);
+
+alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_pkey" PRIMARY KEY (id);
+
+alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_pkey" PRIMARY KEY (organization_id);
+
+alter table "public"."leadflow_leads" add constraint "leadflow_leads_pkey" PRIMARY KEY (id);
+
+alter table "public"."leads" add constraint "leads_pkey" PRIMARY KEY (id);
+
+alter table "public"."marketing_agent_configs" add constraint "marketing_agent_configs_pkey" PRIMARY KEY (organization_id);
+
+alter table "public"."marketing_campaigns" add constraint "marketing_campaigns_pkey" PRIMARY KEY (id);
+
+alter table "public"."memberships" add constraint "memberships_pkey" PRIMARY KEY (id);
+
+alter table "public"."messages" add constraint "messages_pkey" PRIMARY KEY (id);
+
+alter table "public"."organizations" add constraint "organizations_pkey" PRIMARY KEY (id);
+
+alter table "public"."platform_admins" add constraint "platform_admins_pkey" PRIMARY KEY (user_id);
+
+alter table "public"."reception_ai_plan_catalog" add constraint "reception_ai_plan_catalog_pkey" PRIMARY KEY (plan);
+
+alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_pkey" PRIMARY KEY (organization_id);
+
+alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_pkey" PRIMARY KEY (id);
+
+alter table "public"."sales_opportunities" add constraint "sales_opportunities_pkey" PRIMARY KEY (organization_id, lead_id);
+
+alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_pkey" PRIMARY KEY (id);
+
+alter table "public"."sales_sequences" add constraint "sales_sequences_pkey" PRIMARY KEY (id);
+
+alter table "public"."stripe_events" add constraint "stripe_events_pkey" PRIMARY KEY (id);
+
+alter table "public"."tasks" add constraint "tasks_pkey" PRIMARY KEY (id);
+
+alter table "public"."team_invitations" add constraint "team_invitations_pkey" PRIMARY KEY (id);
+
+alter table "public"."tenant_activation_events" add constraint "tenant_activation_events_pkey" PRIMARY KEY (id);
+
+alter table "public"."tenant_integrations" add constraint "tenant_integrations_pkey" PRIMARY KEY (id);
+
+alter table "public"."user_org_context" add constraint "user_org_context_pkey" PRIMARY KEY (user_id);
+
+alter table "public"."widget_rate_limits" add constraint "widget_rate_limits_pkey" PRIMARY KEY (id);
+
+alter table "public"."workflow_action_attempts" add constraint "workflow_action_attempts_pkey" PRIMARY KEY (id);
+
+alter table "public"."workflow_actions" add constraint "workflow_actions_pkey" PRIMARY KEY (id);
+
+alter table "private"."integration_credentials" add constraint "integration_credentials_vault_secret_name_key" UNIQUE (vault_secret_name);
+
+alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_action_unique" UNIQUE (workflow_action_id);
+
+alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_action_unique" UNIQUE (workflow_action_id);
+
+alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_organization_id_owner_user_id_client_req_key" UNIQUE (organization_id, owner_user_id, client_request_id);
+
+alter table "public"."leads" add constraint "leads_organization_id_dedupe_key_key" UNIQUE (organization_id, dedupe_key);
+
+alter table "public"."memberships" add constraint "memberships_organization_id_user_id_key" UNIQUE (organization_id, user_id);
+
+alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_token_key" UNIQUE (token);
+
+alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_sequence_id_step_no_key" UNIQUE (sequence_id, step_no);
+
+alter table "public"."team_invitations" add constraint "team_invitations_token_hash_key" UNIQUE (token_hash);
+
+alter table "public"."tenant_activation_events" add constraint "tenant_activation_events_organization_id_event_type_key" UNIQUE (organization_id, event_type);
+
+alter table "public"."workflow_actions" add constraint "workflow_actions_idempotency_key_key" UNIQUE (idempotency_key);
+
+alter table "private"."billing_checkout_refs" add constraint "billing_checkout_refs_plan_check" CHECK (plan = ANY (ARRAY['starter'::text, 'pro'::text, 'business'::text]));
+
+alter table "private"."oauth_states" add constraint "oauth_states_provider_check" CHECK (provider = 'google_calendar'::text);
+
+alter table "public"."ai_usage_daily" add constraint "ai_usage_daily_request_count_check" CHECK (request_count >= 0);
+
+alter table "public"."business_profiles" add constraint "business_profiles_lead_capture_mode_check" CHECK (lead_capture_mode = ANY (ARRAY['progressive'::text, 'upfront'::text]));
+
+alter table "public"."commercial_learning_snapshots" add constraint "commercial_learning_snapshots_period_days_check" CHECK (period_days >= 7 AND period_days <= 3650);
 
 alter table "public"."conversations" add constraint "conversations_status_check" CHECK (status = ANY (ARRAY['open'::text, 'waiting'::text, 'handoff'::text, 'closed'::text]));
 
 alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_asset_type_check" CHECK (asset_type = ANY (ARRAY['website'::text, 'quote'::text, 'workflow'::text, 'receptionist'::text, 'lead_agent'::text]));
-
-alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_created_by_fkey" FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE CASCADE;
-
-alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL;
-
-alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_pkey" PRIMARY KEY (id);
 
 alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_status_check" CHECK (status = ANY (ARRAY['draft'::text, 'ready'::text, 'active'::text, 'live'::text, 'sent'::text, 'archived'::text]));
 
@@ -658,57 +706,17 @@ alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_tit
 
 alter table "public"."customer_payments" add constraint "customer_payments_amount_positive" CHECK (amount_cents IS NULL OR amount_cents > 0);
 
-alter table "public"."customer_payments" add constraint "customer_payments_appointment_id_fkey" FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE SET NULL;
-
-alter table "public"."customer_payments" add constraint "customer_payments_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
-
-alter table "public"."customer_payments" add constraint "customer_payments_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."customer_payments" add constraint "customer_payments_pkey" PRIMARY KEY (id);
-
-alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_action_unique" UNIQUE (workflow_action_id);
-
-alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_appointment_id_fkey" FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE CASCADE;
-
 alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_operation_check" CHECK (operation = ANY (ARRAY['create'::text, 'update'::text, 'delete'::text]));
-
-alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_pkey" PRIMARY KEY (id);
 
 alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_status_check" CHECK (status = ANY (ARRAY['pending'::text, 'processing'::text, 'synced'::text, 'failed'::text, 'manual_required'::text]));
 
 alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_times_check" CHECK (operation = 'delete'::text OR start_at IS NOT NULL AND end_at IS NOT NULL AND end_at > start_at);
 
-alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES workflow_actions(id) ON DELETE CASCADE;
-
-alter table "public"."handoffs" add constraint "handoffs_conversation_id_fkey" FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE SET NULL;
-
-alter table "public"."handoffs" add constraint "handoffs_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL;
-
-alter table "public"."handoffs" add constraint "handoffs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."handoffs" add constraint "handoffs_pkey" PRIMARY KEY (id);
-
 alter table "public"."handoffs" add constraint "handoffs_status_check" CHECK (status = ANY (ARRAY['open'::text, 'accepted'::text, 'resolved'::text]));
-
-alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_action_unique" UNIQUE (workflow_action_id);
 
 alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_body_vars_array" CHECK (jsonb_typeof(body_variables) = 'array'::text);
 
-alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
-
-alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_pkey" PRIMARY KEY (id);
-
 alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_status_check" CHECK (status = ANY (ARRAY['pending'::text, 'sending'::text, 'sent'::text, 'failed'::text, 'manual_required'::text]));
-
-alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES workflow_actions(id) ON DELETE CASCADE;
-
-alter table "public"."jarvis_agent_events" add constraint "jarvis_agent_events_pkey" PRIMARY KEY (id);
-
-alter table "public"."jarvis_agent_events" add constraint "jarvis_agent_events_task_id_fkey" FOREIGN KEY (task_id) REFERENCES jarvis_agent_tasks(id) ON DELETE CASCADE;
 
 alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_approved_before_execution_v1" CHECK ((status <> ALL (ARRAY['queued'::text, 'needs_attention'::text, 'completed'::text])) OR approved_at IS NOT NULL);
 
@@ -717,14 +725,6 @@ alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_plan_prog
 alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_kind_check" CHECK (kind = ANY (ARRAY['reminder'::text, 'draft'::text, 'plan'::text]));
 
 alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_objective_check" CHECK (char_length(objective) >= 3 AND char_length(objective) <= 1500);
-
-alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_organization_id_owner_user_id_client_req_key" UNIQUE (organization_id, owner_user_id, client_request_id);
-
-alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_owner_user_id_fkey" FOREIGN KEY (owner_user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-
-alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_pkey" PRIMARY KEY (id);
 
 alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_result_text_check" CHECK (char_length(result_text) <= 4000);
 
@@ -738,23 +738,13 @@ alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_min
 
 alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_name_check" CHECK (char_length(name) >= 1 AND char_length(name) <= 120);
 
-alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_pkey" PRIMARY KEY (organization_id);
-
 alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_preferred_channel_check" CHECK (preferred_channel = ANY (ARRAY['auto'::text, 'email'::text, 'whatsapp'::text, 'linkedin'::text, 'phone'::text, 'multichannel'::text]));
-
-alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 
 alter table "public"."leadflow_leads" add constraint "leadflow_leads_contact_check" CHECK (contact IS NULL OR char_length(contact) <= 140);
 
 alter table "public"."leadflow_leads" add constraint "leadflow_leads_name_check" CHECK (char_length(name) >= 1 AND char_length(name) <= 100);
 
 alter table "public"."leadflow_leads" add constraint "leadflow_leads_notes_check" CHECK (notes IS NULL OR char_length(notes) <= 500);
-
-alter table "public"."leadflow_leads" add constraint "leadflow_leads_owner_id_fkey" FOREIGN KEY (owner_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-
-alter table "public"."leadflow_leads" add constraint "leadflow_leads_pkey" PRIMARY KEY (id);
 
 alter table "public"."leadflow_leads" add constraint "leadflow_leads_service_check" CHECK (char_length(service) >= 1 AND char_length(service) <= 120);
 
@@ -764,71 +754,29 @@ alter table "public"."leadflow_leads" add constraint "leadflow_leads_type_check"
 
 alter table "public"."leads" add constraint "leads_lost_reason_code_check" CHECK (lost_reason_code IS NULL OR (lost_reason_code = ANY (ARRAY['price_budget'::text, 'no_response'::text, 'timing'::text, 'competitor'::text, 'no_fit'::text, 'availability'::text, 'not_interested'::text, 'invalid_duplicate'::text, 'other'::text])));
 
-alter table "public"."leads" add constraint "leads_marketing_campaign_id_fkey" FOREIGN KEY (marketing_campaign_id) REFERENCES marketing_campaigns(id) ON DELETE SET NULL;
-
-alter table "public"."leads" add constraint "leads_organization_id_dedupe_key_key" UNIQUE (organization_id, dedupe_key);
-
-alter table "public"."leads" add constraint "leads_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."leads" add constraint "leads_pkey" PRIMARY KEY (id);
-
 alter table "public"."leads" add constraint "leads_score_check" CHECK (score >= 0 AND score <= 100);
 
 alter table "public"."leads" add constraint "leads_status_check" CHECK (status = ANY (ARRAY['new'::text, 'qualifying'::text, 'qualified'::text, 'follow_up'::text, 'handoff'::text, 'won'::text, 'lost'::text]));
 
 alter table "public"."marketing_agent_configs" add constraint "marketing_agent_configs_cadence_per_week_check" CHECK (cadence_per_week >= 1 AND cadence_per_week <= 21);
 
-alter table "public"."marketing_agent_configs" add constraint "marketing_agent_configs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."marketing_agent_configs" add constraint "marketing_agent_configs_pkey" PRIMARY KEY (organization_id);
-
-alter table "public"."marketing_agent_configs" add constraint "marketing_agent_configs_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES auth.users(id) ON DELETE SET NULL;
-
-alter table "public"."marketing_campaigns" add constraint "marketing_campaigns_created_by_fkey" FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
-
-alter table "public"."marketing_campaigns" add constraint "marketing_campaigns_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."marketing_campaigns" add constraint "marketing_campaigns_pkey" PRIMARY KEY (id);
-
 alter table "public"."marketing_campaigns" add constraint "marketing_campaigns_status_check" CHECK (status = ANY (ARRAY['draft'::text, 'approved'::text, 'scheduled'::text, 'published'::text, 'archived'::text]));
 
-alter table "public"."memberships" add constraint "memberships_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."memberships" add constraint "memberships_organization_id_user_id_key" UNIQUE (organization_id, user_id);
-
-alter table "public"."memberships" add constraint "memberships_pkey" PRIMARY KEY (id);
-
 alter table "public"."memberships" add constraint "memberships_role_check" CHECK (role = ANY (ARRAY['owner'::text, 'admin'::text, 'agent'::text, 'viewer'::text]));
-
-alter table "public"."memberships" add constraint "memberships_user_id_fkey" FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-
-alter table "public"."messages" add constraint "messages_conversation_id_fkey" FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE;
-
-alter table "public"."messages" add constraint "messages_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."messages" add constraint "messages_pkey" PRIMARY KEY (id);
 
 alter table "public"."messages" add constraint "messages_role_check" CHECK (role = ANY (ARRAY['customer'::text, 'assistant'::text, 'system'::text, 'human'::text]));
 
 alter table "public"."organizations" add constraint "organizations_name_check" CHECK (char_length(name) >= 1 AND char_length(name) <= 120);
 
-alter table "public"."organizations" add constraint "organizations_pkey" PRIMARY KEY (id);
-
 alter table "public"."organizations" add constraint "organizations_plan_check" CHECK (plan = ANY (ARRAY['trial'::text, 'starter'::text, 'pro'::text, 'business'::text]));
 
 alter table "public"."organizations" add constraint "organizations_status_check" CHECK (status = ANY (ARRAY['onboarding'::text, 'active'::text, 'suspended'::text]));
-
-alter table "public"."platform_admins" add constraint "platform_admins_pkey" PRIMARY KEY (user_id);
-
-alter table "public"."platform_admins" add constraint "platform_admins_user_id_fkey" FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 alter table "public"."reception_ai_plan_catalog" add constraint "reception_ai_plan_catalog_daily_ai_limit_check" CHECK (daily_ai_limit > 0);
 
 alter table "public"."reception_ai_plan_catalog" add constraint "reception_ai_plan_catalog_features_array" CHECK (jsonb_typeof(features) = 'array'::text);
 
 alter table "public"."reception_ai_plan_catalog" add constraint "reception_ai_plan_catalog_monthly_cents_check" CHECK (monthly_cents >= 0);
-
-alter table "public"."reception_ai_plan_catalog" add constraint "reception_ai_plan_catalog_pkey" PRIMARY KEY (plan);
 
 alter table "public"."reception_ai_plan_catalog" add constraint "reception_ai_plan_catalog_plan_check" CHECK (plan = ANY (ARRAY['starter'::text, 'pro'::text, 'business'::text]));
 
@@ -838,11 +786,137 @@ alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_f
 
 alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_min_score_check" CHECK (min_score >= 0 AND min_score <= 100);
 
-alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_pkey" PRIMARY KEY (organization_id);
-
 alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_preferred_channel_check" CHECK (preferred_channel = ANY (ARRAY['auto'::text, 'email'::text, 'whatsapp'::text, 'phone'::text, 'crm'::text]));
+
+alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_requested_plan_check" CHECK (requested_plan = ANY (ARRAY['pilot'::text, 'starter'::text, 'pro'::text, 'business'::text]));
+
+alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_status_check" CHECK (status = ANY (ARRAY['pending'::text, 'claimed'::text, 'converted'::text, 'expired'::text, 'cancelled'::text]));
+
+alter table "public"."sales_opportunities" add constraint "sales_opportunities_confidence_check" CHECK (confidence >= 0 AND confidence <= 100);
+
+alter table "public"."sales_opportunities" add constraint "sales_opportunities_temperature_check" CHECK (temperature = ANY (ARRAY['cold'::text, 'warm'::text, 'hot'::text]));
+
+alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_channel_check" CHECK (channel = ANY (ARRAY['email'::text, 'whatsapp'::text]));
+
+alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_status_check" CHECK (status = ANY (ARRAY['planned'::text, 'approved'::text, 'queued'::text, 'completed'::text, 'skipped'::text, 'cancelled'::text]));
+
+alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_step_no_check" CHECK (step_no >= 1 AND step_no <= 20);
+
+alter table "public"."sales_sequences" add constraint "sales_sequences_current_step_check" CHECK (current_step >= 1 AND current_step <= 20);
+
+alter table "public"."sales_sequences" add constraint "sales_sequences_status_check" CHECK (status = ANY (ARRAY['active'::text, 'paused'::text, 'completed'::text, 'cancelled'::text]));
+
+alter table "public"."stripe_events" add constraint "stripe_events_status_check" CHECK (status = ANY (ARRAY['processing'::text, 'processed'::text, 'failed'::text]));
+
+alter table "public"."tasks" add constraint "tasks_priority_check" CHECK (priority = ANY (ARRAY['low'::text, 'normal'::text, 'high'::text, 'urgent'::text]));
+
+alter table "public"."tasks" add constraint "tasks_status_check" CHECK (status = ANY (ARRAY['open'::text, 'done'::text, 'cancelled'::text]));
+
+alter table "public"."team_invitations" add constraint "team_invitations_email_nonempty" CHECK (length(TRIM(BOTH FROM email)) >= 3 AND length(TRIM(BOTH FROM email)) <= 320);
+
+alter table "public"."team_invitations" add constraint "team_invitations_role_check" CHECK (role = ANY (ARRAY['admin'::text, 'agent'::text, 'viewer'::text]));
+
+alter table "public"."team_invitations" add constraint "team_invitations_status_check" CHECK (status = ANY (ARRAY['pending'::text, 'accepted'::text, 'revoked'::text, 'expired'::text]));
+
+alter table "public"."tenant_activation_events" add constraint "tenant_activation_events_event_type_check" CHECK (event_type = ANY (ARRAY['first_public_conversation'::text, 'first_lead'::text, 'first_qualified_lead'::text, 'first_handoff'::text, 'first_appointment_request'::text, 'first_confirmed_appointment'::text, 'first_completed_appointment'::text, 'first_customer_payment'::text]));
+
+alter table "public"."tenant_integrations" add constraint "tenant_integrations_channel_check" CHECK (channel = ANY (ARRAY['email'::text, 'whatsapp'::text, 'calendar'::text, 'payment'::text, 'webhook'::text]));
+
+alter table "public"."tenant_integrations" add constraint "tenant_integrations_status_check" CHECK (status = ANY (ARRAY['needs_setup'::text, 'active'::text, 'degraded'::text, 'disabled'::text, 'error'::text]));
+
+alter table "public"."workflow_action_attempts" add constraint "workflow_action_attempts_outcome_check" CHECK (outcome = ANY (ARRAY['completed'::text, 'retry'::text, 'blocked'::text, 'failed'::text]));
+
+alter table "private"."billing_checkout_refs" add constraint "billing_checkout_refs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "private"."integration_credentials" add constraint "integration_credentials_integration_id_fkey" FOREIGN KEY (integration_id) REFERENCES tenant_integrations(id) ON DELETE CASCADE;
+
+alter table "private"."integration_credentials" add constraint "integration_credentials_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "private"."oauth_states" add constraint "oauth_states_integration_id_fkey" FOREIGN KEY (integration_id) REFERENCES tenant_integrations(id) ON DELETE CASCADE;
+
+alter table "private"."oauth_states" add constraint "oauth_states_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."ai_usage_daily" add constraint "ai_usage_daily_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."appointments" add constraint "appointments_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
+
+alter table "public"."appointments" add constraint "appointments_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."audit_events" add constraint "audit_events_actor_user_id_fkey" FOREIGN KEY (actor_user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+alter table "public"."audit_events" add constraint "audit_events_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."business_profiles" add constraint "business_profiles_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."commercial_learning_snapshots" add constraint "commercial_learning_snapshots_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."conversations" add constraint "conversations_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL;
+
+alter table "public"."conversations" add constraint "conversations_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_created_by_fkey" FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL;
+
+alter table "public"."customer_payments" add constraint "customer_payments_appointment_id_fkey" FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE SET NULL;
+
+alter table "public"."customer_payments" add constraint "customer_payments_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
+
+alter table "public"."customer_payments" add constraint "customer_payments_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_appointment_id_fkey" FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE CASCADE;
+
+alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES workflow_actions(id) ON DELETE CASCADE;
+
+alter table "public"."handoffs" add constraint "handoffs_conversation_id_fkey" FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE SET NULL;
+
+alter table "public"."handoffs" add constraint "handoffs_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL;
+
+alter table "public"."handoffs" add constraint "handoffs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
+
+alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES workflow_actions(id) ON DELETE CASCADE;
+
+alter table "public"."jarvis_agent_events" add constraint "jarvis_agent_events_task_id_fkey" FOREIGN KEY (task_id) REFERENCES jarvis_agent_tasks(id) ON DELETE CASCADE;
+
+alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_owner_user_id_fkey" FOREIGN KEY (owner_user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+alter table "public"."leadflow_leads" add constraint "leadflow_leads_owner_id_fkey" FOREIGN KEY (owner_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+alter table "public"."leads" add constraint "leads_marketing_campaign_id_fkey" FOREIGN KEY (marketing_campaign_id) REFERENCES marketing_campaigns(id) ON DELETE SET NULL;
+
+alter table "public"."leads" add constraint "leads_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."marketing_agent_configs" add constraint "marketing_agent_configs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."marketing_agent_configs" add constraint "marketing_agent_configs_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+alter table "public"."marketing_campaigns" add constraint "marketing_campaigns_created_by_fkey" FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+alter table "public"."marketing_campaigns" add constraint "marketing_campaigns_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."memberships" add constraint "memberships_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."memberships" add constraint "memberships_user_id_fkey" FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+alter table "public"."messages" add constraint "messages_conversation_id_fkey" FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE;
+
+alter table "public"."messages" add constraint "messages_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."platform_admins" add constraint "platform_admins_user_id_fkey" FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
 alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 
@@ -850,127 +924,53 @@ alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding
 
 alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
 
-alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_pkey" PRIMARY KEY (id);
-
-alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_requested_plan_check" CHECK (requested_plan = ANY (ARRAY['pilot'::text, 'starter'::text, 'pro'::text, 'business'::text]));
-
 alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_sales_organization_id_fkey" FOREIGN KEY (sales_organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_status_check" CHECK (status = ANY (ARRAY['pending'::text, 'claimed'::text, 'converted'::text, 'expired'::text, 'cancelled'::text]));
-
-alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_token_key" UNIQUE (token);
-
-alter table "public"."sales_opportunities" add constraint "sales_opportunities_confidence_check" CHECK (confidence >= 0 AND confidence <= 100);
 
 alter table "public"."sales_opportunities" add constraint "sales_opportunities_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
 
 alter table "public"."sales_opportunities" add constraint "sales_opportunities_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
-alter table "public"."sales_opportunities" add constraint "sales_opportunities_pkey" PRIMARY KEY (organization_id, lead_id);
-
-alter table "public"."sales_opportunities" add constraint "sales_opportunities_temperature_check" CHECK (temperature = ANY (ARRAY['cold'::text, 'warm'::text, 'hot'::text]));
-
-alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_channel_check" CHECK (channel = ANY (ARRAY['email'::text, 'whatsapp'::text]));
-
 alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
 
 alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
-alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_pkey" PRIMARY KEY (id);
-
 alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_sequence_id_fkey" FOREIGN KEY (sequence_id) REFERENCES sales_sequences(id) ON DELETE CASCADE;
-
-alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_sequence_id_step_no_key" UNIQUE (sequence_id, step_no);
-
-alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_status_check" CHECK (status = ANY (ARRAY['planned'::text, 'approved'::text, 'queued'::text, 'completed'::text, 'skipped'::text, 'cancelled'::text]));
-
-alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_step_no_check" CHECK (step_no >= 1 AND step_no <= 20);
 
 alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES workflow_actions(id) ON DELETE SET NULL;
 
 alter table "public"."sales_sequences" add constraint "sales_sequences_created_by_fkey" FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 
-alter table "public"."sales_sequences" add constraint "sales_sequences_current_step_check" CHECK (current_step >= 1 AND current_step <= 20);
-
 alter table "public"."sales_sequences" add constraint "sales_sequences_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
 
 alter table "public"."sales_sequences" add constraint "sales_sequences_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."sales_sequences" add constraint "sales_sequences_pkey" PRIMARY KEY (id);
-
-alter table "public"."sales_sequences" add constraint "sales_sequences_status_check" CHECK (status = ANY (ARRAY['active'::text, 'paused'::text, 'completed'::text, 'cancelled'::text]));
-
-alter table "public"."stripe_events" add constraint "stripe_events_pkey" PRIMARY KEY (id);
-
-alter table "public"."stripe_events" add constraint "stripe_events_status_check" CHECK (status = ANY (ARRAY['processing'::text, 'processed'::text, 'failed'::text]));
 
 alter table "public"."tasks" add constraint "tasks_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL;
 
 alter table "public"."tasks" add constraint "tasks_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
-alter table "public"."tasks" add constraint "tasks_pkey" PRIMARY KEY (id);
-
-alter table "public"."tasks" add constraint "tasks_priority_check" CHECK (priority = ANY (ARRAY['low'::text, 'normal'::text, 'high'::text, 'urgent'::text]));
-
-alter table "public"."tasks" add constraint "tasks_status_check" CHECK (status = ANY (ARRAY['open'::text, 'done'::text, 'cancelled'::text]));
-
 alter table "public"."team_invitations" add constraint "team_invitations_accepted_by_fkey" FOREIGN KEY (accepted_by) REFERENCES auth.users(id);
-
-alter table "public"."team_invitations" add constraint "team_invitations_email_nonempty" CHECK (length(TRIM(BOTH FROM email)) >= 3 AND length(TRIM(BOTH FROM email)) <= 320);
 
 alter table "public"."team_invitations" add constraint "team_invitations_invited_by_fkey" FOREIGN KEY (invited_by) REFERENCES auth.users(id);
 
 alter table "public"."team_invitations" add constraint "team_invitations_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
-alter table "public"."team_invitations" add constraint "team_invitations_pkey" PRIMARY KEY (id);
-
-alter table "public"."team_invitations" add constraint "team_invitations_role_check" CHECK (role = ANY (ARRAY['admin'::text, 'agent'::text, 'viewer'::text]));
-
-alter table "public"."team_invitations" add constraint "team_invitations_status_check" CHECK (status = ANY (ARRAY['pending'::text, 'accepted'::text, 'revoked'::text, 'expired'::text]));
-
-alter table "public"."team_invitations" add constraint "team_invitations_token_hash_key" UNIQUE (token_hash);
-
-alter table "public"."tenant_activation_events" add constraint "tenant_activation_events_event_type_check" CHECK (event_type = ANY (ARRAY['first_public_conversation'::text, 'first_lead'::text, 'first_qualified_lead'::text, 'first_handoff'::text, 'first_appointment_request'::text, 'first_confirmed_appointment'::text, 'first_completed_appointment'::text, 'first_customer_payment'::text]));
-
-alter table "public"."tenant_activation_events" add constraint "tenant_activation_events_organization_id_event_type_key" UNIQUE (organization_id, event_type);
-
 alter table "public"."tenant_activation_events" add constraint "tenant_activation_events_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."tenant_activation_events" add constraint "tenant_activation_events_pkey" PRIMARY KEY (id);
-
-alter table "public"."tenant_integrations" add constraint "tenant_integrations_channel_check" CHECK (channel = ANY (ARRAY['email'::text, 'whatsapp'::text, 'calendar'::text, 'payment'::text, 'webhook'::text]));
 
 alter table "public"."tenant_integrations" add constraint "tenant_integrations_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
-alter table "public"."tenant_integrations" add constraint "tenant_integrations_pkey" PRIMARY KEY (id);
-
-alter table "public"."tenant_integrations" add constraint "tenant_integrations_status_check" CHECK (status = ANY (ARRAY['needs_setup'::text, 'active'::text, 'degraded'::text, 'disabled'::text, 'error'::text]));
-
 alter table "public"."user_org_context" add constraint "user_org_context_membership_fk" FOREIGN KEY (organization_id, user_id) REFERENCES memberships(organization_id, user_id) ON DELETE CASCADE;
-
-alter table "public"."user_org_context" add constraint "user_org_context_pkey" PRIMARY KEY (user_id);
 
 alter table "public"."user_org_context" add constraint "user_org_context_user_id_fkey" FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 alter table "public"."widget_rate_limits" add constraint "widget_rate_limits_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
-alter table "public"."widget_rate_limits" add constraint "widget_rate_limits_pkey" PRIMARY KEY (id);
-
 alter table "public"."workflow_action_attempts" add constraint "workflow_action_attempts_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
-alter table "public"."workflow_action_attempts" add constraint "workflow_action_attempts_outcome_check" CHECK (outcome = ANY (ARRAY['completed'::text, 'retry'::text, 'blocked'::text, 'failed'::text]));
-
-alter table "public"."workflow_action_attempts" add constraint "workflow_action_attempts_pkey" PRIMARY KEY (id);
-
 alter table "public"."workflow_action_attempts" add constraint "workflow_action_attempts_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES workflow_actions(id) ON DELETE CASCADE;
-
-alter table "public"."workflow_actions" add constraint "workflow_actions_idempotency_key_key" UNIQUE (idempotency_key);
 
 alter table "public"."workflow_actions" add constraint "workflow_actions_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
 
 alter table "public"."workflow_actions" add constraint "workflow_actions_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."workflow_actions" add constraint "workflow_actions_pkey" PRIMARY KEY (id);
 
 CREATE INDEX billing_checkout_refs_expiry_idx ON private.billing_checkout_refs USING btree (expires_at);
 
