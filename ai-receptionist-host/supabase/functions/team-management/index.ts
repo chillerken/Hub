@@ -154,6 +154,19 @@ Deno.serve(async (req: Request) => {
       if (!validEmail(email)) return json({ error: "invalid_email" }, 400);
       if (!["admin", "agent", "viewer"].includes(role)) return json({ error: "invalid_role" }, 400);
       if (role === "admin" && !isOwner) return json({ error: "only_owner_can_invite_admin" }, 403);
+      const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const { count: recentInvites, error: rateError } = await admin.from("team_invitations")
+        .select("id", { count: "exact", head: true }).eq("organization_id", selectedOrg).gte("created_at", since);
+      if (rateError) throw rateError;
+      if ((recentInvites || 0) >= 10) return json({ error: "invitation_rate_limit", message: "Maximum 10 uitnodigingen per uur per bedrijf." }, 429);
+      const emailUsers = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+      if (emailUsers.error) throw emailUsers.error;
+      const existingAuthUser = emailUsers.data.users.find((u: any) => String(u.email || "").toLowerCase() === email);
+      if (existingAuthUser) {
+        const { data: existingMembership } = await admin.from("memberships").select("id,active")
+          .eq("organization_id", selectedOrg).eq("user_id", existingAuthUser.id).maybeSingle();
+        if (existingMembership?.active) return json({ error: "already_a_member" }, 409);
+      }
       const token = randomToken();
       const tokenHash = await sha256(token);
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
