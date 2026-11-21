@@ -8,3 +8,5 @@ coverage/
 !.env.example
 
 ai-receptionist-host/runtime-config.local.json
+
+ai-receptionist-host/local-demo-accounts.json
