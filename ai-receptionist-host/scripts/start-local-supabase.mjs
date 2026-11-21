@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const hostDir = resolve(scriptDir, "..");
-const repoRoot = resolve(hostDir, "../..");
+const repoRoot = resolve(hostDir, "..");
 const localRoot = join(hostDir, "local-supabase");
 const supabaseDir = join(localRoot, "supabase");
 const cli = process.platform === "win32" ? "npx.cmd" : "npx";
@@ -87,7 +87,7 @@ const fn = spawn(cli, ["-y", "supabase@latest", "functions", "serve", "team-mana
   cwd: localRoot, ...spawnOptions
 });
 children.push(fn);
-const web = spawn(cli, ["vite", "--root", "ai-receptionist-host", "--host", "127.0.0.1", "--port", "4173", "--strictPort"], {
+const web = spawn(cli, ["vite", "ai-receptionist-host", "--host", "127.0.0.1", "--port", "4173", "--strictPort"], {
   cwd: repoRoot, ...spawnOptions
 });
 children.push(web);
