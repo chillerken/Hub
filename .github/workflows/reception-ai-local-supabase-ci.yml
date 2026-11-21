@@ -66,4 +66,4 @@ jobs:
         if: always()
         run: |
           cd ai-receptionist-host/local-supabase
-          npx -y supabase@latest stop || true
+          npx -y supabase@3.2.0 stop || true
