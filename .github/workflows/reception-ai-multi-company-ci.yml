@@ -1,9 +1,6 @@
 name: Reception AI multi-company validation
 
 on:
-  push:
-    branches:
-      - feat/multi-company-team-management
   pull_request:
     branches:
       - main
