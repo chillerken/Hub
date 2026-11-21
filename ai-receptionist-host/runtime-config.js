@@ -31,8 +31,14 @@ export async function loadReceptionRuntimeConfig() {
     };
   }
 
-  // Public client configuration for the deployed Reception AI site.
-  // This publishable key is designed for browser use; authorization is enforced by RLS and Edge Functions.
+  // Only the explicit production hostnames may use the production Supabase project.
+  // Vercel preview deployments are intentionally denied a production database fallback.
+  const productionHosts = new Set(["reception-ai-luxwash.vercel.app", "ai.luxwash.online"]);
+  if (!productionHosts.has(window.location.hostname.toLowerCase())) {
+    throw new Error("Deze preview heeft geen backendconfiguratie. Gebruik Supabase Local voor veilige tests.");
+  }
+
+  // Public browser key; tenant authorization is enforced by RLS and authenticated Edge Functions.
   return {
     supabaseUrl: "https://ndecxbsrxspkuxjsbndq.supabase.co",
     supabaseAnonKey: "sb_publishable_rhEeG3_B95xt8PA_MlG86Q_oti2Rklc",
