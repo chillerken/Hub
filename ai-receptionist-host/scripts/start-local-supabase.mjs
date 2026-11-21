@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -74,7 +74,6 @@ console.log("\n[3/4] Lees alleen lokale API-keys en configureer de browserclient
 const status = runSupabase(["status", "-o", "env"]);
 const supabaseUrl = parseEnv(status, "API_URL");
 const anonKey = parseEnv(status, "ANON_KEY");
-const serviceRoleKey = parseEnv(status, "SERVICE_ROLE_KEY");
 const parsedHost = new URL(supabaseUrl).hostname;
 if (!["127.0.0.1", "localhost"].includes(parsedHost)) {
   throw new Error("Veiligheidsstop: Supabase Local gaf geen localhost API-URL terug.");
