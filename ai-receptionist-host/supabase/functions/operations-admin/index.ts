@@ -28,10 +28,11 @@ Deno.serve(async(req:Request)=>{
     const {data:u,error:ue}=await userDb.auth.getUser(token);
     if(ue||!u?.user) return out({error:"Unauthorized"},401);
 
-    const {data:mem,error:me}=await userDb.from("memberships")
-      .select("organization_id,role")
-      .eq("user_id",u.user.id).eq("active",true).single();
-    if(me||!mem) return out({error:"Membership not found"},403);
+    const {data:activeContext}=await db.from("user_org_context").select("organization_id").eq("user_id",u.user.id).maybeSingle();
+    let membershipQuery=userDb.from("memberships").select("organization_id,role").eq("user_id",u.user.id).eq("active",true);
+    if(activeContext?.organization_id)membershipQuery=membershipQuery.eq("organization_id",activeContext.organization_id);
+    const {data:mem,error:me}=await membershipQuery.maybeSingle();
+    if(me||!mem) return out({error:me?"Organization selection required":"Membership not found"},me?409:403);
     if(!["owner","admin"].includes(mem.role)) return out({error:"Owner or admin role required"},403);
 
     const b=await req.json();
@@ -173,6 +174,21 @@ Deno.serve(async(req:Request)=>{
         .eq("id",appointmentId).eq("organization_id",org)
         .select("*").single();
       if(error) throw error;
+
+      const {data:wonLead,error:wonErr}=await db.from("leads")
+        .update({status:"won",updated_at:new Date().toISOString()})
+        .eq("id",current.lead_id).eq("organization_id",org)
+        .neq("status","won")
+        .select("id,status").maybeSingle();
+      if(wonErr) throw wonErr;
+      if(wonLead){
+        await db.from("audit_events").insert({
+          organization_id:org,actor_user_id:u.user.id,event_type:"lead.won_from_completed_appointment",
+          entity_type:"lead",entity_id:current.lead_id,
+          payload:{appointment_id:appointmentId}
+        });
+      }
+
       await db.from("audit_events").insert({
         organization_id:org,actor_user_id:u.user.id,event_type:"appointment.completed",
         entity_type:"appointment",entity_id:appointmentId,
