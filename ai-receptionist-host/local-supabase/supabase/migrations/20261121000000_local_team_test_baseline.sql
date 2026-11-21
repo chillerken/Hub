@@ -21,7 +21,6 @@ create table public.memberships (
   role text not null default 'owner' check (role in ('owner','admin','agent','viewer')),
   active boolean not null default true,
   created_at timestamptz not null default now(),
-  constraint memberships_org_user_unique unique (organization_id,user_id),
   constraint memberships_org_user_id_unique unique (organization_id,user_id)
 );
 
