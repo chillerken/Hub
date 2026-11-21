@@ -1,162 +1,194 @@
--- Local-only Reception AI schema baseline; schema/security metadata only; no production records.
+-- Schema-only snapshot of Reception AI production database.
+
+-- Generated from PostgreSQL catalogs. NO production rows, user records, or secret values are included.
+
+-- Rebuilds the public/private application schemas; Supabase-managed auth/storage schemas come from Supabase Local.
 
 create schema if not exists private;
 
-create extension if not exists pgcrypto with schema extensions;
+create schema if not exists promo_omega_private;
 
-create extension if not exists pg_net with schema extensions;
+create schema if not exists promo_omega;
 
-create extension if not exists supabase_vault with schema vault;
+create schema if not exists extensions;
 
-set search_path = public, private, extensions;
+create extension if not exists "pg_cron" with schema "pg_catalog";
 
-create table "private"."billing_checkout_refs" (
-  "token_hash" text NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "user_id" uuid NOT NULL,
-  "plan" text NOT NULL,
-  "expires_at" timestamp with time zone NOT NULL,
+create extension if not exists "pg_net" with schema "public";
+
+create extension if not exists "pg_stat_statements" with schema "extensions";
+
+create extension if not exists "pgcrypto" with schema "extensions";
+
+create extension if not exists "supabase_vault" with schema "vault";
+
+create extension if not exists "unaccent" with schema "extensions";
+
+create extension if not exists "uuid-ossp" with schema "extensions";
+
+set search_path = public, private, extensions, vault, promo_omega_private;
+
+-- Compatibility stub: production signup trigger optionally checks the separate Omega signup router.
+
+create or replace function promo_omega_private.route_signup(uuid, text, jsonb) returns boolean language sql security definer set search_path = '' as $$ select false $$;
+
+-- Sequences must exist before table defaults that call nextval().
+
+create sequence if not exists public."audit_events_id_seq";
+
+create sequence if not exists public."jarvis_agent_events_id_seq";
+
+create sequence if not exists public."widget_rate_limits_id_seq";
+
+-- Create all tables before adding foreign keys and check constraints.
+
+create table if not exists "private"."billing_checkout_refs" (
+  "token_hash" text not null,
+  "organization_id" uuid not null,
+  "user_id" uuid not null,
+  "plan" text not null,
+  "expires_at" timestamp with time zone not null,
   "used_at" timestamp with time zone,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+  "created_at" timestamp with time zone default now() not null
 );
 
-create table "private"."integration_credentials" (
-  "integration_id" uuid NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "vault_secret_name" text NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+create table if not exists "private"."integration_credentials" (
+  "integration_id" uuid not null,
+  "organization_id" uuid not null,
+  "vault_secret_name" text not null,
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null
 );
 
-create table "private"."oauth_states" (
-  "state_hash" text NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "user_id" uuid NOT NULL,
-  "integration_id" uuid NOT NULL,
-  "provider" text NOT NULL,
-  "redirect_after" text NOT NULL,
-  "expires_at" timestamp with time zone NOT NULL,
+create table if not exists "private"."oauth_states" (
+  "state_hash" text not null,
+  "organization_id" uuid not null,
+  "user_id" uuid not null,
+  "integration_id" uuid not null,
+  "provider" text not null,
+  "redirect_after" text not null,
+  "expires_at" timestamp with time zone not null,
   "used_at" timestamp with time zone,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+  "created_at" timestamp with time zone default now() not null
 );
 
-create table "public"."ai_usage_daily" (
-  "organization_id" uuid NOT NULL,
-  "usage_date" date DEFAULT CURRENT_DATE NOT NULL,
-  "request_count" integer DEFAULT 0 NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+create table if not exists "public"."ai_usage_daily" (
+  "organization_id" uuid not null,
+  "usage_date" date default CURRENT_DATE not null,
+  "request_count" integer default 0 not null,
+  "updated_at" timestamp with time zone default now() not null
 );
 
-create table "public"."appointments" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "lead_id" uuid NOT NULL,
-  "status" text DEFAULT 'requested'::text NOT NULL,
+create table if not exists "public"."appointments" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
+  "lead_id" uuid not null,
+  "status" text default 'requested'::text not null,
   "requested_text" text,
   "start_at" timestamp with time zone,
   "end_at" timestamp with time zone,
-  "timezone" text DEFAULT 'Europe/Brussels'::text NOT NULL,
+  "timezone" text default 'Europe/Brussels'::text not null,
   "provider" text,
   "provider_booking_id" text,
   "location" text,
   "notes" text,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null,
   "completed_at" timestamp with time zone
 );
 
-create table "public"."audit_events" (
-  "id" bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
-  "organization_id" uuid NOT NULL,
+create table if not exists "public"."audit_events" (
+  "id" bigint generated always as identity not null,
+  "organization_id" uuid not null,
   "actor_user_id" uuid,
-  "event_type" text NOT NULL,
-  "entity_type" text DEFAULT ''::text NOT NULL,
+  "event_type" text not null,
+  "entity_type" text default ''::text not null,
   "entity_id" uuid,
-  "payload" jsonb DEFAULT '{}'::jsonb NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+  "payload" jsonb default '{}'::jsonb not null,
+  "created_at" timestamp with time zone default now() not null
 );
 
-create table "public"."business_profiles" (
-  "organization_id" uuid NOT NULL,
-  "business_name" text NOT NULL,
-  "description" text DEFAULT ''::text NOT NULL,
-  "services" jsonb DEFAULT '[]'::jsonb NOT NULL,
-  "opening_hours" jsonb DEFAULT '{}'::jsonb NOT NULL,
-  "qualification_questions" jsonb DEFAULT '[]'::jsonb NOT NULL,
-  "escalation_rules" jsonb DEFAULT '{"urgent": true, "complaint": true, "human_request": true}'::jsonb NOT NULL,
-  "receptionist_name" text DEFAULT 'Ava'::text NOT NULL,
-  "locale" text DEFAULT 'nl-BE'::text NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "widget_token" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "widget_enabled" boolean DEFAULT true NOT NULL,
-  "widget_greeting" text DEFAULT 'Hallo! Waarmee kan ik helpen?'::text NOT NULL,
-  "widget_accent" text DEFAULT '#e7b85b'::text NOT NULL,
+create table if not exists "public"."business_profiles" (
+  "organization_id" uuid not null,
+  "business_name" text not null,
+  "description" text default ''::text not null,
+  "services" jsonb default '[]'::jsonb not null,
+  "opening_hours" jsonb default '{}'::jsonb not null,
+  "qualification_questions" jsonb default '[]'::jsonb not null,
+  "escalation_rules" jsonb default '{"urgent": true, "complaint": true, "human_request": true}'::jsonb not null,
+  "receptionist_name" text default 'Ava'::text not null,
+  "locale" text default 'nl-BE'::text not null,
+  "updated_at" timestamp with time zone default now() not null,
+  "widget_token" uuid default gen_random_uuid() not null,
+  "widget_enabled" boolean default true not null,
+  "widget_greeting" text default 'Hallo! Waarmee kan ik helpen?'::text not null,
+  "widget_accent" text default '#e7b85b'::text not null,
   "notification_email" text,
-  "lead_capture_mode" text DEFAULT 'progressive'::text NOT NULL,
-  "automation_enabled" boolean DEFAULT false NOT NULL,
-  "preferred_followup_channel" text DEFAULT 'auto'::text NOT NULL,
-  "review_delay_hours" integer DEFAULT 24 NOT NULL,
-  "retention_delay_days" integer DEFAULT 30 NOT NULL,
-  "widget_allowed_domains" text[] DEFAULT '{}'::text[] NOT NULL,
-  "custom_instructions" text DEFAULT ''::text NOT NULL
+  "lead_capture_mode" text default 'progressive'::text not null,
+  "automation_enabled" boolean default false not null,
+  "preferred_followup_channel" text default 'auto'::text not null,
+  "review_delay_hours" integer default 24 not null,
+  "retention_delay_days" integer default 30 not null,
+  "widget_allowed_domains" text[] default '{}'::text[] not null,
+  "custom_instructions" text default ''::text not null
 );
 
-create table "public"."commercial_learning_snapshots" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "period_days" integer DEFAULT 90 NOT NULL,
-  "metrics" jsonb DEFAULT '{}'::jsonb NOT NULL,
-  "sales_learning" jsonb DEFAULT '{}'::jsonb NOT NULL,
-  "marketing_learning" jsonb DEFAULT '{}'::jsonb NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+create table if not exists "public"."commercial_learning_snapshots" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
+  "period_days" integer default 90 not null,
+  "metrics" jsonb default '{}'::jsonb not null,
+  "sales_learning" jsonb default '{}'::jsonb not null,
+  "marketing_learning" jsonb default '{}'::jsonb not null,
+  "created_at" timestamp with time zone default now() not null
 );
 
-create table "public"."conversations" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
+create table if not exists "public"."conversations" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
   "lead_id" uuid,
-  "channel" text DEFAULT 'web'::text NOT NULL,
-  "status" text DEFAULT 'open'::text NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  "channel" text default 'web'::text not null,
+  "status" text default 'open'::text not null,
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null
 );
 
-create table "public"."creator_hub_assets" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "created_by" uuid NOT NULL,
+create table if not exists "public"."creator_hub_assets" (
+  "id" uuid default gen_random_uuid() not null,
+  "created_by" uuid not null,
   "organization_id" uuid,
-  "asset_type" text NOT NULL,
-  "title" text NOT NULL,
-  "status" text DEFAULT 'draft'::text NOT NULL,
-  "payload" jsonb DEFAULT '{}'::jsonb NOT NULL,
-  "public_token" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  "asset_type" text not null,
+  "title" text not null,
+  "status" text default 'draft'::text not null,
+  "payload" jsonb default '{}'::jsonb not null,
+  "public_token" uuid default gen_random_uuid() not null,
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null
 );
 
-create table "public"."customer_payments" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "lead_id" uuid NOT NULL,
+create table if not exists "public"."customer_payments" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
+  "lead_id" uuid not null,
   "appointment_id" uuid,
-  "status" text DEFAULT 'pending'::text NOT NULL,
+  "status" text default 'pending'::text not null,
   "amount_cents" integer,
-  "currency" text DEFAULT 'EUR'::text NOT NULL,
+  "currency" text default 'EUR'::text not null,
   "provider" text,
   "provider_payment_id" text,
   "payment_url" text,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null,
   "paid_at" timestamp with time zone
 );
 
-create table "public"."google_calendar_dispatch_queue" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "workflow_action_id" uuid NOT NULL,
-  "appointment_id" uuid NOT NULL,
-  "operation" text NOT NULL,
-  "calendar_id" text DEFAULT 'primary'::text NOT NULL,
+create table if not exists "public"."google_calendar_dispatch_queue" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
+  "workflow_action_id" uuid not null,
+  "appointment_id" uuid not null,
+  "operation" text not null,
+  "calendar_id" text default 'primary'::text not null,
   "provider_event_id" text,
   "provider_event_url" text,
   "title" text,
@@ -164,119 +196,119 @@ create table "public"."google_calendar_dispatch_queue" (
   "location" text,
   "start_at" timestamp with time zone,
   "end_at" timestamp with time zone,
-  "timezone" text DEFAULT 'Europe/Brussels'::text NOT NULL,
-  "status" text DEFAULT 'pending'::text NOT NULL,
-  "attempts" integer DEFAULT 0 NOT NULL,
-  "max_attempts" integer DEFAULT 3 NOT NULL,
+  "timezone" text default 'Europe/Brussels'::text not null,
+  "status" text default 'pending'::text not null,
+  "attempts" integer default 0 not null,
+  "max_attempts" integer default 3 not null,
   "last_error" text,
-  "scheduled_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "scheduled_at" timestamp with time zone default now() not null,
   "synced_at" timestamp with time zone,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null
 );
 
-create table "public"."handoffs" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
+create table if not exists "public"."handoffs" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
   "lead_id" uuid,
   "conversation_id" uuid,
-  "reason" text NOT NULL,
-  "status" text DEFAULT 'open'::text NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+  "reason" text not null,
+  "status" text default 'open'::text not null,
+  "created_at" timestamp with time zone default now() not null
 );
 
-create table "public"."izap_dispatch_queue" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "workflow_action_id" uuid NOT NULL,
+create table if not exists "public"."izap_dispatch_queue" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
+  "workflow_action_id" uuid not null,
   "lead_id" uuid,
-  "business_id" uuid NOT NULL,
-  "recipient_phone" text NOT NULL,
-  "template_name" text NOT NULL,
-  "template_language" text DEFAULT 'nl'::text NOT NULL,
-  "body_variables" jsonb DEFAULT '[]'::jsonb NOT NULL,
-  "status" text DEFAULT 'pending'::text NOT NULL,
-  "attempts" integer DEFAULT 0 NOT NULL,
-  "max_attempts" integer DEFAULT 3 NOT NULL,
+  "business_id" uuid not null,
+  "recipient_phone" text not null,
+  "template_name" text not null,
+  "template_language" text default 'nl'::text not null,
+  "body_variables" jsonb default '[]'::jsonb not null,
+  "status" text default 'pending'::text not null,
+  "attempts" integer default 0 not null,
+  "max_attempts" integer default 3 not null,
   "last_error" text,
   "provider_message_id" text,
-  "scheduled_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "scheduled_at" timestamp with time zone default now() not null,
   "sent_at" timestamp with time zone,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null
 );
 
-create table "public"."jarvis_agent_events" (
-  "id" bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
-  "task_id" uuid NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "owner_user_id" uuid NOT NULL,
+create table if not exists "public"."jarvis_agent_events" (
+  "id" bigint generated always as identity not null,
+  "task_id" uuid not null,
+  "organization_id" uuid not null,
+  "owner_user_id" uuid not null,
   "actor_user_id" uuid,
   "old_status" text,
-  "new_status" text NOT NULL,
-  "logged_at" timestamp with time zone DEFAULT now() NOT NULL
+  "new_status" text not null,
+  "logged_at" timestamp with time zone default now() not null
 );
 
-create table "public"."jarvis_agent_tasks" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "owner_user_id" uuid NOT NULL,
-  "client_request_id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "title" text NOT NULL,
-  "objective" text NOT NULL,
-  "kind" text NOT NULL,
-  "status" text DEFAULT 'pending_approval'::text NOT NULL,
-  "scheduled_at" timestamp with time zone DEFAULT now() NOT NULL,
+create table if not exists "public"."jarvis_agent_tasks" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
+  "owner_user_id" uuid not null,
+  "client_request_id" uuid default gen_random_uuid() not null,
+  "title" text not null,
+  "objective" text not null,
+  "kind" text not null,
+  "status" text default 'pending_approval'::text not null,
+  "scheduled_at" timestamp with time zone default now() not null,
   "approved_at" timestamp with time zone,
   "result_text" text,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "plan_progress" jsonb DEFAULT '{}'::jsonb NOT NULL
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null,
+  "plan_progress" jsonb default '{}'::jsonb not null
 );
 
-create table "public"."lead_agent_configs" (
-  "organization_id" uuid NOT NULL,
-  "name" text DEFAULT 'Lead Agent'::text NOT NULL,
-  "target_audience" text DEFAULT ''::text NOT NULL,
-  "offer" text DEFAULT ''::text NOT NULL,
-  "qualification_criteria" text DEFAULT ''::text NOT NULL,
-  "preferred_channel" text DEFAULT 'auto'::text NOT NULL,
-  "min_score" integer DEFAULT 60 NOT NULL,
-  "follow_up_due_hours" integer DEFAULT 24 NOT NULL,
-  "instructions" text DEFAULT ''::text NOT NULL,
-  "active" boolean DEFAULT false NOT NULL,
+create table if not exists "public"."lead_agent_configs" (
+  "organization_id" uuid not null,
+  "name" text default 'Lead Agent'::text not null,
+  "target_audience" text default ''::text not null,
+  "offer" text default ''::text not null,
+  "qualification_criteria" text default ''::text not null,
+  "preferred_channel" text default 'auto'::text not null,
+  "min_score" integer default 60 not null,
+  "follow_up_due_hours" integer default 24 not null,
+  "instructions" text default ''::text not null,
+  "active" boolean default false not null,
   "updated_by" uuid,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null
 );
 
-create table "public"."leadflow_leads" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "owner_id" uuid DEFAULT auth.uid() NOT NULL,
-  "name" text NOT NULL,
+create table if not exists "public"."leadflow_leads" (
+  "id" uuid default gen_random_uuid() not null,
+  "owner_id" uuid default auth.uid() not null,
+  "name" text not null,
   "contact" text,
-  "service" text NOT NULL,
-  "type" text DEFAULT 'Particulier'::text NOT NULL,
-  "status" text DEFAULT 'Nieuw'::text NOT NULL,
+  "service" text not null,
+  "type" text default 'Particulier'::text not null,
+  "status" text default 'Nieuw'::text not null,
   "due" date,
   "notes" text,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+  "created_at" timestamp with time zone default now() not null
 );
 
-create table "public"."leads" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "name" text DEFAULT ''::text NOT NULL,
-  "email" text DEFAULT ''::text,
-  "phone" text DEFAULT ''::text,
-  "source" text DEFAULT 'web'::text NOT NULL,
-  "status" text DEFAULT 'new'::text NOT NULL,
-  "score" integer DEFAULT 0 NOT NULL,
-  "summary" text DEFAULT ''::text NOT NULL,
-  "qualification" jsonb DEFAULT '{}'::jsonb NOT NULL,
-  "dedupe_key" text NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+create table if not exists "public"."leads" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
+  "name" text default ''::text not null,
+  "email" text default ''::text,
+  "phone" text default ''::text,
+  "source" text default 'web'::text not null,
+  "status" text default 'new'::text not null,
+  "score" integer default 0 not null,
+  "summary" text default ''::text not null,
+  "qualification" jsonb default '{}'::jsonb not null,
+  "dedupe_key" text not null,
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null,
   "last_contact_at" timestamp with time zone,
   "contact_consent_at" timestamp with time zone,
   "marketing_consent_at" timestamp with time zone,
@@ -289,416 +321,370 @@ create table "public"."leads" (
   "lost_reason_code" text
 );
 
-create table "public"."marketing_agent_configs" (
-  "organization_id" uuid NOT NULL,
-  "name" text DEFAULT 'Marketing Agent'::text NOT NULL,
-  "active" boolean DEFAULT false NOT NULL,
-  "target_audience" text DEFAULT ''::text NOT NULL,
-  "positioning" text DEFAULT ''::text NOT NULL,
-  "channels" text[] DEFAULT ARRAY['facebook'::text, 'instagram'::text] NOT NULL,
-  "content_pillars" text[] DEFAULT '{}'::text[] NOT NULL,
-  "cadence_per_week" integer DEFAULT 3 NOT NULL,
-  "tone" text DEFAULT 'menselijk, lokaal en betrouwbaar'::text NOT NULL,
-  "call_to_action" text DEFAULT 'Neem contact op voor meer informatie'::text NOT NULL,
-  "instructions" text DEFAULT ''::text NOT NULL,
-  "save_drafts" boolean DEFAULT true NOT NULL,
+create table if not exists "public"."marketing_agent_configs" (
+  "organization_id" uuid not null,
+  "name" text default 'Marketing Agent'::text not null,
+  "active" boolean default false not null,
+  "target_audience" text default ''::text not null,
+  "positioning" text default ''::text not null,
+  "channels" text[] default ARRAY['facebook'::text, 'instagram'::text] not null,
+  "content_pillars" text[] default '{}'::text[] not null,
+  "cadence_per_week" integer default 3 not null,
+  "tone" text default 'menselijk, lokaal en betrouwbaar'::text not null,
+  "call_to_action" text default 'Neem contact op voor meer informatie'::text not null,
+  "instructions" text default ''::text not null,
+  "save_drafts" boolean default true not null,
   "updated_by" uuid,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "auto_drafts" boolean DEFAULT false NOT NULL,
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null,
+  "auto_drafts" boolean default false not null,
   "last_run_at" timestamp with time zone,
-  "brand_name" text DEFAULT ''::text NOT NULL,
-  "product_context" text DEFAULT ''::text NOT NULL,
-  "product_services" text[] DEFAULT '{}'::text[] NOT NULL,
-  "landing_url" text DEFAULT ''::text NOT NULL
+  "brand_name" text default ''::text not null,
+  "product_context" text default ''::text not null,
+  "product_services" text[] default '{}'::text[] not null,
+  "landing_url" text default ''::text not null
 );
 
-create table "public"."marketing_campaigns" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "status" text DEFAULT 'draft'::text NOT NULL,
-  "objective" text DEFAULT ''::text NOT NULL,
-  "audience" text DEFAULT ''::text NOT NULL,
-  "channel" text DEFAULT 'social'::text NOT NULL,
-  "hook" text DEFAULT ''::text NOT NULL,
-  "content" text DEFAULT ''::text NOT NULL,
-  "cta" text DEFAULT ''::text NOT NULL,
-  "rationale" text DEFAULT ''::text NOT NULL,
-  "source_signals" jsonb DEFAULT '{}'::jsonb NOT NULL,
+create table if not exists "public"."marketing_campaigns" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
+  "status" text default 'draft'::text not null,
+  "objective" text default ''::text not null,
+  "audience" text default ''::text not null,
+  "channel" text default 'social'::text not null,
+  "hook" text default ''::text not null,
+  "content" text default ''::text not null,
+  "cta" text default ''::text not null,
+  "rationale" text default ''::text not null,
+  "source_signals" jsonb default '{}'::jsonb not null,
   "created_by" uuid,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null,
   "scheduled_for" timestamp with time zone,
   "published_at" timestamp with time zone,
   "external_url" text,
-  "tracking_code" uuid DEFAULT gen_random_uuid() NOT NULL
+  "tracking_code" uuid default gen_random_uuid() not null
 );
 
-create table "public"."memberships" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "user_id" uuid NOT NULL,
-  "role" text DEFAULT 'owner'::text NOT NULL,
-  "active" boolean DEFAULT true NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+create table if not exists "public"."memberships" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
+  "user_id" uuid not null,
+  "role" text default 'owner'::text not null,
+  "active" boolean default true not null,
+  "created_at" timestamp with time zone default now() not null
 );
 
-create table "public"."messages" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "conversation_id" uuid NOT NULL,
-  "role" text NOT NULL,
-  "content" text NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+create table if not exists "public"."messages" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
+  "conversation_id" uuid not null,
+  "role" text not null,
+  "content" text not null,
+  "created_at" timestamp with time zone default now() not null
 );
 
-create table "public"."organizations" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "name" text NOT NULL,
-  "status" text DEFAULT 'onboarding'::text NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "plan" text DEFAULT 'trial'::text NOT NULL,
-  "trial_ends_at" timestamp with time zone DEFAULT (now() + '14 days'::interval) NOT NULL,
+create table if not exists "public"."organizations" (
+  "id" uuid default gen_random_uuid() not null,
+  "name" text not null,
+  "status" text default 'onboarding'::text not null,
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null,
+  "plan" text default 'trial'::text not null,
+  "trial_ends_at" timestamp with time zone default (now() + '14 days'::interval) not null,
   "stripe_customer_id" text,
   "stripe_subscription_id" text,
-  "subscription_status" text DEFAULT 'trialing'::text NOT NULL,
-  "is_internal" boolean DEFAULT false NOT NULL
+  "subscription_status" text default 'trialing'::text not null,
+  "is_internal" boolean default false not null
 );
 
-create table "public"."platform_admins" (
-  "user_id" uuid NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+create table if not exists "public"."platform_admins" (
+  "user_id" uuid not null,
+  "created_at" timestamp with time zone default now() not null
 );
 
-create table "public"."reception_ai_plan_catalog" (
-  "plan" text NOT NULL,
-  "public_name" text NOT NULL,
-  "monthly_cents" integer NOT NULL,
-  "currency" text DEFAULT 'EUR'::text NOT NULL,
-  "payment_link_url" text NOT NULL,
-  "stripe_payment_link_id" text NOT NULL,
-  "daily_ai_limit" integer NOT NULL,
-  "sort_order" integer NOT NULL,
-  "summary" text NOT NULL,
-  "features" jsonb DEFAULT '[]'::jsonb NOT NULL,
-  "active" boolean DEFAULT true NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "setup_cents" integer DEFAULT 0 NOT NULL
+create table if not exists "public"."reception_ai_plan_catalog" (
+  "plan" text not null,
+  "public_name" text not null,
+  "monthly_cents" integer not null,
+  "currency" text default 'EUR'::text not null,
+  "payment_link_url" text not null,
+  "stripe_payment_link_id" text not null,
+  "daily_ai_limit" integer not null,
+  "sort_order" integer not null,
+  "summary" text not null,
+  "features" jsonb default '[]'::jsonb not null,
+  "active" boolean default true not null,
+  "updated_at" timestamp with time zone default now() not null,
+  "setup_cents" integer default 0 not null
 );
 
-create table "public"."sales_agent_configs" (
-  "organization_id" uuid NOT NULL,
-  "name" text DEFAULT 'Sales Agent'::text NOT NULL,
-  "active" boolean DEFAULT false NOT NULL,
-  "min_score" integer DEFAULT 60 NOT NULL,
-  "preferred_channel" text DEFAULT 'auto'::text NOT NULL,
-  "follow_up_due_hours" integer DEFAULT 24 NOT NULL,
-  "objective" text DEFAULT ''::text NOT NULL,
-  "offer" text DEFAULT ''::text NOT NULL,
-  "tone" text DEFAULT 'menselijk, professioneel en compact'::text NOT NULL,
-  "instructions" text DEFAULT ''::text NOT NULL,
-  "create_task_by_default" boolean DEFAULT true NOT NULL,
+create table if not exists "public"."sales_agent_configs" (
+  "organization_id" uuid not null,
+  "name" text default 'Sales Agent'::text not null,
+  "active" boolean default false not null,
+  "min_score" integer default 60 not null,
+  "preferred_channel" text default 'auto'::text not null,
+  "follow_up_due_hours" integer default 24 not null,
+  "objective" text default ''::text not null,
+  "offer" text default ''::text not null,
+  "tone" text default 'menselijk, professioneel en compact'::text not null,
+  "instructions" text default ''::text not null,
+  "create_task_by_default" boolean default true not null,
   "updated_by" uuid,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "auto_triage" boolean DEFAULT false NOT NULL,
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null,
+  "auto_triage" boolean default false not null,
   "last_run_at" timestamp with time zone,
-  "brand_name" text DEFAULT ''::text NOT NULL,
-  "product_context" text DEFAULT ''::text NOT NULL,
-  "product_services" text[] DEFAULT '{}'::text[] NOT NULL
+  "brand_name" text default ''::text not null,
+  "product_context" text default ''::text not null,
+  "product_services" text[] default '{}'::text[] not null
 );
 
-create table "public"."sales_onboarding_invites" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "token" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "sales_organization_id" uuid NOT NULL,
-  "lead_id" uuid NOT NULL,
-  "requested_plan" text DEFAULT 'pilot'::text NOT NULL,
-  "status" text DEFAULT 'pending'::text NOT NULL,
-  "expires_at" timestamp with time zone DEFAULT (now() + '7 days'::interval) NOT NULL,
+create table if not exists "public"."sales_onboarding_invites" (
+  "id" uuid default gen_random_uuid() not null,
+  "token" uuid default gen_random_uuid() not null,
+  "sales_organization_id" uuid not null,
+  "lead_id" uuid not null,
+  "requested_plan" text default 'pilot'::text not null,
+  "status" text default 'pending'::text not null,
+  "expires_at" timestamp with time zone default (now() + '7 days'::interval) not null,
   "claimed_organization_id" uuid,
   "claimed_at" timestamp with time zone,
   "converted_at" timestamp with time zone,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null
 );
 
-create table "public"."sales_opportunities" (
-  "organization_id" uuid NOT NULL,
-  "lead_id" uuid NOT NULL,
-  "temperature" text DEFAULT 'cold'::text NOT NULL,
-  "stage" text DEFAULT 'new'::text NOT NULL,
-  "confidence" integer DEFAULT 0 NOT NULL,
-  "next_action" text DEFAULT ''::text NOT NULL,
-  "reason" text DEFAULT ''::text NOT NULL,
-  "channel" text DEFAULT 'CRM'::text NOT NULL,
-  "message" text DEFAULT ''::text NOT NULL,
-  "objection" text DEFAULT ''::text NOT NULL,
-  "missing_info" jsonb DEFAULT '[]'::jsonb NOT NULL,
-  "can_contact" boolean DEFAULT false NOT NULL,
-  "analyzed_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+create table if not exists "public"."sales_opportunities" (
+  "organization_id" uuid not null,
+  "lead_id" uuid not null,
+  "temperature" text default 'cold'::text not null,
+  "stage" text default 'new'::text not null,
+  "confidence" integer default 0 not null,
+  "next_action" text default ''::text not null,
+  "reason" text default ''::text not null,
+  "channel" text default 'CRM'::text not null,
+  "message" text default ''::text not null,
+  "objection" text default ''::text not null,
+  "missing_info" jsonb default '[]'::jsonb not null,
+  "can_contact" boolean default false not null,
+  "analyzed_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null
 );
 
-create table "public"."sales_sequence_steps" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "sequence_id" uuid NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "lead_id" uuid NOT NULL,
-  "step_no" integer NOT NULL,
-  "due_at" timestamp with time zone NOT NULL,
-  "channel" text DEFAULT 'email'::text NOT NULL,
-  "message" text DEFAULT ''::text NOT NULL,
-  "status" text DEFAULT 'planned'::text NOT NULL,
-  "requires_approval" boolean DEFAULT true NOT NULL,
+create table if not exists "public"."sales_sequence_steps" (
+  "id" uuid default gen_random_uuid() not null,
+  "sequence_id" uuid not null,
+  "organization_id" uuid not null,
+  "lead_id" uuid not null,
+  "step_no" integer not null,
+  "due_at" timestamp with time zone not null,
+  "channel" text default 'email'::text not null,
+  "message" text default ''::text not null,
+  "status" text default 'planned'::text not null,
+  "requires_approval" boolean default true not null,
   "workflow_action_id" uuid,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null
 );
 
-create table "public"."sales_sequences" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "lead_id" uuid NOT NULL,
-  "status" text DEFAULT 'active'::text NOT NULL,
-  "objective" text DEFAULT ''::text NOT NULL,
-  "current_step" integer DEFAULT 1 NOT NULL,
+create table if not exists "public"."sales_sequences" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
+  "lead_id" uuid not null,
+  "status" text default 'active'::text not null,
+  "objective" text default ''::text not null,
+  "current_step" integer default 1 not null,
   "created_by" uuid,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null
 );
 
-create table "public"."stripe_events" (
-  "id" text NOT NULL,
-  "event_type" text NOT NULL,
-  "processed_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "status" text DEFAULT 'processed'::text NOT NULL,
+create table if not exists "public"."stripe_events" (
+  "id" text not null,
+  "event_type" text not null,
+  "processed_at" timestamp with time zone default now() not null,
+  "status" text default 'processed'::text not null,
   "last_error" text,
-  "attempts" integer DEFAULT 1 NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  "attempts" integer default 1 not null,
+  "updated_at" timestamp with time zone default now() not null
 );
 
-create table "public"."tasks" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
+create table if not exists "public"."tasks" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
   "lead_id" uuid,
-  "title" text NOT NULL,
-  "status" text DEFAULT 'open'::text NOT NULL,
-  "priority" text DEFAULT 'normal'::text NOT NULL,
+  "title" text not null,
+  "status" text default 'open'::text not null,
+  "priority" text default 'normal'::text not null,
   "due_at" timestamp with time zone,
   "completed_at" timestamp with time zone,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+  "created_at" timestamp with time zone default now() not null
 );
 
-create table "public"."team_invitations" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "email" text NOT NULL,
-  "role" text NOT NULL,
-  "invited_by" uuid NOT NULL,
-  "token_hash" text NOT NULL,
-  "status" text DEFAULT 'pending'::text NOT NULL,
-  "expires_at" timestamp with time zone DEFAULT (now() + '7 days'::interval) NOT NULL,
+create table if not exists "public"."team_invitations" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
+  "email" text not null,
+  "role" text not null,
+  "invited_by" uuid not null,
+  "token_hash" text not null,
+  "status" text default 'pending'::text not null,
+  "expires_at" timestamp with time zone default (now() + '7 days'::interval) not null,
   "accepted_at" timestamp with time zone,
   "accepted_by" uuid,
   "revoked_at" timestamp with time zone,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null
 );
 
-create table "public"."tenant_activation_events" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "event_type" text NOT NULL,
+create table if not exists "public"."tenant_activation_events" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
+  "event_type" text not null,
   "source_entity_type" text,
   "source_entity_id" uuid,
-  "happened_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "metadata" jsonb DEFAULT '{}'::jsonb NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+  "happened_at" timestamp with time zone default now() not null,
+  "metadata" jsonb default '{}'::jsonb not null,
+  "created_at" timestamp with time zone default now() not null
 );
 
-create table "public"."tenant_integrations" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "channel" text NOT NULL,
-  "provider" text NOT NULL,
-  "status" text DEFAULT 'needs_setup'::text NOT NULL,
-  "is_default" boolean DEFAULT true NOT NULL,
-  "config" jsonb DEFAULT '{}'::jsonb NOT NULL,
-  "capabilities" text[] DEFAULT '{}'::text[] NOT NULL,
+create table if not exists "public"."tenant_integrations" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
+  "channel" text not null,
+  "provider" text not null,
+  "status" text default 'needs_setup'::text not null,
+  "is_default" boolean default true not null,
+  "config" jsonb default '{}'::jsonb not null,
+  "capabilities" text[] default '{}'::text[] not null,
   "last_verified_at" timestamp with time zone,
   "last_error" text,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null
 );
 
-create table "public"."user_org_context" (
-  "user_id" uuid NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+create table if not exists "public"."user_org_context" (
+  "user_id" uuid not null,
+  "organization_id" uuid not null,
+  "updated_at" timestamp with time zone default now() not null
 );
 
-create table "public"."widget_rate_limits" (
-  "id" bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "client_hash" text NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+create table if not exists "public"."widget_rate_limits" (
+  "id" bigint generated always as identity not null,
+  "organization_id" uuid not null,
+  "client_hash" text not null,
+  "created_at" timestamp with time zone default now() not null
 );
 
-create table "public"."workflow_action_attempts" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "workflow_action_id" uuid NOT NULL,
-  "organization_id" uuid NOT NULL,
-  "attempt_no" integer NOT NULL,
+create table if not exists "public"."workflow_action_attempts" (
+  "id" uuid default gen_random_uuid() not null,
+  "workflow_action_id" uuid not null,
+  "organization_id" uuid not null,
+  "attempt_no" integer not null,
   "provider" text,
-  "outcome" text NOT NULL,
+  "outcome" text not null,
   "http_status" integer,
   "provider_reference" text,
   "error_code" text,
   "error_message" text,
-  "response_meta" jsonb DEFAULT '{}'::jsonb NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+  "response_meta" jsonb default '{}'::jsonb not null,
+  "created_at" timestamp with time zone default now() not null
 );
 
-create table "public"."workflow_actions" (
-  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" uuid NOT NULL,
+create table if not exists "public"."workflow_actions" (
+  "id" uuid default gen_random_uuid() not null,
+  "organization_id" uuid not null,
   "lead_id" uuid,
-  "action_type" text NOT NULL,
-  "channel" text DEFAULT 'internal'::text NOT NULL,
-  "status" text DEFAULT 'pending'::text NOT NULL,
-  "priority" text DEFAULT 'normal'::text NOT NULL,
-  "idempotency_key" text NOT NULL,
-  "payload" jsonb DEFAULT '{}'::jsonb NOT NULL,
-  "scheduled_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "attempts" integer DEFAULT 0 NOT NULL,
+  "action_type" text not null,
+  "channel" text default 'internal'::text not null,
+  "status" text default 'pending'::text not null,
+  "priority" text default 'normal'::text not null,
+  "idempotency_key" text not null,
+  "payload" jsonb default '{}'::jsonb not null,
+  "scheduled_at" timestamp with time zone default now() not null,
+  "attempts" integer default 0 not null,
   "provider" text,
   "provider_reference" text,
   "last_error" text,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "created_at" timestamp with time zone default now() not null,
+  "updated_at" timestamp with time zone default now() not null,
   "completed_at" timestamp with time zone,
   "locked_at" timestamp with time zone,
   "locked_by" text,
-  "max_attempts" integer DEFAULT 5 NOT NULL
+  "max_attempts" integer default 5 not null
 );
+
+-- Add keys and constraints after all referenced tables exist.
+
+alter table "private"."billing_checkout_refs" add constraint "billing_checkout_refs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
 alter table "private"."billing_checkout_refs" add constraint "billing_checkout_refs_pkey" PRIMARY KEY (token_hash);
 
+alter table "private"."billing_checkout_refs" add constraint "billing_checkout_refs_plan_check" CHECK (plan = ANY (ARRAY['starter'::text, 'pro'::text, 'business'::text]));
+
+alter table "private"."integration_credentials" add constraint "integration_credentials_integration_id_fkey" FOREIGN KEY (integration_id) REFERENCES tenant_integrations(id) ON DELETE CASCADE;
+
+alter table "private"."integration_credentials" add constraint "integration_credentials_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
 alter table "private"."integration_credentials" add constraint "integration_credentials_pkey" PRIMARY KEY (integration_id);
-
-alter table "private"."oauth_states" add constraint "oauth_states_pkey" PRIMARY KEY (state_hash);
-
-alter table "public"."ai_usage_daily" add constraint "ai_usage_daily_pkey" PRIMARY KEY (organization_id, usage_date);
-
-alter table "public"."appointments" add constraint "appointments_pkey" PRIMARY KEY (id);
-
-alter table "public"."audit_events" add constraint "audit_events_pkey" PRIMARY KEY (id);
-
-alter table "public"."business_profiles" add constraint "business_profiles_pkey" PRIMARY KEY (organization_id);
-
-alter table "public"."commercial_learning_snapshots" add constraint "commercial_learning_snapshots_pkey" PRIMARY KEY (id);
-
-alter table "public"."conversations" add constraint "conversations_pkey" PRIMARY KEY (id);
-
-alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_pkey" PRIMARY KEY (id);
-
-alter table "public"."customer_payments" add constraint "customer_payments_pkey" PRIMARY KEY (id);
-
-alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_pkey" PRIMARY KEY (id);
-
-alter table "public"."handoffs" add constraint "handoffs_pkey" PRIMARY KEY (id);
-
-alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_pkey" PRIMARY KEY (id);
-
-alter table "public"."jarvis_agent_events" add constraint "jarvis_agent_events_pkey" PRIMARY KEY (id);
-
-alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_pkey" PRIMARY KEY (id);
-
-alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_pkey" PRIMARY KEY (organization_id);
-
-alter table "public"."leadflow_leads" add constraint "leadflow_leads_pkey" PRIMARY KEY (id);
-
-alter table "public"."leads" add constraint "leads_pkey" PRIMARY KEY (id);
-
-alter table "public"."marketing_agent_configs" add constraint "marketing_agent_configs_pkey" PRIMARY KEY (organization_id);
-
-alter table "public"."marketing_campaigns" add constraint "marketing_campaigns_pkey" PRIMARY KEY (id);
-
-alter table "public"."memberships" add constraint "memberships_pkey" PRIMARY KEY (id);
-
-alter table "public"."messages" add constraint "messages_pkey" PRIMARY KEY (id);
-
-alter table "public"."organizations" add constraint "organizations_pkey" PRIMARY KEY (id);
-
-alter table "public"."platform_admins" add constraint "platform_admins_pkey" PRIMARY KEY (user_id);
-
-alter table "public"."reception_ai_plan_catalog" add constraint "reception_ai_plan_catalog_pkey" PRIMARY KEY (plan);
-
-alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_pkey" PRIMARY KEY (organization_id);
-
-alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_pkey" PRIMARY KEY (id);
-
-alter table "public"."sales_opportunities" add constraint "sales_opportunities_pkey" PRIMARY KEY (organization_id, lead_id);
-
-alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_pkey" PRIMARY KEY (id);
-
-alter table "public"."sales_sequences" add constraint "sales_sequences_pkey" PRIMARY KEY (id);
-
-alter table "public"."stripe_events" add constraint "stripe_events_pkey" PRIMARY KEY (id);
-
-alter table "public"."tasks" add constraint "tasks_pkey" PRIMARY KEY (id);
-
-alter table "public"."team_invitations" add constraint "team_invitations_pkey" PRIMARY KEY (id);
-
-alter table "public"."tenant_activation_events" add constraint "tenant_activation_events_pkey" PRIMARY KEY (id);
-
-alter table "public"."tenant_integrations" add constraint "tenant_integrations_pkey" PRIMARY KEY (id);
-
-alter table "public"."user_org_context" add constraint "user_org_context_pkey" PRIMARY KEY (user_id);
-
-alter table "public"."widget_rate_limits" add constraint "widget_rate_limits_pkey" PRIMARY KEY (id);
-
-alter table "public"."workflow_action_attempts" add constraint "workflow_action_attempts_pkey" PRIMARY KEY (id);
-
-alter table "public"."workflow_actions" add constraint "workflow_actions_pkey" PRIMARY KEY (id);
 
 alter table "private"."integration_credentials" add constraint "integration_credentials_vault_secret_name_key" UNIQUE (vault_secret_name);
 
-alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_action_unique" UNIQUE (workflow_action_id);
+alter table "private"."oauth_states" add constraint "oauth_states_integration_id_fkey" FOREIGN KEY (integration_id) REFERENCES tenant_integrations(id) ON DELETE CASCADE;
 
-alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_action_unique" UNIQUE (workflow_action_id);
+alter table "private"."oauth_states" add constraint "oauth_states_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
-alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_organization_id_owner_user_id_client_req_key" UNIQUE (organization_id, owner_user_id, client_request_id);
-
-alter table "public"."leads" add constraint "leads_organization_id_dedupe_key_key" UNIQUE (organization_id, dedupe_key);
-
-alter table "public"."memberships" add constraint "memberships_organization_id_user_id_key" UNIQUE (organization_id, user_id);
-
-alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_token_key" UNIQUE (token);
-
-alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_sequence_id_step_no_key" UNIQUE (sequence_id, step_no);
-
-alter table "public"."team_invitations" add constraint "team_invitations_token_hash_key" UNIQUE (token_hash);
-
-alter table "public"."tenant_activation_events" add constraint "tenant_activation_events_organization_id_event_type_key" UNIQUE (organization_id, event_type);
-
-alter table "public"."workflow_actions" add constraint "workflow_actions_idempotency_key_key" UNIQUE (idempotency_key);
-
-alter table "private"."billing_checkout_refs" add constraint "billing_checkout_refs_plan_check" CHECK (plan = ANY (ARRAY['starter'::text, 'pro'::text, 'business'::text]));
+alter table "private"."oauth_states" add constraint "oauth_states_pkey" PRIMARY KEY (state_hash);
 
 alter table "private"."oauth_states" add constraint "oauth_states_provider_check" CHECK (provider = 'google_calendar'::text);
 
+alter table "public"."ai_usage_daily" add constraint "ai_usage_daily_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."ai_usage_daily" add constraint "ai_usage_daily_pkey" PRIMARY KEY (organization_id, usage_date);
+
 alter table "public"."ai_usage_daily" add constraint "ai_usage_daily_request_count_check" CHECK (request_count >= 0);
+
+alter table "public"."appointments" add constraint "appointments_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
+
+alter table "public"."appointments" add constraint "appointments_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."appointments" add constraint "appointments_pkey" PRIMARY KEY (id);
+
+alter table "public"."audit_events" add constraint "audit_events_actor_user_id_fkey" FOREIGN KEY (actor_user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+alter table "public"."audit_events" add constraint "audit_events_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."audit_events" add constraint "audit_events_pkey" PRIMARY KEY (id);
 
 alter table "public"."business_profiles" add constraint "business_profiles_lead_capture_mode_check" CHECK (lead_capture_mode = ANY (ARRAY['progressive'::text, 'upfront'::text]));
 
+alter table "public"."business_profiles" add constraint "business_profiles_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."business_profiles" add constraint "business_profiles_pkey" PRIMARY KEY (organization_id);
+
+alter table "public"."commercial_learning_snapshots" add constraint "commercial_learning_snapshots_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
 alter table "public"."commercial_learning_snapshots" add constraint "commercial_learning_snapshots_period_days_check" CHECK (period_days >= 7 AND period_days <= 3650);
+
+alter table "public"."commercial_learning_snapshots" add constraint "commercial_learning_snapshots_pkey" PRIMARY KEY (id);
+
+alter table "public"."conversations" add constraint "conversations_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL;
+
+alter table "public"."conversations" add constraint "conversations_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."conversations" add constraint "conversations_pkey" PRIMARY KEY (id);
 
 alter table "public"."conversations" add constraint "conversations_status_check" CHECK (status = ANY (ARRAY['open'::text, 'waiting'::text, 'handoff'::text, 'closed'::text]));
 
 alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_asset_type_check" CHECK (asset_type = ANY (ARRAY['website'::text, 'quote'::text, 'workflow'::text, 'receptionist'::text, 'lead_agent'::text]));
+
+alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_created_by_fkey" FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL;
+
+alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_pkey" PRIMARY KEY (id);
 
 alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_status_check" CHECK (status = ANY (ARRAY['draft'::text, 'ready'::text, 'active'::text, 'live'::text, 'sent'::text, 'archived'::text]));
 
@@ -706,17 +692,57 @@ alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_tit
 
 alter table "public"."customer_payments" add constraint "customer_payments_amount_positive" CHECK (amount_cents IS NULL OR amount_cents > 0);
 
+alter table "public"."customer_payments" add constraint "customer_payments_appointment_id_fkey" FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE SET NULL;
+
+alter table "public"."customer_payments" add constraint "customer_payments_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
+
+alter table "public"."customer_payments" add constraint "customer_payments_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."customer_payments" add constraint "customer_payments_pkey" PRIMARY KEY (id);
+
+alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_action_unique" UNIQUE (workflow_action_id);
+
+alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_appointment_id_fkey" FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE CASCADE;
+
 alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_operation_check" CHECK (operation = ANY (ARRAY['create'::text, 'update'::text, 'delete'::text]));
+
+alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_pkey" PRIMARY KEY (id);
 
 alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_status_check" CHECK (status = ANY (ARRAY['pending'::text, 'processing'::text, 'synced'::text, 'failed'::text, 'manual_required'::text]));
 
 alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_times_check" CHECK (operation = 'delete'::text OR start_at IS NOT NULL AND end_at IS NOT NULL AND end_at > start_at);
 
+alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES workflow_actions(id) ON DELETE CASCADE;
+
+alter table "public"."handoffs" add constraint "handoffs_conversation_id_fkey" FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE SET NULL;
+
+alter table "public"."handoffs" add constraint "handoffs_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL;
+
+alter table "public"."handoffs" add constraint "handoffs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."handoffs" add constraint "handoffs_pkey" PRIMARY KEY (id);
+
 alter table "public"."handoffs" add constraint "handoffs_status_check" CHECK (status = ANY (ARRAY['open'::text, 'accepted'::text, 'resolved'::text]));
+
+alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_action_unique" UNIQUE (workflow_action_id);
 
 alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_body_vars_array" CHECK (jsonb_typeof(body_variables) = 'array'::text);
 
+alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
+
+alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_pkey" PRIMARY KEY (id);
+
 alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_status_check" CHECK (status = ANY (ARRAY['pending'::text, 'sending'::text, 'sent'::text, 'failed'::text, 'manual_required'::text]));
+
+alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES workflow_actions(id) ON DELETE CASCADE;
+
+alter table "public"."jarvis_agent_events" add constraint "jarvis_agent_events_pkey" PRIMARY KEY (id);
+
+alter table "public"."jarvis_agent_events" add constraint "jarvis_agent_events_task_id_fkey" FOREIGN KEY (task_id) REFERENCES jarvis_agent_tasks(id) ON DELETE CASCADE;
 
 alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_approved_before_execution_v1" CHECK ((status <> ALL (ARRAY['queued'::text, 'needs_attention'::text, 'completed'::text])) OR approved_at IS NOT NULL);
 
@@ -725,6 +751,14 @@ alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_plan_prog
 alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_kind_check" CHECK (kind = ANY (ARRAY['reminder'::text, 'draft'::text, 'plan'::text]));
 
 alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_objective_check" CHECK (char_length(objective) >= 3 AND char_length(objective) <= 1500);
+
+alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_organization_id_owner_user_id_client_req_key" UNIQUE (organization_id, owner_user_id, client_request_id);
+
+alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_owner_user_id_fkey" FOREIGN KEY (owner_user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_pkey" PRIMARY KEY (id);
 
 alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_result_text_check" CHECK (char_length(result_text) <= 4000);
 
@@ -738,13 +772,23 @@ alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_min
 
 alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_name_check" CHECK (char_length(name) >= 1 AND char_length(name) <= 120);
 
+alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_pkey" PRIMARY KEY (organization_id);
+
 alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_preferred_channel_check" CHECK (preferred_channel = ANY (ARRAY['auto'::text, 'email'::text, 'whatsapp'::text, 'linkedin'::text, 'phone'::text, 'multichannel'::text]));
+
+alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 
 alter table "public"."leadflow_leads" add constraint "leadflow_leads_contact_check" CHECK (contact IS NULL OR char_length(contact) <= 140);
 
 alter table "public"."leadflow_leads" add constraint "leadflow_leads_name_check" CHECK (char_length(name) >= 1 AND char_length(name) <= 100);
 
 alter table "public"."leadflow_leads" add constraint "leadflow_leads_notes_check" CHECK (notes IS NULL OR char_length(notes) <= 500);
+
+alter table "public"."leadflow_leads" add constraint "leadflow_leads_owner_id_fkey" FOREIGN KEY (owner_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+alter table "public"."leadflow_leads" add constraint "leadflow_leads_pkey" PRIMARY KEY (id);
 
 alter table "public"."leadflow_leads" add constraint "leadflow_leads_service_check" CHECK (char_length(service) >= 1 AND char_length(service) <= 120);
 
@@ -754,29 +798,71 @@ alter table "public"."leadflow_leads" add constraint "leadflow_leads_type_check"
 
 alter table "public"."leads" add constraint "leads_lost_reason_code_check" CHECK (lost_reason_code IS NULL OR (lost_reason_code = ANY (ARRAY['price_budget'::text, 'no_response'::text, 'timing'::text, 'competitor'::text, 'no_fit'::text, 'availability'::text, 'not_interested'::text, 'invalid_duplicate'::text, 'other'::text])));
 
+alter table "public"."leads" add constraint "leads_marketing_campaign_id_fkey" FOREIGN KEY (marketing_campaign_id) REFERENCES marketing_campaigns(id) ON DELETE SET NULL;
+
+alter table "public"."leads" add constraint "leads_organization_id_dedupe_key_key" UNIQUE (organization_id, dedupe_key);
+
+alter table "public"."leads" add constraint "leads_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."leads" add constraint "leads_pkey" PRIMARY KEY (id);
+
 alter table "public"."leads" add constraint "leads_score_check" CHECK (score >= 0 AND score <= 100);
 
 alter table "public"."leads" add constraint "leads_status_check" CHECK (status = ANY (ARRAY['new'::text, 'qualifying'::text, 'qualified'::text, 'follow_up'::text, 'handoff'::text, 'won'::text, 'lost'::text]));
 
 alter table "public"."marketing_agent_configs" add constraint "marketing_agent_configs_cadence_per_week_check" CHECK (cadence_per_week >= 1 AND cadence_per_week <= 21);
 
+alter table "public"."marketing_agent_configs" add constraint "marketing_agent_configs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."marketing_agent_configs" add constraint "marketing_agent_configs_pkey" PRIMARY KEY (organization_id);
+
+alter table "public"."marketing_agent_configs" add constraint "marketing_agent_configs_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+alter table "public"."marketing_campaigns" add constraint "marketing_campaigns_created_by_fkey" FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+alter table "public"."marketing_campaigns" add constraint "marketing_campaigns_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."marketing_campaigns" add constraint "marketing_campaigns_pkey" PRIMARY KEY (id);
+
 alter table "public"."marketing_campaigns" add constraint "marketing_campaigns_status_check" CHECK (status = ANY (ARRAY['draft'::text, 'approved'::text, 'scheduled'::text, 'published'::text, 'archived'::text]));
 
+alter table "public"."memberships" add constraint "memberships_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."memberships" add constraint "memberships_organization_id_user_id_key" UNIQUE (organization_id, user_id);
+
+alter table "public"."memberships" add constraint "memberships_pkey" PRIMARY KEY (id);
+
 alter table "public"."memberships" add constraint "memberships_role_check" CHECK (role = ANY (ARRAY['owner'::text, 'admin'::text, 'agent'::text, 'viewer'::text]));
+
+alter table "public"."memberships" add constraint "memberships_user_id_fkey" FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+alter table "public"."messages" add constraint "messages_conversation_id_fkey" FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE;
+
+alter table "public"."messages" add constraint "messages_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."messages" add constraint "messages_pkey" PRIMARY KEY (id);
 
 alter table "public"."messages" add constraint "messages_role_check" CHECK (role = ANY (ARRAY['customer'::text, 'assistant'::text, 'system'::text, 'human'::text]));
 
 alter table "public"."organizations" add constraint "organizations_name_check" CHECK (char_length(name) >= 1 AND char_length(name) <= 120);
 
+alter table "public"."organizations" add constraint "organizations_pkey" PRIMARY KEY (id);
+
 alter table "public"."organizations" add constraint "organizations_plan_check" CHECK (plan = ANY (ARRAY['trial'::text, 'starter'::text, 'pro'::text, 'business'::text]));
 
 alter table "public"."organizations" add constraint "organizations_status_check" CHECK (status = ANY (ARRAY['onboarding'::text, 'active'::text, 'suspended'::text]));
+
+alter table "public"."platform_admins" add constraint "platform_admins_pkey" PRIMARY KEY (user_id);
+
+alter table "public"."platform_admins" add constraint "platform_admins_user_id_fkey" FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 alter table "public"."reception_ai_plan_catalog" add constraint "reception_ai_plan_catalog_daily_ai_limit_check" CHECK (daily_ai_limit > 0);
 
 alter table "public"."reception_ai_plan_catalog" add constraint "reception_ai_plan_catalog_features_array" CHECK (jsonb_typeof(features) = 'array'::text);
 
 alter table "public"."reception_ai_plan_catalog" add constraint "reception_ai_plan_catalog_monthly_cents_check" CHECK (monthly_cents >= 0);
+
+alter table "public"."reception_ai_plan_catalog" add constraint "reception_ai_plan_catalog_pkey" PRIMARY KEY (plan);
 
 alter table "public"."reception_ai_plan_catalog" add constraint "reception_ai_plan_catalog_plan_check" CHECK (plan = ANY (ARRAY['starter'::text, 'pro'::text, 'business'::text]));
 
@@ -786,137 +872,11 @@ alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_f
 
 alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_min_score_check" CHECK (min_score >= 0 AND min_score <= 100);
 
-alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_preferred_channel_check" CHECK (preferred_channel = ANY (ARRAY['auto'::text, 'email'::text, 'whatsapp'::text, 'phone'::text, 'crm'::text]));
-
-alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_requested_plan_check" CHECK (requested_plan = ANY (ARRAY['pilot'::text, 'starter'::text, 'pro'::text, 'business'::text]));
-
-alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_status_check" CHECK (status = ANY (ARRAY['pending'::text, 'claimed'::text, 'converted'::text, 'expired'::text, 'cancelled'::text]));
-
-alter table "public"."sales_opportunities" add constraint "sales_opportunities_confidence_check" CHECK (confidence >= 0 AND confidence <= 100);
-
-alter table "public"."sales_opportunities" add constraint "sales_opportunities_temperature_check" CHECK (temperature = ANY (ARRAY['cold'::text, 'warm'::text, 'hot'::text]));
-
-alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_channel_check" CHECK (channel = ANY (ARRAY['email'::text, 'whatsapp'::text]));
-
-alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_status_check" CHECK (status = ANY (ARRAY['planned'::text, 'approved'::text, 'queued'::text, 'completed'::text, 'skipped'::text, 'cancelled'::text]));
-
-alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_step_no_check" CHECK (step_no >= 1 AND step_no <= 20);
-
-alter table "public"."sales_sequences" add constraint "sales_sequences_current_step_check" CHECK (current_step >= 1 AND current_step <= 20);
-
-alter table "public"."sales_sequences" add constraint "sales_sequences_status_check" CHECK (status = ANY (ARRAY['active'::text, 'paused'::text, 'completed'::text, 'cancelled'::text]));
-
-alter table "public"."stripe_events" add constraint "stripe_events_status_check" CHECK (status = ANY (ARRAY['processing'::text, 'processed'::text, 'failed'::text]));
-
-alter table "public"."tasks" add constraint "tasks_priority_check" CHECK (priority = ANY (ARRAY['low'::text, 'normal'::text, 'high'::text, 'urgent'::text]));
-
-alter table "public"."tasks" add constraint "tasks_status_check" CHECK (status = ANY (ARRAY['open'::text, 'done'::text, 'cancelled'::text]));
-
-alter table "public"."team_invitations" add constraint "team_invitations_email_nonempty" CHECK (length(TRIM(BOTH FROM email)) >= 3 AND length(TRIM(BOTH FROM email)) <= 320);
-
-alter table "public"."team_invitations" add constraint "team_invitations_role_check" CHECK (role = ANY (ARRAY['admin'::text, 'agent'::text, 'viewer'::text]));
-
-alter table "public"."team_invitations" add constraint "team_invitations_status_check" CHECK (status = ANY (ARRAY['pending'::text, 'accepted'::text, 'revoked'::text, 'expired'::text]));
-
-alter table "public"."tenant_activation_events" add constraint "tenant_activation_events_event_type_check" CHECK (event_type = ANY (ARRAY['first_public_conversation'::text, 'first_lead'::text, 'first_qualified_lead'::text, 'first_handoff'::text, 'first_appointment_request'::text, 'first_confirmed_appointment'::text, 'first_completed_appointment'::text, 'first_customer_payment'::text]));
-
-alter table "public"."tenant_integrations" add constraint "tenant_integrations_channel_check" CHECK (channel = ANY (ARRAY['email'::text, 'whatsapp'::text, 'calendar'::text, 'payment'::text, 'webhook'::text]));
-
-alter table "public"."tenant_integrations" add constraint "tenant_integrations_status_check" CHECK (status = ANY (ARRAY['needs_setup'::text, 'active'::text, 'degraded'::text, 'disabled'::text, 'error'::text]));
-
-alter table "public"."workflow_action_attempts" add constraint "workflow_action_attempts_outcome_check" CHECK (outcome = ANY (ARRAY['completed'::text, 'retry'::text, 'blocked'::text, 'failed'::text]));
-
-alter table "private"."billing_checkout_refs" add constraint "billing_checkout_refs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "private"."integration_credentials" add constraint "integration_credentials_integration_id_fkey" FOREIGN KEY (integration_id) REFERENCES tenant_integrations(id) ON DELETE CASCADE;
-
-alter table "private"."integration_credentials" add constraint "integration_credentials_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "private"."oauth_states" add constraint "oauth_states_integration_id_fkey" FOREIGN KEY (integration_id) REFERENCES tenant_integrations(id) ON DELETE CASCADE;
-
-alter table "private"."oauth_states" add constraint "oauth_states_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."ai_usage_daily" add constraint "ai_usage_daily_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."appointments" add constraint "appointments_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
-
-alter table "public"."appointments" add constraint "appointments_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."audit_events" add constraint "audit_events_actor_user_id_fkey" FOREIGN KEY (actor_user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
-
-alter table "public"."audit_events" add constraint "audit_events_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."business_profiles" add constraint "business_profiles_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."commercial_learning_snapshots" add constraint "commercial_learning_snapshots_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."conversations" add constraint "conversations_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL;
-
-alter table "public"."conversations" add constraint "conversations_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_created_by_fkey" FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE CASCADE;
-
-alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL;
-
-alter table "public"."customer_payments" add constraint "customer_payments_appointment_id_fkey" FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE SET NULL;
-
-alter table "public"."customer_payments" add constraint "customer_payments_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
-
-alter table "public"."customer_payments" add constraint "customer_payments_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_appointment_id_fkey" FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE CASCADE;
-
-alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES workflow_actions(id) ON DELETE CASCADE;
-
-alter table "public"."handoffs" add constraint "handoffs_conversation_id_fkey" FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE SET NULL;
-
-alter table "public"."handoffs" add constraint "handoffs_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL;
-
-alter table "public"."handoffs" add constraint "handoffs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
-
-alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES workflow_actions(id) ON DELETE CASCADE;
-
-alter table "public"."jarvis_agent_events" add constraint "jarvis_agent_events_task_id_fkey" FOREIGN KEY (task_id) REFERENCES jarvis_agent_tasks(id) ON DELETE CASCADE;
-
-alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_owner_user_id_fkey" FOREIGN KEY (owner_user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-
-alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES auth.users(id) ON DELETE SET NULL;
-
-alter table "public"."leadflow_leads" add constraint "leadflow_leads_owner_id_fkey" FOREIGN KEY (owner_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-
-alter table "public"."leads" add constraint "leads_marketing_campaign_id_fkey" FOREIGN KEY (marketing_campaign_id) REFERENCES marketing_campaigns(id) ON DELETE SET NULL;
-
-alter table "public"."leads" add constraint "leads_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."marketing_agent_configs" add constraint "marketing_agent_configs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."marketing_agent_configs" add constraint "marketing_agent_configs_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES auth.users(id) ON DELETE SET NULL;
-
-alter table "public"."marketing_campaigns" add constraint "marketing_campaigns_created_by_fkey" FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
-
-alter table "public"."marketing_campaigns" add constraint "marketing_campaigns_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."memberships" add constraint "memberships_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."memberships" add constraint "memberships_user_id_fkey" FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-
-alter table "public"."messages" add constraint "messages_conversation_id_fkey" FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE;
-
-alter table "public"."messages" add constraint "messages_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
-
-alter table "public"."platform_admins" add constraint "platform_admins_user_id_fkey" FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-
 alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_pkey" PRIMARY KEY (organization_id);
+
+alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_preferred_channel_check" CHECK (preferred_channel = ANY (ARRAY['auto'::text, 'email'::text, 'whatsapp'::text, 'phone'::text, 'crm'::text]));
 
 alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 
@@ -924,53 +884,129 @@ alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding
 
 alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
 
+alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_pkey" PRIMARY KEY (id);
+
+alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_requested_plan_check" CHECK (requested_plan = ANY (ARRAY['pilot'::text, 'starter'::text, 'pro'::text, 'business'::text]));
+
 alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_sales_organization_id_fkey" FOREIGN KEY (sales_organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_status_check" CHECK (status = ANY (ARRAY['pending'::text, 'claimed'::text, 'converted'::text, 'expired'::text, 'cancelled'::text]));
+
+alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_token_key" UNIQUE (token);
+
+alter table "public"."sales_opportunities" add constraint "sales_opportunities_confidence_check" CHECK (confidence >= 0 AND confidence <= 100);
 
 alter table "public"."sales_opportunities" add constraint "sales_opportunities_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
 
 alter table "public"."sales_opportunities" add constraint "sales_opportunities_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
+alter table "public"."sales_opportunities" add constraint "sales_opportunities_pkey" PRIMARY KEY (organization_id, lead_id);
+
+alter table "public"."sales_opportunities" add constraint "sales_opportunities_temperature_check" CHECK (temperature = ANY (ARRAY['cold'::text, 'warm'::text, 'hot'::text]));
+
+alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_channel_check" CHECK (channel = ANY (ARRAY['email'::text, 'whatsapp'::text]));
+
 alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
 
 alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
+alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_pkey" PRIMARY KEY (id);
+
 alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_sequence_id_fkey" FOREIGN KEY (sequence_id) REFERENCES sales_sequences(id) ON DELETE CASCADE;
+
+alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_sequence_id_step_no_key" UNIQUE (sequence_id, step_no);
+
+alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_status_check" CHECK (status = ANY (ARRAY['planned'::text, 'approved'::text, 'queued'::text, 'completed'::text, 'skipped'::text, 'cancelled'::text]));
+
+alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_step_no_check" CHECK (step_no >= 1 AND step_no <= 20);
 
 alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES workflow_actions(id) ON DELETE SET NULL;
 
 alter table "public"."sales_sequences" add constraint "sales_sequences_created_by_fkey" FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 
+alter table "public"."sales_sequences" add constraint "sales_sequences_current_step_check" CHECK (current_step >= 1 AND current_step <= 20);
+
 alter table "public"."sales_sequences" add constraint "sales_sequences_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
 
 alter table "public"."sales_sequences" add constraint "sales_sequences_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."sales_sequences" add constraint "sales_sequences_pkey" PRIMARY KEY (id);
+
+alter table "public"."sales_sequences" add constraint "sales_sequences_status_check" CHECK (status = ANY (ARRAY['active'::text, 'paused'::text, 'completed'::text, 'cancelled'::text]));
+
+alter table "public"."stripe_events" add constraint "stripe_events_pkey" PRIMARY KEY (id);
+
+alter table "public"."stripe_events" add constraint "stripe_events_status_check" CHECK (status = ANY (ARRAY['processing'::text, 'processed'::text, 'failed'::text]));
 
 alter table "public"."tasks" add constraint "tasks_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL;
 
 alter table "public"."tasks" add constraint "tasks_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
+alter table "public"."tasks" add constraint "tasks_pkey" PRIMARY KEY (id);
+
+alter table "public"."tasks" add constraint "tasks_priority_check" CHECK (priority = ANY (ARRAY['low'::text, 'normal'::text, 'high'::text, 'urgent'::text]));
+
+alter table "public"."tasks" add constraint "tasks_status_check" CHECK (status = ANY (ARRAY['open'::text, 'done'::text, 'cancelled'::text]));
+
 alter table "public"."team_invitations" add constraint "team_invitations_accepted_by_fkey" FOREIGN KEY (accepted_by) REFERENCES auth.users(id);
+
+alter table "public"."team_invitations" add constraint "team_invitations_email_nonempty" CHECK (length(TRIM(BOTH FROM email)) >= 3 AND length(TRIM(BOTH FROM email)) <= 320);
 
 alter table "public"."team_invitations" add constraint "team_invitations_invited_by_fkey" FOREIGN KEY (invited_by) REFERENCES auth.users(id);
 
 alter table "public"."team_invitations" add constraint "team_invitations_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
+alter table "public"."team_invitations" add constraint "team_invitations_pkey" PRIMARY KEY (id);
+
+alter table "public"."team_invitations" add constraint "team_invitations_role_check" CHECK (role = ANY (ARRAY['admin'::text, 'agent'::text, 'viewer'::text]));
+
+alter table "public"."team_invitations" add constraint "team_invitations_status_check" CHECK (status = ANY (ARRAY['pending'::text, 'accepted'::text, 'revoked'::text, 'expired'::text]));
+
+alter table "public"."team_invitations" add constraint "team_invitations_token_hash_key" UNIQUE (token_hash);
+
+alter table "public"."tenant_activation_events" add constraint "tenant_activation_events_event_type_check" CHECK (event_type = ANY (ARRAY['first_public_conversation'::text, 'first_lead'::text, 'first_qualified_lead'::text, 'first_handoff'::text, 'first_appointment_request'::text, 'first_confirmed_appointment'::text, 'first_completed_appointment'::text, 'first_customer_payment'::text]));
+
+alter table "public"."tenant_activation_events" add constraint "tenant_activation_events_organization_id_event_type_key" UNIQUE (organization_id, event_type);
+
 alter table "public"."tenant_activation_events" add constraint "tenant_activation_events_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."tenant_activation_events" add constraint "tenant_activation_events_pkey" PRIMARY KEY (id);
+
+alter table "public"."tenant_integrations" add constraint "tenant_integrations_channel_check" CHECK (channel = ANY (ARRAY['email'::text, 'whatsapp'::text, 'calendar'::text, 'payment'::text, 'webhook'::text]));
 
 alter table "public"."tenant_integrations" add constraint "tenant_integrations_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
+alter table "public"."tenant_integrations" add constraint "tenant_integrations_pkey" PRIMARY KEY (id);
+
+alter table "public"."tenant_integrations" add constraint "tenant_integrations_status_check" CHECK (status = ANY (ARRAY['needs_setup'::text, 'active'::text, 'degraded'::text, 'disabled'::text, 'error'::text]));
+
 alter table "public"."user_org_context" add constraint "user_org_context_membership_fk" FOREIGN KEY (organization_id, user_id) REFERENCES memberships(organization_id, user_id) ON DELETE CASCADE;
+
+alter table "public"."user_org_context" add constraint "user_org_context_pkey" PRIMARY KEY (user_id);
 
 alter table "public"."user_org_context" add constraint "user_org_context_user_id_fkey" FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 alter table "public"."widget_rate_limits" add constraint "widget_rate_limits_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
+alter table "public"."widget_rate_limits" add constraint "widget_rate_limits_pkey" PRIMARY KEY (id);
+
 alter table "public"."workflow_action_attempts" add constraint "workflow_action_attempts_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
+alter table "public"."workflow_action_attempts" add constraint "workflow_action_attempts_outcome_check" CHECK (outcome = ANY (ARRAY['completed'::text, 'retry'::text, 'blocked'::text, 'failed'::text]));
+
+alter table "public"."workflow_action_attempts" add constraint "workflow_action_attempts_pkey" PRIMARY KEY (id);
+
 alter table "public"."workflow_action_attempts" add constraint "workflow_action_attempts_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES workflow_actions(id) ON DELETE CASCADE;
+
+alter table "public"."workflow_actions" add constraint "workflow_actions_idempotency_key_key" UNIQUE (idempotency_key);
 
 alter table "public"."workflow_actions" add constraint "workflow_actions_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
 
 alter table "public"."workflow_actions" add constraint "workflow_actions_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+alter table "public"."workflow_actions" add constraint "workflow_actions_pkey" PRIMARY KEY (id);
+
+-- Non-constraint indexes.
 
 CREATE INDEX billing_checkout_refs_expiry_idx ON private.billing_checkout_refs USING btree (expires_at);
 
@@ -1135,6 +1171,427 @@ CREATE INDEX workflow_actions_due_idx ON public.workflow_actions USING btree (st
 CREATE INDEX workflow_actions_lead_idx ON public.workflow_actions USING btree (lead_id, created_at DESC);
 
 CREATE INDEX workflow_actions_org_status_idx ON public.workflow_actions USING btree (organization_id, status, scheduled_at);
+
+-- Restore row-level security before granting application access.
+
+alter table "private"."billing_checkout_refs" enable row level security;
+
+alter table "private"."integration_credentials" enable row level security;
+
+alter table "private"."oauth_states" enable row level security;
+
+alter table "public"."ai_usage_daily" enable row level security;
+
+alter table "public"."appointments" enable row level security;
+
+alter table "public"."audit_events" enable row level security;
+
+alter table "public"."business_profiles" enable row level security;
+
+alter table "public"."commercial_learning_snapshots" enable row level security;
+
+alter table "public"."conversations" enable row level security;
+
+alter table "public"."creator_hub_assets" enable row level security;
+
+alter table "public"."customer_payments" enable row level security;
+
+alter table "public"."google_calendar_dispatch_queue" enable row level security;
+
+alter table "public"."handoffs" enable row level security;
+
+alter table "public"."izap_dispatch_queue" enable row level security;
+
+alter table "public"."jarvis_agent_events" enable row level security;
+
+alter table "public"."jarvis_agent_tasks" enable row level security;
+
+alter table "public"."lead_agent_configs" enable row level security;
+
+alter table "public"."leadflow_leads" enable row level security;
+
+alter table "public"."leads" enable row level security;
+
+alter table "public"."marketing_agent_configs" enable row level security;
+
+alter table "public"."marketing_campaigns" enable row level security;
+
+alter table "public"."memberships" enable row level security;
+
+alter table "public"."messages" enable row level security;
+
+alter table "public"."organizations" enable row level security;
+
+alter table "public"."platform_admins" enable row level security;
+
+alter table "public"."reception_ai_plan_catalog" enable row level security;
+
+alter table "public"."sales_agent_configs" enable row level security;
+
+alter table "public"."sales_onboarding_invites" enable row level security;
+
+alter table "public"."sales_opportunities" enable row level security;
+
+alter table "public"."sales_sequence_steps" enable row level security;
+
+alter table "public"."sales_sequences" enable row level security;
+
+alter table "public"."stripe_events" enable row level security;
+
+alter table "public"."tasks" enable row level security;
+
+alter table "public"."team_invitations" enable row level security;
+
+alter table "public"."tenant_activation_events" enable row level security;
+
+alter table "public"."tenant_integrations" enable row level security;
+
+alter table "public"."user_org_context" enable row level security;
+
+alter table "public"."widget_rate_limits" enable row level security;
+
+alter table "public"."workflow_action_attempts" enable row level security;
+
+alter table "public"."workflow_actions" enable row level security;
+
+create policy "ai_usage_daily_no_direct_access" on "public"."ai_usage_daily" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "appointments_select" on "public"."appointments" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "audit_select" on "public"."audit_events" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "profile_select" on "public"."business_profiles" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "profile_update" on "public"."business_profiles" as PERMISSIVE for UPDATE to "authenticated" using (is_org_admin(organization_id)) with check (is_org_admin(organization_id));
+
+create policy "commercial_learning_no_direct_access" on "public"."commercial_learning_snapshots" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "conv_select" on "public"."conversations" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "creator_hub_assets_no_direct_access" on "public"."creator_hub_assets" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "customer_payments_select" on "public"."customer_payments" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "server_only_deny_users" on "public"."google_calendar_dispatch_queue" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "handoffs_select" on "public"."handoffs" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "handoffs_update" on "public"."handoffs" as PERMISSIVE for UPDATE to "authenticated" using (is_org_operator(organization_id)) with check (is_org_operator(organization_id));
+
+create policy "server_only_deny_users" on "public"."izap_dispatch_queue" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "jarvis_agent_events_read" on "public"."jarvis_agent_events" as PERMISSIVE for SELECT to "authenticated" using (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
+   FROM memberships m
+  WHERE ((m.organization_id = jarvis_agent_events.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))));
+
+create policy "jarvis_agent_tasks_owner_insert" on "public"."jarvis_agent_tasks" as PERMISSIVE for INSERT to "authenticated" with check (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (status = 'pending_approval'::text) AND (approved_at IS NULL) AND (result_text IS NULL) AND (EXISTS ( SELECT 1
+   FROM memberships m
+  WHERE ((m.organization_id = jarvis_agent_tasks.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))));
+
+create policy "jarvis_agent_tasks_owner_select" on "public"."jarvis_agent_tasks" as PERMISSIVE for SELECT to "authenticated" using (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
+   FROM memberships m
+  WHERE ((m.organization_id = jarvis_agent_tasks.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))));
+
+create policy "jarvis_agent_tasks_owner_update" on "public"."jarvis_agent_tasks" as PERMISSIVE for UPDATE to "authenticated" using (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
+   FROM memberships m
+  WHERE ((m.organization_id = jarvis_agent_tasks.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text]))))))) with check (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
+   FROM memberships m
+  WHERE ((m.organization_id = jarvis_agent_tasks.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))));
+
+create policy "lead_agent_configs_no_direct_access" on "public"."lead_agent_configs" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "leadflow_leads_delete_own" on "public"."leadflow_leads" as PERMISSIVE for DELETE to "authenticated" using ((( SELECT auth.uid() AS uid) = owner_id));
+
+create policy "leadflow_leads_insert_own" on "public"."leadflow_leads" as PERMISSIVE for INSERT to "authenticated" with check ((( SELECT auth.uid() AS uid) = owner_id));
+
+create policy "leadflow_leads_read_own" on "public"."leadflow_leads" as PERMISSIVE for SELECT to "authenticated" using ((( SELECT auth.uid() AS uid) = owner_id));
+
+create policy "leadflow_leads_update_own" on "public"."leadflow_leads" as PERMISSIVE for UPDATE to "authenticated" using ((( SELECT auth.uid() AS uid) = owner_id)) with check ((( SELECT auth.uid() AS uid) = owner_id));
+
+create policy "leads_select" on "public"."leads" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "leads_update" on "public"."leads" as PERMISSIVE for UPDATE to "authenticated" using (is_org_operator(organization_id)) with check (is_org_operator(organization_id));
+
+create policy "marketing_agent_configs_no_direct_access" on "public"."marketing_agent_configs" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "marketing_campaigns_no_direct_access" on "public"."marketing_campaigns" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "membership_select" on "public"."memberships" as PERMISSIVE for SELECT to "authenticated" using ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy "messages_select" on "public"."messages" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "org_select" on "public"."organizations" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(id));
+
+create policy "platform_admin_self_select" on "public"."platform_admins" as PERMISSIVE for SELECT to "authenticated" using ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy "reception_ai_plan_catalog_no_direct_access" on "public"."reception_ai_plan_catalog" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "sales_agent_configs_no_direct_access" on "public"."sales_agent_configs" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "sales_onboarding_invites_no_direct_access" on "public"."sales_onboarding_invites" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "sales_opportunities_no_direct_access" on "public"."sales_opportunities" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "sales_sequence_steps_no_direct_access" on "public"."sales_sequence_steps" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "sales_sequences_no_direct_access" on "public"."sales_sequences" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "stripe_events_no_client_access" on "public"."stripe_events" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "tasks_select" on "public"."tasks" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "tasks_update" on "public"."tasks" as PERMISSIVE for UPDATE to "authenticated" using (is_org_operator(organization_id)) with check (is_org_operator(organization_id));
+
+create policy "tenant_activation_events_no_direct_access" on "public"."tenant_activation_events" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "tenant_integrations_select" on "public"."tenant_integrations" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "widget_rate_limits_no_client_access" on "public"."widget_rate_limits" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "workflow_attempts_select" on "public"."workflow_action_attempts" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "workflow_actions_select" on "public"."workflow_actions" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+-- Restore functions; defer body checks because functions reference other functions created in this snapshot.
+
+set check_function_bodies = off;
+
+CREATE OR REPLACE FUNCTION private.handle_new_user()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_org uuid;
+  v_name text;
+  v_onboarding_token uuid;
+  v_invite record;
+  v_now timestamptz := now();
+begin
+
+  -- Omega routing requires a private, email-bound, one-use server ticket.
+  if promo_omega_private.route_signup(new.id,new.email,new.raw_user_meta_data) then
+    return new;
+  end if;
+  v_name := left(coalesce(nullif(trim(new.raw_user_meta_data->>'business_name'),''),'Mijn bedrijf'),120);
+
+  begin
+    v_onboarding_token := nullif(trim(new.raw_user_meta_data->>'onboarding_token'),'')::uuid;
+  exception when others then
+    v_onboarding_token := null;
+  end;
+
+  -- Initialise the record even for ordinary signups without an invitation.
+  select i.*,l.email,l.phone,l.name,l.qualification into v_invite
+  from public.sales_onboarding_invites i
+  join public.leads l on l.id=i.lead_id and l.organization_id=i.sales_organization_id
+  where false;
+
+  if v_onboarding_token is not null then
+    select i.*,l.email,l.phone,l.name,l.qualification
+    into v_invite
+    from public.sales_onboarding_invites i
+    join public.leads l on l.id=i.lead_id and l.organization_id=i.sales_organization_id
+    where i.token=v_onboarding_token
+      and new.email_confirmed_at is not null
+      and nullif(lower(trim(l.email)),'')=lower(trim(new.email))
+      and i.status='pending'
+      and i.expires_at>v_now
+    for update;
+
+    if found and coalesce(v_invite.qualification->>'company','')<>'' then
+      v_name := left(v_invite.qualification->>'company',120);
+    end if;
+  end if;
+
+  insert into public.organizations(name,status)
+  values(v_name,'onboarding')
+  returning id into v_org;
+
+  insert into public.memberships(organization_id,user_id,role,active)
+  values(v_org,new.id,'owner',true);
+
+  insert into public.business_profiles(
+    organization_id,business_name,qualification_questions,notification_email
+  )
+  values(
+    v_org,
+    v_name,
+    '["Waarmee kunnen we u precies helpen?","Wanneer wilt u dit laten uitvoeren?","Hoe mogen we u het best bereiken?"]'::jsonb,
+    nullif(lower(trim(new.email)),'')
+  );
+
+  insert into public.audit_events(
+    organization_id,actor_user_id,event_type,entity_type,entity_id,payload
+  )
+  values(
+    v_org,new.id,'organization.created','organization',v_org,
+    jsonb_build_object(
+      'source',case when v_onboarding_token is not null and v_invite.id is not null then 'reception_ai_sales_onboarding' else 'auth_signup' end
+    )
+  );
+
+  if v_onboarding_token is not null and v_invite.id is not null then
+    update public.sales_onboarding_invites
+    set status='claimed',
+        claimed_organization_id=v_org,
+        claimed_at=v_now,
+        updated_at=v_now
+    where id=v_invite.id;
+
+    update public.leads
+    set status='follow_up',
+        score=greatest(score,95),
+        qualification=coalesce(qualification,'{}'::jsonb) || jsonb_build_object(
+          'funnel_stage','onboarding_started',
+          'requested_plan',v_invite.requested_plan,
+          'onboarding_invite_id',v_invite.id,
+          'tenant_organization_id',v_org
+        ),
+        updated_at=v_now
+    where id=v_invite.lead_id
+      and organization_id=v_invite.sales_organization_id
+      and status not in ('won','lost');
+
+    insert into public.sales_opportunities(
+      organization_id,lead_id,temperature,stage,confidence,next_action,reason,channel,message,objection,missing_info,can_contact,analyzed_at,updated_at
+    )
+    values(
+      v_invite.sales_organization_id,v_invite.lead_id,'hot','onboarding',98,
+      'Onboarding begeleiden en controleren of bedrijfsprofiel, widget en integraties correct worden ingesteld.',
+      'De prospect heeft vanuit de Reception AI-verkoopflow zelf een bedrijfsaccount aangemaakt.',
+      case when coalesce(v_invite.phone,'')<>'' then 'telefoon' else 'e-mail' end,
+      '',
+      '',
+      '[]'::jsonb,
+      true,
+      v_now,v_now
+    )
+    on conflict (organization_id,lead_id) do update set
+      temperature='hot',
+      stage='onboarding',
+      confidence=greatest(public.sales_opportunities.confidence,98),
+      next_action=excluded.next_action,
+      reason=excluded.reason,
+      channel=excluded.channel,
+      can_contact=true,
+      analyzed_at=v_now,
+      updated_at=v_now;
+
+    if not exists(
+      select 1 from public.tasks
+      where organization_id=v_invite.sales_organization_id
+        and lead_id=v_invite.lead_id
+        and status='open'
+        and title='Sales Agent: Reception AI onboarding begeleiden'
+    ) then
+      insert into public.tasks(organization_id,lead_id,title,status,priority,due_at)
+      values(
+        v_invite.sales_organization_id,
+        v_invite.lead_id,
+        'Sales Agent: Reception AI onboarding begeleiden',
+        'open','high',v_now+interval '24 hours'
+      );
+    end if;
+
+    insert into public.audit_events(
+      organization_id,actor_user_id,event_type,entity_type,entity_id,payload
+    )
+    values(
+      v_invite.sales_organization_id,null,'sales_onboarding.started','lead',v_invite.lead_id,
+      jsonb_build_object(
+        'invite_id',v_invite.id,
+        'requested_plan',v_invite.requested_plan,
+        'claimed_organization_id',v_org
+      )
+    );
+  end if;
+
+  return new;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION private.reception_ai_sync_central_v2()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_key text;
+  v_conversation_id uuid;
+  v_appointment record;
+  v_intent text;
+  v_message text;
+  v_payload jsonb;
+begin
+  select decrypted_secret
+    into v_key
+    from vault.decrypted_secrets
+   where name = 'luxwash_reception_bridge_key_v2'
+   limit 1;
+
+  if coalesce(v_key,'') = '' then
+    raise warning 'Reception AI central sync skipped: Vault key unavailable';
+    return new;
+  end if;
+
+  select c.id
+    into v_conversation_id
+    from public.conversations c
+   where c.lead_id = new.id
+     and c.organization_id = new.organization_id
+   order by c.created_at desc
+   limit 1;
+
+  select a.id, a.start_at, a.end_at, a.timezone, a.requested_text, a.status
+    into v_appointment
+    from public.appointments a
+   where a.lead_id = new.id
+     and a.organization_id = new.organization_id
+     and a.status in ('requested','proposed','confirmed')
+   order by a.created_at desc
+   limit 1;
+
+  v_intent := coalesce(new.qualification->>'intent','general');
+  v_message := coalesce(nullif(new.summary,''),'Reception AI lead sync');
+
+  v_payload := jsonb_build_object(
+    'external_lead_id', new.id,
+    'external_conversation_id', v_conversation_id,
+    'name', case when new.name = 'Websitebezoeker' then null else new.name end,
+    'email', new.email,
+    'phone', new.phone,
+    'message', v_message,
+    'score', new.score,
+    'status', new.status,
+    'intent', v_intent,
+    'contact_consent', new.contact_consent_at is not null,
+    'external_appointment_id', v_appointment.id,
+    'appointment_start_at', v_appointment.start_at,
+    'appointment_end_at', v_appointment.end_at,
+    'appointment_timezone', v_appointment.timezone,
+    'appointment_requested_text', v_appointment.requested_text
+  );
+
+  perform net.http_post(
+    url := 'https://nahwlhptgdkwhjcfkhkt.supabase.co/functions/v1/luxwash-site-api/reception-sync',
+    body := v_payload,
+    headers := jsonb_build_object(
+      'Content-Type','application/json',
+      'x-reception-bridge-key',v_key
+    ),
+    timeout_milliseconds := 5000
+  );
+
+  return new;
+exception
+  when others then
+    raise warning 'Reception AI central sync failed: %', sqlerrm;
+    return new;
+end;
+$function$;
 
 CREATE OR REPLACE FUNCTION private.refresh_onboarding_status()
  RETURNS trigger
@@ -3711,183 +4168,9 @@ AS $function$
   );
 $function$;
 
-alter table "private"."billing_checkout_refs" enable row level security;
+reset check_function_bodies;
 
-alter table "private"."integration_credentials" enable row level security;
-
-alter table "private"."oauth_states" enable row level security;
-
-alter table "public"."ai_usage_daily" enable row level security;
-
-create policy "ai_usage_daily_no_direct_access" on "public"."ai_usage_daily" for ALL to "anon", "authenticated" using (false) with check (false);
-
-alter table "public"."appointments" enable row level security;
-
-create policy "appointments_select" on "public"."appointments" for SELECT to "authenticated" using (is_org_member(organization_id));
-
-alter table "public"."audit_events" enable row level security;
-
-create policy "audit_select" on "public"."audit_events" for SELECT to "authenticated" using (is_org_member(organization_id));
-
-alter table "public"."business_profiles" enable row level security;
-
-create policy "profile_select" on "public"."business_profiles" for SELECT to "authenticated" using (is_org_member(organization_id));
-
-create policy "profile_update" on "public"."business_profiles" for UPDATE to "authenticated" using (is_org_admin(organization_id)) with check (is_org_admin(organization_id));
-
-alter table "public"."commercial_learning_snapshots" enable row level security;
-
-create policy "commercial_learning_no_direct_access" on "public"."commercial_learning_snapshots" for ALL to "anon", "authenticated" using (false) with check (false);
-
-alter table "public"."conversations" enable row level security;
-
-create policy "conv_select" on "public"."conversations" for SELECT to "authenticated" using (is_org_member(organization_id));
-
-alter table "public"."creator_hub_assets" enable row level security;
-
-create policy "creator_hub_assets_no_direct_access" on "public"."creator_hub_assets" for ALL to "anon", "authenticated" using (false) with check (false);
-
-alter table "public"."customer_payments" enable row level security;
-
-create policy "customer_payments_select" on "public"."customer_payments" for SELECT to "authenticated" using (is_org_member(organization_id));
-
-alter table "public"."google_calendar_dispatch_queue" enable row level security;
-
-create policy "server_only_deny_users" on "public"."google_calendar_dispatch_queue" for ALL to "anon", "authenticated" using (false) with check (false);
-
-alter table "public"."handoffs" enable row level security;
-
-create policy "handoffs_select" on "public"."handoffs" for SELECT to "authenticated" using (is_org_member(organization_id));
-
-create policy "handoffs_update" on "public"."handoffs" for UPDATE to "authenticated" using (is_org_operator(organization_id)) with check (is_org_operator(organization_id));
-
-alter table "public"."izap_dispatch_queue" enable row level security;
-
-create policy "server_only_deny_users" on "public"."izap_dispatch_queue" for ALL to "anon", "authenticated" using (false) with check (false);
-
-alter table "public"."jarvis_agent_events" enable row level security;
-
-create policy "jarvis_agent_events_read" on "public"."jarvis_agent_events" for SELECT to "authenticated" using (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
-   FROM memberships m
-  WHERE ((m.organization_id = jarvis_agent_events.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))));
-
-alter table "public"."jarvis_agent_tasks" enable row level security;
-
-create policy "jarvis_agent_tasks_owner_insert" on "public"."jarvis_agent_tasks" for INSERT to "authenticated" with check (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (status = 'pending_approval'::text) AND (approved_at IS NULL) AND (result_text IS NULL) AND (EXISTS ( SELECT 1
-   FROM memberships m
-  WHERE ((m.organization_id = jarvis_agent_tasks.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))));
-
-create policy "jarvis_agent_tasks_owner_select" on "public"."jarvis_agent_tasks" for SELECT to "authenticated" using (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
-   FROM memberships m
-  WHERE ((m.organization_id = jarvis_agent_tasks.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))));
-
-create policy "jarvis_agent_tasks_owner_update" on "public"."jarvis_agent_tasks" for UPDATE to "authenticated" using (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
-   FROM memberships m
-  WHERE ((m.organization_id = jarvis_agent_tasks.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text]))))))) with check (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
-   FROM memberships m
-  WHERE ((m.organization_id = jarvis_agent_tasks.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))));
-
-alter table "public"."lead_agent_configs" enable row level security;
-
-create policy "lead_agent_configs_no_direct_access" on "public"."lead_agent_configs" for ALL to "anon", "authenticated" using (false) with check (false);
-
-alter table "public"."leadflow_leads" enable row level security;
-
-create policy "leadflow_leads_delete_own" on "public"."leadflow_leads" for DELETE to "authenticated" using ((( SELECT auth.uid() AS uid) = owner_id));
-
-create policy "leadflow_leads_insert_own" on "public"."leadflow_leads" for INSERT to "authenticated" with check ((( SELECT auth.uid() AS uid) = owner_id));
-
-create policy "leadflow_leads_read_own" on "public"."leadflow_leads" for SELECT to "authenticated" using ((( SELECT auth.uid() AS uid) = owner_id));
-
-create policy "leadflow_leads_update_own" on "public"."leadflow_leads" for UPDATE to "authenticated" using ((( SELECT auth.uid() AS uid) = owner_id)) with check ((( SELECT auth.uid() AS uid) = owner_id));
-
-alter table "public"."leads" enable row level security;
-
-create policy "leads_select" on "public"."leads" for SELECT to "authenticated" using (is_org_member(organization_id));
-
-create policy "leads_update" on "public"."leads" for UPDATE to "authenticated" using (is_org_operator(organization_id)) with check (is_org_operator(organization_id));
-
-alter table "public"."marketing_agent_configs" enable row level security;
-
-create policy "marketing_agent_configs_no_direct_access" on "public"."marketing_agent_configs" for ALL to "anon", "authenticated" using (false) with check (false);
-
-alter table "public"."marketing_campaigns" enable row level security;
-
-create policy "marketing_campaigns_no_direct_access" on "public"."marketing_campaigns" for ALL to "anon", "authenticated" using (false) with check (false);
-
-alter table "public"."memberships" enable row level security;
-
-create policy "membership_select" on "public"."memberships" for SELECT to "authenticated" using ((user_id = ( SELECT auth.uid() AS uid)));
-
-alter table "public"."messages" enable row level security;
-
-create policy "messages_select" on "public"."messages" for SELECT to "authenticated" using (is_org_member(organization_id));
-
-alter table "public"."organizations" enable row level security;
-
-create policy "org_select" on "public"."organizations" for SELECT to "authenticated" using (is_org_member(id));
-
-alter table "public"."platform_admins" enable row level security;
-
-create policy "platform_admin_self_select" on "public"."platform_admins" for SELECT to "authenticated" using ((user_id = ( SELECT auth.uid() AS uid)));
-
-alter table "public"."reception_ai_plan_catalog" enable row level security;
-
-create policy "reception_ai_plan_catalog_no_direct_access" on "public"."reception_ai_plan_catalog" for ALL to "anon", "authenticated" using (false) with check (false);
-
-alter table "public"."sales_agent_configs" enable row level security;
-
-create policy "sales_agent_configs_no_direct_access" on "public"."sales_agent_configs" for ALL to "anon", "authenticated" using (false) with check (false);
-
-alter table "public"."sales_onboarding_invites" enable row level security;
-
-create policy "sales_onboarding_invites_no_direct_access" on "public"."sales_onboarding_invites" for ALL to "anon", "authenticated" using (false) with check (false);
-
-alter table "public"."sales_opportunities" enable row level security;
-
-create policy "sales_opportunities_no_direct_access" on "public"."sales_opportunities" for ALL to "anon", "authenticated" using (false) with check (false);
-
-alter table "public"."sales_sequence_steps" enable row level security;
-
-create policy "sales_sequence_steps_no_direct_access" on "public"."sales_sequence_steps" for ALL to "anon", "authenticated" using (false) with check (false);
-
-alter table "public"."sales_sequences" enable row level security;
-
-create policy "sales_sequences_no_direct_access" on "public"."sales_sequences" for ALL to "anon", "authenticated" using (false) with check (false);
-
-alter table "public"."stripe_events" enable row level security;
-
-create policy "stripe_events_no_client_access" on "public"."stripe_events" for ALL to "anon", "authenticated" using (false) with check (false);
-
-alter table "public"."tasks" enable row level security;
-
-create policy "tasks_select" on "public"."tasks" for SELECT to "authenticated" using (is_org_member(organization_id));
-
-create policy "tasks_update" on "public"."tasks" for UPDATE to "authenticated" using (is_org_operator(organization_id)) with check (is_org_operator(organization_id));
-
-alter table "public"."team_invitations" enable row level security;
-
-alter table "public"."tenant_activation_events" enable row level security;
-
-create policy "tenant_activation_events_no_direct_access" on "public"."tenant_activation_events" for ALL to "anon", "authenticated" using (false) with check (false);
-
-alter table "public"."tenant_integrations" enable row level security;
-
-create policy "tenant_integrations_select" on "public"."tenant_integrations" for SELECT to "authenticated" using (is_org_member(organization_id));
-
-alter table "public"."user_org_context" enable row level security;
-
-alter table "public"."widget_rate_limits" enable row level security;
-
-create policy "widget_rate_limits_no_client_access" on "public"."widget_rate_limits" for ALL to "anon", "authenticated" using (false) with check (false);
-
-alter table "public"."workflow_action_attempts" enable row level security;
-
-create policy "workflow_attempts_select" on "public"."workflow_action_attempts" for SELECT to "authenticated" using (is_org_member(organization_id));
-
-alter table "public"."workflow_actions" enable row level security;
-
-create policy "workflow_actions_select" on "public"."workflow_actions" for SELECT to "authenticated" using (is_org_member(organization_id));
+-- Restore triggers after trigger functions exist.
 
 CREATE TRIGGER trg_appointment_lifecycle_actions AFTER INSERT OR UPDATE OF status, start_at, end_at, location ON appointments FOR EACH ROW EXECUTE FUNCTION enqueue_appointment_lifecycle_actions();
 
@@ -3913,6 +4196,8 @@ CREATE TRIGGER trg_payment_lifecycle_actions AFTER INSERT OR UPDATE OF status, a
 
 CREATE TRIGGER trg_capture_handoff_activation AFTER INSERT ON handoffs FOR EACH ROW EXECUTE FUNCTION capture_handoff_activation();
 
+CREATE TRIGGER jarvis_agent_audit AFTER INSERT OR UPDATE ON jarvis_agent_tasks FOR EACH ROW EXECUTE FUNCTION jarvis_private.log_task_transition();
+
 CREATE TRIGGER trg_capture_lead_activation_insert AFTER INSERT ON leads FOR EACH ROW EXECUTE FUNCTION capture_lead_activation();
 
 CREATE TRIGGER trg_capture_lead_activation_update AFTER UPDATE OF score, status ON leads FOR EACH ROW WHEN (new.score IS DISTINCT FROM old.score AND new.score >= 60 OR new.status IS DISTINCT FROM old.status AND (new.status = ANY (ARRAY['qualified'::text, 'follow_up'::text, 'handoff'::text, 'won'::text]))) EXECUTE FUNCTION capture_lead_activation();
@@ -3922,6 +4207,8 @@ CREATE TRIGGER trg_close_sales_followup_on_lead_outcome AFTER UPDATE OF status O
 CREATE TRIGGER trg_lead_lifecycle_actions AFTER INSERT OR UPDATE OF status, contact_consent_at, marketing_consent_at ON leads FOR EACH ROW EXECUTE FUNCTION enqueue_lead_lifecycle_actions();
 
 CREATE TRIGGER trg_normalize_lost_reason BEFORE INSERT OR UPDATE OF status, outcome_reason, lost_reason_code ON leads FOR EACH ROW EXECUTE FUNCTION normalize_lost_reason();
+
+CREATE TRIGGER trg_reception_ai_central_sync_v2 AFTER UPDATE OF name, email, phone, status, score, summary, qualification, contact_consent_at ON leads FOR EACH ROW EXECUTE FUNCTION private.reception_ai_sync_central_v2();
 
 CREATE TRIGGER trg_stamp_lead_outcome BEFORE UPDATE OF status ON leads FOR EACH ROW EXECUTE FUNCTION stamp_lead_outcome();
 
@@ -3934,6 +4221,16 @@ CREATE TRIGGER trg_tenant_integrations_touch BEFORE UPDATE ON tenant_integration
 CREATE TRIGGER trg_cleanup_widget_rate_limits AFTER INSERT ON widget_rate_limits FOR EACH STATEMENT EXECUTE FUNCTION cleanup_widget_rate_limits();
 
 CREATE TRIGGER trg_workflow_actions_touch BEFORE UPDATE ON workflow_actions FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+-- Sequence ownership.
+
+alter sequence public."audit_events_id_seq" owned by public."audit_events".id;
+
+alter sequence public."jarvis_agent_events_id_seq" owned by public."jarvis_agent_events".id;
+
+alter sequence public."widget_rate_limits_id_seq" owned by public."widget_rate_limits".id;
+
+-- Table privileges from the production schema ACL (no data or credentials).
 
 grant DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE on table "private"."billing_checkout_refs" to "postgres";
 
@@ -4129,8 +4426,6 @@ grant usage on schema public to anon, authenticated, service_role;
 
 grant usage on schema private to service_role;
 
-create or replace function private.handle_new_user() returns trigger language plpgsql security definer set search_path = '' as $local$ declare v_org uuid; v_name text; begin v_name := left(coalesce(nullif(trim(new.raw_user_meta_data->>'business_name'),''),'Mijn bedrijf'),120); insert into public.organizations(name,status) values(v_name,'onboarding') returning id into v_org; insert into public.memberships(organization_id,user_id,role,active) values(v_org,new.id,'owner',true); insert into public.business_profiles(organization_id,business_name) values(v_org,v_name); insert into public.audit_events(organization_id,actor_user_id,event_type,entity_type,entity_id,payload) values(v_org,new.id,'organization.created','organization',v_org,jsonb_build_object('source','local_auth_signup')); return new; end; $local$;
+grant usage, select on all sequences in schema public to anon, authenticated, service_role;
 
-drop trigger if exists on_auth_user_created on auth.users; create trigger on_auth_user_created after insert on auth.users for each row execute function private.handle_new_user();
-
--- Intentionally omitted local triggers: production HTTP bridge sync and Omega/JARVIS private audit hook.
+-- Local only: no external production credentials are copied.
