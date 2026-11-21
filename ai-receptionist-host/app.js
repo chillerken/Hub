@@ -7,7 +7,12 @@ try {
   runtimeConfig = await loadReceptionRuntimeConfig();
 } catch (error) {
   const mount = document.querySelector("#app");
-  if (mount) mount.innerHTML = '<main class="shell"><section class="card"><h1>Lokale configuratie ontbreekt</h1><p>Start de geïsoleerde ontwikkelomgeving met <code>npm run reception:local</code>.</p><p>De lokale omgeving schakelt nooit automatisch over naar de productie-database.</p></section></main>';
+  const isLocalHost = ["localhost", "127.0.0.1"].includes(location.hostname.toLowerCase());
+  if (mount && isLocalHost) {
+    mount.innerHTML = '<main class="shell"><section class="card"><h1>Lokale configuratie ontbreekt</h1><p>Start de geïsoleerde ontwikkelomgeving met <code>npm run reception:local</code>.</p><p>De lokale omgeving schakelt nooit automatisch over naar de productie-database.</p></section></main>';
+  } else {
+    console.warn("[Reception AI] Backend bewust niet gekoppeld op deze previewhost.", error);
+  }
   throw error;
 }
 const SUPABASE_URL = runtimeConfig.supabaseUrl;
