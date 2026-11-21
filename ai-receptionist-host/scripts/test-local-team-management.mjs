@@ -48,12 +48,22 @@ async function createUser(label) {
   const email = `${label}-${runId}@example.test`;
   const result = await request("/auth/v1/admin/users", {
     method: "POST",
-    body: { email, password, email_confirm: true, user_metadata: { local_test: true } }
+    body: { email, password, email_confirm: true, user_metadata: { local_test: true, business_name: `Testbedrijf ${label} ${runId}` } }
   });
   if (result.status !== 200 && result.status !== 201) {
     throw new Error(`Lokale testgebruiker kon niet worden aangemaakt (${result.status}): ${JSON.stringify(result.data)}`);
   }
-  return { id: result.data.id || result.data.user?.id, email };
+  const id = result.data.id || result.data.user?.id;
+  const memberships = await request(`/rest/v1/memberships?user_id=eq.${id}&select=organization_id,role`);
+  const ownerMembership = memberships.data?.find(row => row.role === "owner");
+  if (memberships.status !== 200 || !ownerMembership) {
+    throw new Error(`Auth signup-trigger heeft geen owner-lidmaatschap aangemaakt: ${JSON.stringify(memberships.data)}`);
+  }
+  const profile = await request(`/rest/v1/business_profiles?organization_id=eq.${ownerMembership.organization_id}&select=organization_id,business_name`);
+  return {
+    id, email, organizationId: ownerMembership.organization_id,
+    profileCreated: profile.status === 200 && profile.data?.length === 1
+  };
 }
 async function signIn(email) {
   const result = await request("/auth/v1/token?grant_type=password", {
@@ -63,17 +73,6 @@ async function signIn(email) {
     throw new Error(`Aanmelden mislukt voor ${email}: ${JSON.stringify(result.data)}`);
   }
   return result.data.access_token;
-}
-async function createOrg(name) {
-  const result = await request("/rest/v1/organizations", {
-    method: "POST",
-    body: { name: `${name} ${runId}` },
-    headers: { Prefer: "return=representation" }
-  });
-  if (result.status !== 201 || !result.data?.[0]?.id) {
-    throw new Error(`Testbedrijf kon niet worden aangemaakt: ${JSON.stringify(result.data)}`);
-  }
-  return result.data[0];
 }
 async function addMembership(orgId, userId, role) {
   const result = await request("/rest/v1/memberships", {
@@ -102,6 +101,18 @@ async function callTeam(token, body) {
   });
 }
 
+const functionNames = ["marketing-plan-action","stripe-webhook","google-calendar-oauth-callback","public-widget-config","sales-sequence-action","integration-admin","public-receipt-link","commercial-agent-runner","jarvis-orchestrator","operations-admin","marketing-agent-action","billing-link","tenant-health","billing-return","public-creator-site","sales-batch-action","creator-hub-action","sales-agent-action","platform-admin","billing-readiness","google-calendar-oauth-start","review-agent-action","reception-chat","workflow-runner","lead-agent-action","sales-onboarding-context","team-management","ai-provider-health","production-e2e-check","public-contact-capture","agent-admin","public-demo-chat","customer-payment-webhook","onboarding-quickstart","public-reception-chat","sales-conversion-draft","sales-lead-capture","claim-sales-onboarding","onboarding-status","lead-outcome-action"];
+const functionChecks = await Promise.all(functionNames.map(async name => {
+  const response = await fetch(`${base}/functions/v1/${name}`, {
+    headers: { apikey: anon },
+    signal: AbortSignal.timeout(20000)
+  });
+  return { name, status: response.status };
+}));
+const brokenFunctions = functionChecks.filter(x => x.status === 404 || x.status >= 500);
+check("Alle 40 productie-Edge-Functions zijn lokaal beschikbaar zonder secrets of live credentials", brokenFunctions.length === 0);
+if (brokenFunctions.length) throw new Error(`Edge Function bootfouten: ${JSON.stringify(brokenFunctions)}`);
+
 console.log("Lokale Supabase-integratietests starten…");
 const signupEmail = `signup-${runId}@example.test`;
 const signup = await request("/auth/v1/signup", {
@@ -113,12 +124,10 @@ check("Auth-registratie accepteert een nieuwe lokale gebruiker", signup.status =
 const [owner, invitee, outsider, target] = await Promise.all([
   createUser("owner"), createUser("invitee"), createUser("outsider"), createUser("target")
 ]);
-const [orgA, orgB] = await Promise.all([createOrg("Testbedrijf A"), createOrg("Testbedrijf B")]);
-const [ownerMembership, outsiderMembership, targetMembership] = await Promise.all([
-  addMembership(orgA.id, owner.id, "owner"),
-  addMembership(orgB.id, outsider.id, "owner"),
-  addMembership(orgB.id, target.id, "viewer")
-]);
+const orgA = { id: owner.organizationId };
+const orgB = { id: outsider.organizationId };
+check("Auth signup-trigger maakt bedrijf, owner-lidmaatschap en bedrijfsprofiel aan", Boolean(owner.organizationId && owner.profileCreated));
+const targetMembership = await addMembership(orgB.id, target.id, "viewer");
 await Promise.all([setContext(owner.id, orgA.id), setContext(outsider.id, orgB.id)]);
 const [ownerToken, inviteeToken, outsiderToken] = await Promise.all([
   signIn(owner.email), signIn(invitee.email), signIn(outsider.email)
