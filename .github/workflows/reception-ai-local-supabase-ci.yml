@@ -52,6 +52,8 @@ jobs:
           cat "$RUNNER_TEMP/reception-ai-local.log"
           echo "Local Supabase stack did not become ready in time."
           exit 1
+      - name: Seed isolated demo companies and CRM workflow
+        run: npm run reception:local:seed
       - name: Run local Auth, invitation, role and tenant-isolation tests
         run: npm run reception:test:local
       - name: Seed synthetic local demo companies and CRM data
