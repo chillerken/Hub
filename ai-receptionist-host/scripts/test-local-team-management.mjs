@@ -7,15 +7,15 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const hostDir = resolve(scriptDir, "..");
 const config = JSON.parse(readFileSync(join(hostDir, "runtime-config.local.json"), "utf8"));
 const envFile = readFileSync(join(hostDir, "local-supabase", "supabase", ".env.local"), "utf8");
-const env = Object.fromEntries(envFile.split(/\r?\n/).filter(line => line && !line.startsWith("#")).map(line => {
+const env = Object.fromEntries(envFile.split(/\r?\n/).map(line => line.trim()).filter(line => line && !line.startsWith("#") && line.includes("=")).map(line => {
   const i = line.indexOf("=");
-  return [line.slice(0, i), line.slice(i + 1)];
+  return [line.slice(0, i).trim(), line.slice(i + 1).trim().replace(/^["']|["']$/g, "")];
 }));
 const base = String(config.supabaseUrl).replace(/\/$/, "");
 const anon = config.supabaseAnonKey;
 const service = env.SUPABASE_SERVICE_ROLE_KEY;
 assert.ok(["127.0.0.1", "localhost"].includes(new URL(base).hostname), "Tests mogen alleen localhost aanspreken.");
-assert.ok(anon && service, "Lokale API-keys ontbreken.");
+assert.ok(anon && service, `Lokale API-keys ontbreken. Gevonden env-sleutels: ${Object.keys(env).join(", ")}`);
 
 const runId = Date.now().toString(36);
 const password = "LocalOnly!2026";
