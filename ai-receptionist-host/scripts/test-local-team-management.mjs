@@ -117,10 +117,12 @@ for (let i = 0; i < functionNames.length; i += 5) {
   }));
   functionChecks.push(...results);
 }
-const brokenFunctions = functionChecks.filter(x => x.status === 404 || x.status >= 500);
+const brokenFunctions = functionChecks.filter(x => (x.status === 404 && x.name !== "public-creator-site") || x.status >= 500);
 console.log("Edge Function smoke results:", JSON.stringify(functionChecks));
 if (brokenFunctions.length) throw new Error(`Edge Function bootfouten: ${JSON.stringify(brokenFunctions)}`);
-check("Alle 40 productie-Edge-Functions zijn lokaal beschikbaar zonder secrets of live credentials", true);
+const creatorSiteProbe = await fetch(`${base}/functions/v1/public-creator-site?token=00000000-0000-4000-8000-000000000000`, { headers: { apikey: anon } });
+check("Public creator-site route start en geeft veilig HTML-404 voor een onbekende publicatietoken", creatorSiteProbe.status === 404 && creatorSiteProbe.headers.get("content-type")?.includes("text/html"));
+check("Alle repository-Edge-Functions zijn lokaal beschikbaar zonder live credentials", true);
 
 console.log("Lokale Supabase-integratietests starten…");
 const signupEmail = `signup-${runId}@example.test`;
