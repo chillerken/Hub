@@ -18,7 +18,7 @@ const base = String(config.supabaseUrl).replace(/\/$/, "");
 const anon = config.supabaseAnonKey;
 const service = serviceMatch?.[1]?.trim().replace(/^["']|["']$/g, "");
 assert.ok(["127.0.0.1", "localhost"].includes(new URL(base).hostname), "Tests mogen alleen localhost aanspreken.");
-assert.ok(anon && service, `Lokale API-keys ontbreken. Gevonden env-sleutels: ${Object.keys(env).join(", ")}`);
+assert.ok(anon && service, "Lokale anon- of service-role-key ontbreekt.");
 
 const runId = Date.now().toString(36);
 const password = "LocalOnly!2026";
