@@ -27,8 +27,11 @@ Deno.serve(async(req:Request)=>{
     const admin=createClient(url,sec,{auth:{persistSession:false}});
     const {data:{user},error:ue}=await uc.auth.getUser(auth.slice(7));
     if(ue||!user)return json({error:"unauthorized"},401);
-    const {data:mem,error:me}=await uc.from("memberships").select("organization_id,role").eq("user_id",user.id).eq("active",true).single();
-    if(me||!mem)return json({error:"forbidden"},403);
+    const {data:activeContext}=await admin.from("user_org_context").select("organization_id").eq("user_id",user.id).maybeSingle();
+    let membershipQuery=uc.from("memberships").select("organization_id,role").eq("user_id",user.id).eq("active",true);
+    if(activeContext?.organization_id)membershipQuery=membershipQuery.eq("organization_id",activeContext.organization_id);
+    const {data:mem,error:me}=await membershipQuery.maybeSingle();
+    if(me||!mem)return json({error:me?"organization_selection_required":"forbidden"},me?409:403);
 
     const {data:org,error:orgError}=await admin.from("organizations")
       .select("plan,subscription_status,trial_ends_at,is_internal")
@@ -70,7 +73,26 @@ Deno.serve(async(req:Request)=>{
         has_contact:Boolean(String(lead.email||"").trim()||String(lead.phone||"").trim()),
         opportunity:oppMap.get(lead.id)||null,
         onboarding:onboardingMap.get(lead.id)||null
-      }));
+      })).sort((a:any,b:any)=>{
+        const rank=(x:any)=>{
+          const stage=String(x.opportunity?.stage||"");
+          const stageWeight:any={
+            conversion_ready:900,
+            value_proven:850,
+            value_event:800,
+            pilot_live:750,
+            onboarding:700,
+            demo_requested:650
+          };
+          if(stageWeight[stage])return stageWeight[stage]+Number(x.score||0);
+          const actionable=Boolean(x.has_contact&&x.contact_consent_at);
+          if(actionable)return 500+Number(x.score||0);
+          const research=String(x.source||"")==="reception_ai_outbound_research"&&!x.contact_consent_at;
+          if(research)return 100+Number(x.score||0);
+          return 300+Number(x.score||0);
+        };
+        return rank(b)-rank(a);
+      });
       const leadMap=new Map((queueLeads||[]).map((x:any)=>[x.id,x]));
       const sequenceList=(sequences||[]).map((seq:any)=>({
         ...seq,
@@ -85,6 +107,7 @@ Deno.serve(async(req:Request)=>{
           warm:openLeads.filter((x:any)=>Number(x.score||0)>=60).length,
           hot:openLeads.filter((x:any)=>Number(x.score||0)>=80).length,
           actionable:openLeads.filter((x:any)=>Number(x.score||0)>=60&&Boolean(String(x.email||"").trim()||String(x.phone||"").trim())&&Boolean(x.contact_consent_at)).length,
+          manual_review:openLeads.filter((x:any)=>String(x.source||"")==="reception_ai_outbound_research"&&!x.contact_consent_at).length,
           tasks:(salesTasks||[]).length,
           analyzed:(opps||[]).length,
           sequences:sequenceList.filter((x:any)=>["active","paused"].includes(x.status)).length,
