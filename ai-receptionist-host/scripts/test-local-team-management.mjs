@@ -115,8 +115,9 @@ for (let i = 0; i < functionNames.length; i += 5) {
   functionChecks.push(...results);
 }
 const brokenFunctions = functionChecks.filter(x => x.status === 404 || x.status >= 500);
-check("Alle 40 productie-Edge-Functions zijn lokaal beschikbaar zonder secrets of live credentials", brokenFunctions.length === 0);
+console.log("Edge Function smoke results:", JSON.stringify(functionChecks));
 if (brokenFunctions.length) throw new Error(`Edge Function bootfouten: ${JSON.stringify(brokenFunctions)}`);
+check("Alle 40 productie-Edge-Functions zijn lokaal beschikbaar zonder secrets of live credentials", true);
 
 console.log("Lokale Supabase-integratietests starten…");
 const signupEmail = `signup-${runId}@example.test`;
