@@ -102,13 +102,18 @@ async function callTeam(token, body) {
 }
 
 const functionNames = ["marketing-plan-action","stripe-webhook","google-calendar-oauth-callback","public-widget-config","sales-sequence-action","integration-admin","public-receipt-link","commercial-agent-runner","jarvis-orchestrator","operations-admin","marketing-agent-action","billing-link","tenant-health","billing-return","public-creator-site","sales-batch-action","creator-hub-action","sales-agent-action","platform-admin","billing-readiness","google-calendar-oauth-start","review-agent-action","reception-chat","workflow-runner","lead-agent-action","sales-onboarding-context","team-management","ai-provider-health","production-e2e-check","public-contact-capture","agent-admin","public-demo-chat","customer-payment-webhook","onboarding-quickstart","public-reception-chat","sales-conversion-draft","sales-lead-capture","claim-sales-onboarding","onboarding-status","lead-outcome-action"];
-const functionChecks = await Promise.all(functionNames.map(async name => {
-  const response = await fetch(`${base}/functions/v1/${name}`, {
-    headers: { apikey: anon },
-    signal: AbortSignal.timeout(20000)
-  });
-  return { name, status: response.status };
-}));
+const functionChecks = [];
+for (let i = 0; i < functionNames.length; i += 5) {
+  const batch = functionNames.slice(i, i + 5);
+  const results = await Promise.all(batch.map(async name => {
+    const response = await fetch(`${base}/functions/v1/${name}`, {
+      headers: { apikey: anon },
+      signal: AbortSignal.timeout(20000)
+    });
+    return { name, status: response.status };
+  }));
+  functionChecks.push(...results);
+}
 const brokenFunctions = functionChecks.filter(x => x.status === 404 || x.status >= 500);
 check("Alle 40 productie-Edge-Functions zijn lokaal beschikbaar zonder secrets of live credentials", brokenFunctions.length === 0);
 if (brokenFunctions.length) throw new Error(`Edge Function bootfouten: ${JSON.stringify(brokenFunctions)}`);
