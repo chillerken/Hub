@@ -54,6 +54,8 @@ jobs:
           exit 1
       - name: Run local Auth, invitation, role and tenant-isolation tests
         run: npm run reception:test:local
+      - name: Seed synthetic local demo companies and CRM data
+        run: npm run reception:local:seed
       - name: Upload local stack logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
