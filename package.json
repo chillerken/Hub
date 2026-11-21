@@ -8,7 +8,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "reception:local": "node ai-receptionist-host/scripts/start-local-supabase.mjs",
+    "reception:test:local": "node ai-receptionist-host/scripts/test-local-team-management.mjs",
+    "reception:local:stop": "cd ai-receptionist-host/local-supabase && npx supabase stop",
+    "reception:local:reset": "cd ai-receptionist-host/local-supabase && npx supabase db reset"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
