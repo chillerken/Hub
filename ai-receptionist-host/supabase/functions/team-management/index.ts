@@ -99,7 +99,9 @@ Deno.serve(async (req: Request) => {
       ]);
       if (orgError) throw orgError;
       if (contextError) throw contextError;
-      const activeId = ids.includes(context?.organization_id) ? context.organization_id : (ids.length === 1 ? ids[0] : null);
+      const activeId = context?.organization_id && ids.includes(context.organization_id)
+        ? context.organization_id
+        : (ids.length === 1 ? ids[0] : null);
       return json({ organizations: (organizations || []).map((o: any) => ({ ...o, membership: memberships!.find((m: any) => m.organization_id === o.id) })), active_organization_id: activeId, selection_required: ids.length > 1 && !activeId });
     }
 
