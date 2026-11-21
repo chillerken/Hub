@@ -1,14 +1,16 @@
--- Schema-only snapshot of Reception AI production database.
+-- FULL RECEPTION AI LOCAL SCHEMA SNAPSHOT
 
--- Generated from PostgreSQL catalogs. NO production rows, user records, or secret values are included.
+-- Generated from PostgreSQL catalogs in Reception AI Production on 2026-11-21.
 
--- Rebuilds the public/private application schemas; Supabase-managed auth/storage schemas come from Supabase Local.
+-- Schema-only: no production table rows, user accounts, credentials, tokens, secrets, or OAuth data.
+
+-- Supabase-managed auth/storage/realtime schemas are provided by Supabase Local.
 
 create schema if not exists private;
 
-create schema if not exists promo_omega_private;
+create schema if not exists jarvis_private;
 
-create schema if not exists promo_omega;
+create schema if not exists promo_omega_private;
 
 create schema if not exists extensions;
 
@@ -26,13 +28,11 @@ create extension if not exists "unaccent" with schema "extensions";
 
 create extension if not exists "uuid-ossp" with schema "extensions";
 
-set search_path = public, private, extensions, vault, promo_omega_private;
+set search_path = public, private, jarvis_private, extensions, vault, promo_omega_private;
 
--- Compatibility stub: production signup trigger optionally checks the separate Omega signup router.
+-- The signup trigger checks a separate Omega routing module. Local Reception AI does not load Omega customer data.
 
 create or replace function promo_omega_private.route_signup(uuid, text, jsonb) returns boolean language sql security definer set search_path = '' as $$ select false $$;
-
--- Sequences must exist before table defaults that call nextval().
 
 create sequence if not exists public."audit_events_id_seq";
 
@@ -40,7 +40,7 @@ create sequence if not exists public."jarvis_agent_events_id_seq";
 
 create sequence if not exists public."widget_rate_limits_id_seq";
 
--- Create all tables before adding foreign keys and check constraints.
+-- Create tables first; add foreign keys and policies after dependent objects exist.
 
 create table if not exists "private"."billing_checkout_refs" (
   "token_hash" text not null,
@@ -616,8 +616,6 @@ create table if not exists "public"."workflow_actions" (
   "max_attempts" integer default 5 not null
 );
 
--- Add keys and constraints after all referenced tables exist.
-
 alter table "private"."billing_checkout_refs" add constraint "billing_checkout_refs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
 
 alter table "private"."billing_checkout_refs" add constraint "billing_checkout_refs_pkey" PRIMARY KEY (token_hash);
@@ -1006,8 +1004,6 @@ alter table "public"."workflow_actions" add constraint "workflow_actions_organiz
 
 alter table "public"."workflow_actions" add constraint "workflow_actions_pkey" PRIMARY KEY (id);
 
--- Non-constraint indexes.
-
 CREATE INDEX billing_checkout_refs_expiry_idx ON private.billing_checkout_refs USING btree (expires_at);
 
 CREATE INDEX billing_checkout_refs_org_idx ON private.billing_checkout_refs USING btree (organization_id, created_at DESC);
@@ -1172,187 +1168,7 @@ CREATE INDEX workflow_actions_lead_idx ON public.workflow_actions USING btree (l
 
 CREATE INDEX workflow_actions_org_status_idx ON public.workflow_actions USING btree (organization_id, status, scheduled_at);
 
--- Restore row-level security before granting application access.
-
-alter table "private"."billing_checkout_refs" enable row level security;
-
-alter table "private"."integration_credentials" enable row level security;
-
-alter table "private"."oauth_states" enable row level security;
-
-alter table "public"."ai_usage_daily" enable row level security;
-
-alter table "public"."appointments" enable row level security;
-
-alter table "public"."audit_events" enable row level security;
-
-alter table "public"."business_profiles" enable row level security;
-
-alter table "public"."commercial_learning_snapshots" enable row level security;
-
-alter table "public"."conversations" enable row level security;
-
-alter table "public"."creator_hub_assets" enable row level security;
-
-alter table "public"."customer_payments" enable row level security;
-
-alter table "public"."google_calendar_dispatch_queue" enable row level security;
-
-alter table "public"."handoffs" enable row level security;
-
-alter table "public"."izap_dispatch_queue" enable row level security;
-
-alter table "public"."jarvis_agent_events" enable row level security;
-
-alter table "public"."jarvis_agent_tasks" enable row level security;
-
-alter table "public"."lead_agent_configs" enable row level security;
-
-alter table "public"."leadflow_leads" enable row level security;
-
-alter table "public"."leads" enable row level security;
-
-alter table "public"."marketing_agent_configs" enable row level security;
-
-alter table "public"."marketing_campaigns" enable row level security;
-
-alter table "public"."memberships" enable row level security;
-
-alter table "public"."messages" enable row level security;
-
-alter table "public"."organizations" enable row level security;
-
-alter table "public"."platform_admins" enable row level security;
-
-alter table "public"."reception_ai_plan_catalog" enable row level security;
-
-alter table "public"."sales_agent_configs" enable row level security;
-
-alter table "public"."sales_onboarding_invites" enable row level security;
-
-alter table "public"."sales_opportunities" enable row level security;
-
-alter table "public"."sales_sequence_steps" enable row level security;
-
-alter table "public"."sales_sequences" enable row level security;
-
-alter table "public"."stripe_events" enable row level security;
-
-alter table "public"."tasks" enable row level security;
-
-alter table "public"."team_invitations" enable row level security;
-
-alter table "public"."tenant_activation_events" enable row level security;
-
-alter table "public"."tenant_integrations" enable row level security;
-
-alter table "public"."user_org_context" enable row level security;
-
-alter table "public"."widget_rate_limits" enable row level security;
-
-alter table "public"."workflow_action_attempts" enable row level security;
-
-alter table "public"."workflow_actions" enable row level security;
-
-create policy "ai_usage_daily_no_direct_access" on "public"."ai_usage_daily" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
-
-create policy "appointments_select" on "public"."appointments" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
-
-create policy "audit_select" on "public"."audit_events" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
-
-create policy "profile_select" on "public"."business_profiles" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
-
-create policy "profile_update" on "public"."business_profiles" as PERMISSIVE for UPDATE to "authenticated" using (is_org_admin(organization_id)) with check (is_org_admin(organization_id));
-
-create policy "commercial_learning_no_direct_access" on "public"."commercial_learning_snapshots" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
-
-create policy "conv_select" on "public"."conversations" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
-
-create policy "creator_hub_assets_no_direct_access" on "public"."creator_hub_assets" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
-
-create policy "customer_payments_select" on "public"."customer_payments" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
-
-create policy "server_only_deny_users" on "public"."google_calendar_dispatch_queue" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
-
-create policy "handoffs_select" on "public"."handoffs" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
-
-create policy "handoffs_update" on "public"."handoffs" as PERMISSIVE for UPDATE to "authenticated" using (is_org_operator(organization_id)) with check (is_org_operator(organization_id));
-
-create policy "server_only_deny_users" on "public"."izap_dispatch_queue" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
-
-create policy "jarvis_agent_events_read" on "public"."jarvis_agent_events" as PERMISSIVE for SELECT to "authenticated" using (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
-   FROM memberships m
-  WHERE ((m.organization_id = jarvis_agent_events.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))));
-
-create policy "jarvis_agent_tasks_owner_insert" on "public"."jarvis_agent_tasks" as PERMISSIVE for INSERT to "authenticated" with check (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (status = 'pending_approval'::text) AND (approved_at IS NULL) AND (result_text IS NULL) AND (EXISTS ( SELECT 1
-   FROM memberships m
-  WHERE ((m.organization_id = jarvis_agent_tasks.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))));
-
-create policy "jarvis_agent_tasks_owner_select" on "public"."jarvis_agent_tasks" as PERMISSIVE for SELECT to "authenticated" using (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
-   FROM memberships m
-  WHERE ((m.organization_id = jarvis_agent_tasks.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))));
-
-create policy "jarvis_agent_tasks_owner_update" on "public"."jarvis_agent_tasks" as PERMISSIVE for UPDATE to "authenticated" using (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
-   FROM memberships m
-  WHERE ((m.organization_id = jarvis_agent_tasks.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text]))))))) with check (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
-   FROM memberships m
-  WHERE ((m.organization_id = jarvis_agent_tasks.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))));
-
-create policy "lead_agent_configs_no_direct_access" on "public"."lead_agent_configs" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
-
-create policy "leadflow_leads_delete_own" on "public"."leadflow_leads" as PERMISSIVE for DELETE to "authenticated" using ((( SELECT auth.uid() AS uid) = owner_id));
-
-create policy "leadflow_leads_insert_own" on "public"."leadflow_leads" as PERMISSIVE for INSERT to "authenticated" with check ((( SELECT auth.uid() AS uid) = owner_id));
-
-create policy "leadflow_leads_read_own" on "public"."leadflow_leads" as PERMISSIVE for SELECT to "authenticated" using ((( SELECT auth.uid() AS uid) = owner_id));
-
-create policy "leadflow_leads_update_own" on "public"."leadflow_leads" as PERMISSIVE for UPDATE to "authenticated" using ((( SELECT auth.uid() AS uid) = owner_id)) with check ((( SELECT auth.uid() AS uid) = owner_id));
-
-create policy "leads_select" on "public"."leads" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
-
-create policy "leads_update" on "public"."leads" as PERMISSIVE for UPDATE to "authenticated" using (is_org_operator(organization_id)) with check (is_org_operator(organization_id));
-
-create policy "marketing_agent_configs_no_direct_access" on "public"."marketing_agent_configs" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
-
-create policy "marketing_campaigns_no_direct_access" on "public"."marketing_campaigns" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
-
-create policy "membership_select" on "public"."memberships" as PERMISSIVE for SELECT to "authenticated" using ((user_id = ( SELECT auth.uid() AS uid)));
-
-create policy "messages_select" on "public"."messages" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
-
-create policy "org_select" on "public"."organizations" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(id));
-
-create policy "platform_admin_self_select" on "public"."platform_admins" as PERMISSIVE for SELECT to "authenticated" using ((user_id = ( SELECT auth.uid() AS uid)));
-
-create policy "reception_ai_plan_catalog_no_direct_access" on "public"."reception_ai_plan_catalog" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
-
-create policy "sales_agent_configs_no_direct_access" on "public"."sales_agent_configs" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
-
-create policy "sales_onboarding_invites_no_direct_access" on "public"."sales_onboarding_invites" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
-
-create policy "sales_opportunities_no_direct_access" on "public"."sales_opportunities" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
-
-create policy "sales_sequence_steps_no_direct_access" on "public"."sales_sequence_steps" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
-
-create policy "sales_sequences_no_direct_access" on "public"."sales_sequences" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
-
-create policy "stripe_events_no_client_access" on "public"."stripe_events" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
-
-create policy "tasks_select" on "public"."tasks" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
-
-create policy "tasks_update" on "public"."tasks" as PERMISSIVE for UPDATE to "authenticated" using (is_org_operator(organization_id)) with check (is_org_operator(organization_id));
-
-create policy "tenant_activation_events_no_direct_access" on "public"."tenant_activation_events" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
-
-create policy "tenant_integrations_select" on "public"."tenant_integrations" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
-
-create policy "widget_rate_limits_no_client_access" on "public"."widget_rate_limits" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
-
-create policy "workflow_attempts_select" on "public"."workflow_action_attempts" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
-
-create policy "workflow_actions_select" on "public"."workflow_actions" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
-
--- Restore functions; defer body checks because functions reference other functions created in this snapshot.
+-- Function bodies can refer to other functions defined in this same snapshot.
 
 set check_function_bodies = off;
 
@@ -4168,9 +3984,273 @@ AS $function$
   );
 $function$;
 
+CREATE OR REPLACE FUNCTION jarvis_private.activate_due_reminders()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+begin
+  update public.jarvis_agent_tasks
+  set status='needs_attention',
+      result_text='De geplande herinnering is nu aan de beurt. Er is geen extern bericht verzonden.',
+      updated_at=now()
+  where status='queued' and kind='reminder' and scheduled_at<=now();
+end $function$;
+
+CREATE OR REPLACE FUNCTION jarvis_private.log_task_transition()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+begin
+  if TG_OP='INSERT' or old.status is distinct from new.status then
+    insert into public.jarvis_agent_events
+      (task_id,organization_id,owner_user_id,actor_user_id,old_status,new_status)
+    values (new.id,new.organization_id,new.owner_user_id,auth.uid(),
+      case when TG_OP='INSERT' then null else old.status end,new.status);
+  end if;
+  return new;
+end $function$;
+
 reset check_function_bodies;
 
--- Restore triggers after trigger functions exist.
+-- Restore RLS and the exact production policies after all helper functions exist.
+
+alter table "private"."billing_checkout_refs" enable row level security;
+
+alter table "private"."integration_credentials" enable row level security;
+
+alter table "private"."oauth_states" enable row level security;
+
+alter table "public"."ai_usage_daily" enable row level security;
+
+alter table "public"."appointments" enable row level security;
+
+alter table "public"."audit_events" enable row level security;
+
+alter table "public"."business_profiles" enable row level security;
+
+alter table "public"."commercial_learning_snapshots" enable row level security;
+
+alter table "public"."conversations" enable row level security;
+
+alter table "public"."creator_hub_assets" enable row level security;
+
+alter table "public"."customer_payments" enable row level security;
+
+alter table "public"."google_calendar_dispatch_queue" enable row level security;
+
+alter table "public"."handoffs" enable row level security;
+
+alter table "public"."izap_dispatch_queue" enable row level security;
+
+alter table "public"."jarvis_agent_events" enable row level security;
+
+alter table "public"."jarvis_agent_tasks" enable row level security;
+
+alter table "public"."lead_agent_configs" enable row level security;
+
+alter table "public"."leadflow_leads" enable row level security;
+
+alter table "public"."leads" enable row level security;
+
+alter table "public"."marketing_agent_configs" enable row level security;
+
+alter table "public"."marketing_campaigns" enable row level security;
+
+alter table "public"."memberships" enable row level security;
+
+alter table "public"."messages" enable row level security;
+
+alter table "public"."organizations" enable row level security;
+
+alter table "public"."platform_admins" enable row level security;
+
+alter table "public"."reception_ai_plan_catalog" enable row level security;
+
+alter table "public"."sales_agent_configs" enable row level security;
+
+alter table "public"."sales_onboarding_invites" enable row level security;
+
+alter table "public"."sales_opportunities" enable row level security;
+
+alter table "public"."sales_sequence_steps" enable row level security;
+
+alter table "public"."sales_sequences" enable row level security;
+
+alter table "public"."stripe_events" enable row level security;
+
+alter table "public"."tasks" enable row level security;
+
+alter table "public"."team_invitations" enable row level security;
+
+alter table "public"."tenant_activation_events" enable row level security;
+
+alter table "public"."tenant_integrations" enable row level security;
+
+alter table "public"."user_org_context" enable row level security;
+
+alter table "public"."widget_rate_limits" enable row level security;
+
+alter table "public"."workflow_action_attempts" enable row level security;
+
+alter table "public"."workflow_actions" enable row level security;
+
+create policy "ai_usage_daily_no_direct_access" on "public"."ai_usage_daily" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "appointments_select" on "public"."appointments" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "audit_select" on "public"."audit_events" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "profile_select" on "public"."business_profiles" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "profile_update" on "public"."business_profiles" as PERMISSIVE for UPDATE to "authenticated" using (is_org_admin(organization_id)) with check (is_org_admin(organization_id));
+
+create policy "commercial_learning_no_direct_access" on "public"."commercial_learning_snapshots" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "conv_select" on "public"."conversations" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "creator_hub_assets_no_direct_access" on "public"."creator_hub_assets" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "customer_payments_select" on "public"."customer_payments" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "server_only_deny_users" on "public"."google_calendar_dispatch_queue" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "handoffs_select" on "public"."handoffs" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "handoffs_update" on "public"."handoffs" as PERMISSIVE for UPDATE to "authenticated" using (is_org_operator(organization_id)) with check (is_org_operator(organization_id));
+
+create policy "server_only_deny_users" on "public"."izap_dispatch_queue" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "jarvis_agent_events_read" on "public"."jarvis_agent_events" as PERMISSIVE for SELECT to "authenticated" using (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
+   FROM memberships m
+  WHERE ((m.organization_id = jarvis_agent_events.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))));
+
+create policy "jarvis_agent_tasks_owner_insert" on "public"."jarvis_agent_tasks" as PERMISSIVE for INSERT to "authenticated" with check (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (status = 'pending_approval'::text) AND (approved_at IS NULL) AND (result_text IS NULL) AND (EXISTS ( SELECT 1
+   FROM memberships m
+  WHERE ((m.organization_id = jarvis_agent_tasks.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))));
+
+create policy "jarvis_agent_tasks_owner_select" on "public"."jarvis_agent_tasks" as PERMISSIVE for SELECT to "authenticated" using (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
+   FROM memberships m
+  WHERE ((m.organization_id = jarvis_agent_tasks.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))));
+
+create policy "jarvis_agent_tasks_owner_update" on "public"."jarvis_agent_tasks" as PERMISSIVE for UPDATE to "authenticated" using (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
+   FROM memberships m
+  WHERE ((m.organization_id = jarvis_agent_tasks.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text]))))))) with check (((owner_user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
+   FROM memberships m
+  WHERE ((m.organization_id = jarvis_agent_tasks.organization_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND m.active AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))));
+
+create policy "lead_agent_configs_no_direct_access" on "public"."lead_agent_configs" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "leadflow_leads_delete_own" on "public"."leadflow_leads" as PERMISSIVE for DELETE to "authenticated" using ((( SELECT auth.uid() AS uid) = owner_id));
+
+create policy "leadflow_leads_insert_own" on "public"."leadflow_leads" as PERMISSIVE for INSERT to "authenticated" with check ((( SELECT auth.uid() AS uid) = owner_id));
+
+create policy "leadflow_leads_read_own" on "public"."leadflow_leads" as PERMISSIVE for SELECT to "authenticated" using ((( SELECT auth.uid() AS uid) = owner_id));
+
+create policy "leadflow_leads_update_own" on "public"."leadflow_leads" as PERMISSIVE for UPDATE to "authenticated" using ((( SELECT auth.uid() AS uid) = owner_id)) with check ((( SELECT auth.uid() AS uid) = owner_id));
+
+create policy "leads_select" on "public"."leads" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "leads_update" on "public"."leads" as PERMISSIVE for UPDATE to "authenticated" using (is_org_operator(organization_id)) with check (is_org_operator(organization_id));
+
+create policy "marketing_agent_configs_no_direct_access" on "public"."marketing_agent_configs" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "marketing_campaigns_no_direct_access" on "public"."marketing_campaigns" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "membership_select" on "public"."memberships" as PERMISSIVE for SELECT to "authenticated" using ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy "messages_select" on "public"."messages" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "org_select" on "public"."organizations" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(id));
+
+create policy "platform_admin_self_select" on "public"."platform_admins" as PERMISSIVE for SELECT to "authenticated" using ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy "reception_ai_plan_catalog_no_direct_access" on "public"."reception_ai_plan_catalog" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "sales_agent_configs_no_direct_access" on "public"."sales_agent_configs" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "sales_onboarding_invites_no_direct_access" on "public"."sales_onboarding_invites" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "sales_opportunities_no_direct_access" on "public"."sales_opportunities" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "sales_sequence_steps_no_direct_access" on "public"."sales_sequence_steps" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "sales_sequences_no_direct_access" on "public"."sales_sequences" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "stripe_events_no_client_access" on "public"."stripe_events" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "tasks_select" on "public"."tasks" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "tasks_update" on "public"."tasks" as PERMISSIVE for UPDATE to "authenticated" using (is_org_operator(organization_id)) with check (is_org_operator(organization_id));
+
+create policy "tenant_activation_events_no_direct_access" on "public"."tenant_activation_events" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "tenant_integrations_select" on "public"."tenant_integrations" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "widget_rate_limits_no_client_access" on "public"."widget_rate_limits" as PERMISSIVE for ALL to "authenticated", "anon" using (false) with check (false);
+
+create policy "workflow_attempts_select" on "public"."workflow_action_attempts" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+create policy "workflow_actions_select" on "public"."workflow_actions" as PERMISSIVE for SELECT to "authenticated" using (is_org_member(organization_id));
+
+-- Restore user-defined triggers, including the auth signup provisioning hook.
+
+drop trigger if exists "on_auth_user_created" on "auth"."users";
+
+drop trigger if exists "trg_appointment_lifecycle_actions" on "public"."appointments";
+
+drop trigger if exists "trg_appointments_touch" on "public"."appointments";
+
+drop trigger if exists "trg_capture_appointment_activation_insert" on "public"."appointments";
+
+drop trigger if exists "trg_capture_appointment_activation_update" on "public"."appointments";
+
+drop trigger if exists "trg_refresh_onboarding_status" on "public"."business_profiles";
+
+drop trigger if exists "trg_capture_conversation_activation" on "public"."conversations";
+
+drop trigger if exists "trg_capture_payment_activation_insert" on "public"."customer_payments";
+
+drop trigger if exists "trg_capture_payment_activation_update" on "public"."customer_payments";
+
+drop trigger if exists "trg_convert_lead_when_payment_paid" on "public"."customer_payments";
+
+drop trigger if exists "trg_customer_payments_touch" on "public"."customer_payments";
+
+drop trigger if exists "trg_payment_lifecycle_actions" on "public"."customer_payments";
+
+drop trigger if exists "trg_capture_handoff_activation" on "public"."handoffs";
+
+drop trigger if exists "jarvis_agent_audit" on "public"."jarvis_agent_tasks";
+
+drop trigger if exists "trg_capture_lead_activation_insert" on "public"."leads";
+
+drop trigger if exists "trg_capture_lead_activation_update" on "public"."leads";
+
+drop trigger if exists "trg_close_sales_followup_on_lead_outcome" on "public"."leads";
+
+drop trigger if exists "trg_lead_lifecycle_actions" on "public"."leads";
+
+drop trigger if exists "trg_normalize_lost_reason" on "public"."leads";
+
+drop trigger if exists "trg_reception_ai_central_sync_v2" on "public"."leads";
+
+drop trigger if exists "trg_stamp_lead_outcome" on "public"."leads";
+
+drop trigger if exists "trg_seed_default_integrations" on "public"."organizations";
+
+drop trigger if exists "trg_requeue_integration_actions" on "public"."tenant_integrations";
+
+drop trigger if exists "trg_tenant_integrations_touch" on "public"."tenant_integrations";
+
+drop trigger if exists "trg_cleanup_widget_rate_limits" on "public"."widget_rate_limits";
+
+drop trigger if exists "trg_workflow_actions_touch" on "public"."workflow_actions";
+
+CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION private.handle_new_user();
 
 CREATE TRIGGER trg_appointment_lifecycle_actions AFTER INSERT OR UPDATE OF status, start_at, end_at, location ON appointments FOR EACH ROW EXECUTE FUNCTION enqueue_appointment_lifecycle_actions();
 
@@ -4222,15 +4302,13 @@ CREATE TRIGGER trg_cleanup_widget_rate_limits AFTER INSERT ON widget_rate_limits
 
 CREATE TRIGGER trg_workflow_actions_touch BEFORE UPDATE ON workflow_actions FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 
--- Sequence ownership.
-
 alter sequence public."audit_events_id_seq" owned by public."audit_events".id;
 
 alter sequence public."jarvis_agent_events_id_seq" owned by public."jarvis_agent_events".id;
 
 alter sequence public."widget_rate_limits_id_seq" owned by public."widget_rate_limits".id;
 
--- Table privileges from the production schema ACL (no data or credentials).
+-- Restore table privileges from the production schema ACL (no data or credentials).
 
 grant DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE on table "private"."billing_checkout_refs" to "postgres";
 
@@ -4426,6 +4504,10 @@ grant usage on schema public to anon, authenticated, service_role;
 
 grant usage on schema private to service_role;
 
+grant usage on schema jarvis_private to service_role;
+
+grant usage on schema promo_omega_private to service_role;
+
 grant usage, select on all sequences in schema public to anon, authenticated, service_role;
 
--- Local only: no external production credentials are copied.
+-- No scheduled production cron jobs are imported; local external integrations use placeholders only.
