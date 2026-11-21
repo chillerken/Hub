@@ -6,3 +6,5 @@ coverage/
 *.log
 .env*
 !.env.example
+
+ai-receptionist-host/runtime-config.local.json
