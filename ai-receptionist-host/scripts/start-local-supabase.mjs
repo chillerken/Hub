@@ -84,13 +84,13 @@ writeFileSync(join(hostDir, "runtime-config.local.json"), JSON.stringify({
 }, null, 2) + "\n");
 const envFile = join(supabaseDir, ".env.local");
 const existingEnv = await fsPromises.readFile(envFile, "utf8").catch(() => "");
-const values = new Map(existingEnv.split(/\\r?\\n/).filter(line => line && !line.startsWith("#")).map(line => {
+const values = new Map(existingEnv.split(/\r?\n/).filter(line => line && !line.startsWith("#")).map(line => {
   const i = line.indexOf("=");
   return [line.slice(0, i), line.slice(i + 1)];
 }));
 if (!values.has("GEMINI_API_KEY")) values.set("GEMINI_API_KEY", "replace-with-a-separate-development-key");
 if (!values.has("STRIPE_WEBHOOK_SECRET")) values.set("STRIPE_WEBHOOK_SECRET", "whsec_local_test_only");
-writeFileSync(envFile, [...values].map(([key, value]) => `${key}=${value}`).join("\\n") + "\\n");
+writeFileSync(envFile, [...values].map(([key, value]) => `${key}=${value}`).join("\n") + "\n");
 
 
 console.log("\n[4/4] Start lokale Edge Function en Reception AI-webapp…");
