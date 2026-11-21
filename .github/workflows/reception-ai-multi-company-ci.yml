@@ -6,6 +6,11 @@ on:
       - main
     paths:
       - "ai-receptionist-host/app.js"
+      - "ai-receptionist-host/runtime-config.js"
+      - "ai-receptionist-host/scripts/**"
+      - "ai-receptionist-host/local-supabase/**"
+      - "package.json"
+      - ".gitignore"
       - "ai-receptionist-host/supabase/**"
       - "ai-receptionist-host/tests/**"
       - "ai-receptionist-host/playwright.config.cjs"
@@ -63,8 +68,14 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f ai-receptionist-host/tests/team-management-assertions.sql
       - name: Check Edge Function types
         run: deno check ai-receptionist-host/supabase/functions/team-management/index.ts
+      - name: Check integration admin Edge Function types
+        run: deno check ai-receptionist-host/supabase/functions/integration-admin/index.ts
       - name: Check frontend JavaScript syntax
-        run: node --check ai-receptionist-host/app.js
+        run: |
+          node --check ai-receptionist-host/app.js
+          node --check ai-receptionist-host/runtime-config.js
+          node --check ai-receptionist-host/scripts/start-local-supabase.mjs
+          node --check ai-receptionist-host/scripts/test-local-team-management.mjs
       - name: Run team management contract tests
         run: node --test ai-receptionist-host/tests/team-management-contract.test.cjs
 
