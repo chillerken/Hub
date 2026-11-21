@@ -1,0 +1,154 @@
+project_id = "reception-ai-local"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:4173"
+additional_redirect_urls = [
+  "http://127.0.0.1:4173/**",
+  "http://localhost:4173/**"
+]
+enable_signup = true
+jwt_expiry = 3600
+
+[auth.email]
+enabled = true
+double_confirm_changes = false
+enable_confirmations = false
+secure_password_change = false
+
+# Mirror production JWT enforcement for every Reception AI Edge Function.
+[functions.marketing-plan-action]
+verify_jwt = true
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.google-calendar-oauth-callback]
+verify_jwt = false
+
+[functions.public-widget-config]
+verify_jwt = false
+
+[functions.sales-sequence-action]
+verify_jwt = true
+
+[functions.integration-admin]
+verify_jwt = true
+
+[functions.public-receipt-link]
+verify_jwt = false
+
+[functions.commercial-agent-runner]
+verify_jwt = true
+
+[functions.jarvis-orchestrator]
+verify_jwt = true
+
+[functions.operations-admin]
+verify_jwt = true
+
+[functions.marketing-agent-action]
+verify_jwt = true
+
+[functions.billing-link]
+verify_jwt = true
+
+[functions.tenant-health]
+verify_jwt = true
+
+[functions.billing-return]
+verify_jwt = false
+
+[functions.public-creator-site]
+verify_jwt = false
+
+[functions.sales-batch-action]
+verify_jwt = true
+
+[functions.creator-hub-action]
+verify_jwt = true
+
+[functions.sales-agent-action]
+verify_jwt = true
+
+[functions.platform-admin]
+verify_jwt = true
+
+[functions.billing-readiness]
+verify_jwt = true
+
+[functions.google-calendar-oauth-start]
+verify_jwt = true
+
+[functions.review-agent-action]
+verify_jwt = true
+
+[functions.reception-chat]
+verify_jwt = true
+
+[functions.workflow-runner]
+verify_jwt = true
+
+[functions.lead-agent-action]
+verify_jwt = true
+
+[functions.sales-onboarding-context]
+verify_jwt = false
+
+[functions.team-management]
+verify_jwt = true
+
+[functions.ai-provider-health]
+verify_jwt = true
+
+[functions.production-e2e-check]
+verify_jwt = true
+
+[functions.public-contact-capture]
+verify_jwt = false
+
+[functions.agent-admin]
+verify_jwt = true
+
+[functions.public-demo-chat]
+verify_jwt = false
+
+[functions.customer-payment-webhook]
+verify_jwt = false
+
+[functions.onboarding-quickstart]
+verify_jwt = true
+
+[functions.public-reception-chat]
+verify_jwt = false
+
+[functions.sales-conversion-draft]
+verify_jwt = true
+
+[functions.sales-lead-capture]
+verify_jwt = false
+
+[functions.claim-sales-onboarding]
+verify_jwt = true
+
+[functions.onboarding-status]
+verify_jwt = true
+
+[functions.lead-outcome-action]
+verify_jwt = true

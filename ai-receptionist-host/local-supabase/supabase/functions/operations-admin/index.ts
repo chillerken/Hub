@@ -1,0 +1,288 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
+
+const cors={
+  "Access-Control-Allow-Origin":"*",
+  "Access-Control-Allow-Headers":"authorization, apikey, x-client-info, content-type",
+  "Access-Control-Allow-Methods":"POST,OPTIONS"
+};
+const out=(body:any,status=200)=>new Response(JSON.stringify(body),{
+  status,headers:{...cors,"Content-Type":"application/json"}
+});
+const clean=(v:any,max=1000)=>String(v??"").trim().slice(0,max);
+
+Deno.serve(async(req:Request)=>{
+  if(req.method==="OPTIONS") return new Response("ok",{headers:cors});
+  if(req.method!=="POST") return out({error:"Method not allowed"},405);
+
+  try{
+    const auth=req.headers.get("Authorization")||"";
+    if(!auth.startsWith("Bearer ")) return out({error:"Unauthorized"},401);
+    const token=auth.slice(7);
+
+    const url=Deno.env.get("SUPABASE_URL")!;
+    const anon=Deno.env.get("SUPABASE_ANON_KEY")!;
+    const service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const userDb=createClient(url,anon,{auth:{persistSession:false},global:{headers:{Authorization:auth}}});
+    const db=createClient(url,service,{auth:{persistSession:false}});
+
+    const {data:u,error:ue}=await userDb.auth.getUser(token);
+    if(ue||!u?.user) return out({error:"Unauthorized"},401);
+
+    const {data:activeContext}=await db.from("user_org_context").select("organization_id").eq("user_id",u.user.id).maybeSingle();
+    let membershipQuery=userDb.from("memberships").select("organization_id,role").eq("user_id",u.user.id).eq("active",true);
+    if(activeContext?.organization_id)membershipQuery=membershipQuery.eq("organization_id",activeContext.organization_id);
+    const {data:mem,error:me}=await membershipQuery.maybeSingle();
+    if(me||!mem) return out({error:me?"Organization selection required":"Membership not found"},me?409:403);
+    if(!["owner","admin"].includes(mem.role)) return out({error:"Owner or admin role required"},403);
+
+    const b=await req.json();
+    const action=clean(b.action,50);
+    const org=mem.organization_id;
+
+    if(action==="retry_workflow_action"){
+      const actionId=clean(b.workflow_action_id,80);
+      if(!actionId) return out({error:"workflow_action_id required"},400);
+
+      const {data:current,error:we}=await db.from("workflow_actions")
+        .select("id,organization_id,lead_id,action_type,channel,status,provider,last_error,attempts,max_attempts")
+        .eq("id",actionId).eq("organization_id",org).single();
+      if(we||!current) return out({error:"Workflow action not found"},404);
+      if(!["blocked","failed"].includes(current.status)) return out({error:"Only blocked or failed actions can be retried"},409);
+
+      const deliveryUnknown=String(current.last_error||"").toLowerCase().includes("delivery status is unknown")
+        || String(current.last_error||"").toLowerCase().includes("delivery_unknown");
+      if(deliveryUnknown && b.confirm_delivery_unknown!==true){
+        return out({
+          error:"Delivery status is unknown. Retrying can cause a duplicate customer message.",
+          code:"delivery_unknown_confirmation_required"
+        },409);
+      }
+
+      const {data:updated,error:ue2}=await db.from("workflow_actions")
+        .update({
+          status:"pending",
+          attempts:0,
+          scheduled_at:new Date().toISOString(),
+          last_error:null,
+          locked_at:null,
+          locked_by:null,
+          completed_at:null,
+          updated_at:new Date().toISOString()
+        })
+        .eq("id",actionId).eq("organization_id",org)
+        .select("*").single();
+      if(ue2) throw ue2;
+
+      await db.from("audit_events").insert({
+        organization_id:org,
+        actor_user_id:u.user.id,
+        event_type:"workflow.retry_requested",
+        entity_type:"workflow_action",
+        entity_id:actionId,
+        payload:{
+          action_type:current.action_type,
+          channel:current.channel,
+          prior_status:current.status,
+          prior_attempts:current.attempts,
+          delivery_unknown:deliveryUnknown
+        }
+      });
+
+      return out({ok:true,workflow_action:updated});
+    }
+
+    if(action==="schedule_appointment"){
+      const appointmentId=clean(b.appointment_id,80);
+      const start=new Date(String(b.start_at||""));
+      const end=new Date(String(b.end_at||""));
+      if(!appointmentId||Number.isNaN(start.getTime())||Number.isNaN(end.getTime())||end<=start){
+        return out({error:"Valid appointment_id, start_at and end_at are required"},400);
+      }
+      const status=["proposed","confirmed"].includes(b.status)?b.status:"proposed";
+      const {data:current,error:ce}=await db.from("appointments")
+        .select("id,status,organization_id")
+        .eq("id",appointmentId).eq("organization_id",org).single();
+      if(ce||!current) return out({error:"Appointment not found"},404);
+      if(["completed","cancelled"].includes(current.status)) return out({error:"Closed appointment cannot be rescheduled"},409);
+
+      const {data:updated,error}=await db.from("appointments")
+        .update({
+          start_at:start.toISOString(),
+          end_at:end.toISOString(),
+          timezone:clean(b.timezone,100)||"Europe/Brussels",
+          location:clean(b.location,500)||null,
+          status,
+          updated_at:new Date().toISOString()
+        })
+        .eq("id",appointmentId).eq("organization_id",org)
+        .select("*").single();
+      if(error) throw error;
+      await db.from("audit_events").insert({
+        organization_id:org,actor_user_id:u.user.id,event_type:"appointment.scheduled",
+        entity_type:"appointment",entity_id:appointmentId,
+        payload:{start_at:updated.start_at,end_at:updated.end_at,timezone:updated.timezone,location:updated.location,status:updated.status}
+      });
+      return out({ok:true,appointment:updated});
+    }
+
+    if(action==="confirm_appointment"){
+      const appointmentId=clean(b.appointment_id,80);
+      const {data:current,error:ce}=await db.from("appointments").select("*")
+        .eq("id",appointmentId).eq("organization_id",org).single();
+      if(ce||!current) return out({error:"Appointment not found"},404);
+      if(!current.start_at||!current.end_at) return out({error:"Set an exact start and end time first"},409);
+      if(["completed","cancelled"].includes(current.status)) return out({error:"Closed appointment cannot be confirmed"},409);
+      const {data:updated,error}=await db.from("appointments")
+        .update({status:"confirmed",updated_at:new Date().toISOString()})
+        .eq("id",appointmentId).eq("organization_id",org)
+        .select("*").single();
+      if(error) throw error;
+      await db.from("audit_events").insert({
+        organization_id:org,actor_user_id:u.user.id,event_type:"appointment.confirmed",
+        entity_type:"appointment",entity_id:appointmentId,
+        payload:{start_at:updated.start_at,end_at:updated.end_at}
+      });
+      return out({ok:true,appointment:updated});
+    }
+
+    if(action==="complete_appointment"){
+      const appointmentId=clean(b.appointment_id,80);
+      const {data:current,error:ce}=await db.from("appointments").select("*")
+        .eq("id",appointmentId).eq("organization_id",org).single();
+      if(ce||!current) return out({error:"Appointment not found"},404);
+      if(current.status!=="confirmed") return out({error:"Only a confirmed appointment can be marked completed"},409);
+
+      const {data:unpaid}=await db.from("customer_payments")
+        .select("id,status,amount_cents,currency")
+        .eq("organization_id",org)
+        .eq("appointment_id",appointmentId)
+        .neq("status","paid")
+        .order("created_at",{ascending:false})
+        .limit(1)
+        .maybeSingle();
+      if(unpaid){
+        return out({
+          error:"Appointment has an unpaid payment request",
+          code:"payment_required_before_completion",
+          payment_id:unpaid.id,
+          payment_status:unpaid.status
+        },409);
+      }
+
+      const {data:updated,error}=await db.from("appointments")
+        .update({status:"completed",completed_at:new Date().toISOString(),updated_at:new Date().toISOString()})
+        .eq("id",appointmentId).eq("organization_id",org)
+        .select("*").single();
+      if(error) throw error;
+
+      const {data:wonLead,error:wonErr}=await db.from("leads")
+        .update({status:"won",updated_at:new Date().toISOString()})
+        .eq("id",current.lead_id).eq("organization_id",org)
+        .neq("status","won")
+        .select("id,status").maybeSingle();
+      if(wonErr) throw wonErr;
+      if(wonLead){
+        await db.from("audit_events").insert({
+          organization_id:org,actor_user_id:u.user.id,event_type:"lead.won_from_completed_appointment",
+          entity_type:"lead",entity_id:current.lead_id,
+          payload:{appointment_id:appointmentId}
+        });
+      }
+
+      await db.from("audit_events").insert({
+        organization_id:org,actor_user_id:u.user.id,event_type:"appointment.completed",
+        entity_type:"appointment",entity_id:appointmentId,
+        payload:{completed_at:updated.completed_at}
+      });
+      return out({ok:true,appointment:updated});
+    }
+
+    if(action==="cancel_appointment"){
+      const appointmentId=clean(b.appointment_id,80);
+      const {data:current,error:ce}=await db.from("appointments").select("*")
+        .eq("id",appointmentId).eq("organization_id",org).single();
+      if(ce||!current) return out({error:"Appointment not found"},404);
+      if(current.status==="completed") return out({error:"Completed appointment cannot be cancelled"},409);
+      const {data:updated,error}=await db.from("appointments")
+        .update({status:"cancelled",updated_at:new Date().toISOString()})
+        .eq("id",appointmentId).eq("organization_id",org)
+        .select("*").single();
+      if(error) throw error;
+      await db.from("audit_events").insert({
+        organization_id:org,actor_user_id:u.user.id,event_type:"appointment.cancelled",
+        entity_type:"appointment",entity_id:appointmentId,
+        payload:{prior_status:current.status}
+      });
+      return out({ok:true,appointment:updated});
+    }
+
+    if(action==="create_payment"){
+      const appointmentId=clean(b.appointment_id,80)||null;
+      let leadId=clean(b.lead_id,80)||null;
+      const amount=Number(b.amount_cents);
+      const currency=clean(b.currency||"EUR",3).toUpperCase();
+      if(!Number.isInteger(amount)||amount<=0) return out({error:"Positive amount_cents required"},400);
+      if(!/^[A-Z]{3}$/.test(currency)) return out({error:"Invalid currency"},400);
+
+      if(appointmentId){
+        const {data:appt,error:ae}=await db.from("appointments").select("id,lead_id,status")
+          .eq("id",appointmentId).eq("organization_id",org).single();
+        if(ae||!appt) return out({error:"Appointment not found"},404);
+        if(appt.status==="cancelled") return out({error:"Cannot create payment for cancelled appointment"},409);
+        if(!["confirmed","completed"].includes(appt.status)){
+          return out({error:"Confirm the appointment before creating a payment request",code:"appointment_confirmation_required"},409);
+        }
+        leadId=appt.lead_id;
+      }
+      if(!leadId) return out({error:"lead_id or appointment_id required"},400);
+      const {data:lead,error:le}=await db.from("leads").select("id")
+        .eq("id",leadId).eq("organization_id",org).single();
+      if(le||!lead) return out({error:"Lead not found"},404);
+
+      let existing:any=null;
+      if(appointmentId){
+        const {data}=await db.from("customer_payments").select("*")
+          .eq("organization_id",org).eq("appointment_id",appointmentId)
+          .eq("status","pending").order("created_at",{ascending:false}).limit(1).maybeSingle();
+        existing=data;
+      }
+
+      if(existing?.payment_url && existing.amount_cents!==amount){
+        return out({error:"Existing Checkout link already has a fixed amount; create a new payment instead"},409);
+      }
+
+      if(existing){
+        const {data:updated,error}=await db.from("customer_payments")
+          .update({amount_cents:amount,currency,updated_at:new Date().toISOString()})
+          .eq("id",existing.id).eq("organization_id",org)
+          .select("*").single();
+        if(error) throw error;
+        await db.from("audit_events").insert({
+          organization_id:org,actor_user_id:u.user.id,event_type:"payment.request_updated",
+          entity_type:"customer_payment",entity_id:updated.id,
+          payload:{appointment_id:appointmentId,lead_id:leadId,amount_cents:amount,currency}
+        });
+        return out({ok:true,payment:updated,reused:true});
+      }
+
+      const {data:created,error}=await db.from("customer_payments")
+        .insert({
+          organization_id:org,lead_id:leadId,appointment_id:appointmentId,
+          status:"pending",amount_cents:amount,currency
+        })
+        .select("*").single();
+      if(error) throw error;
+      await db.from("audit_events").insert({
+        organization_id:org,actor_user_id:u.user.id,event_type:"payment.request_created",
+        entity_type:"customer_payment",entity_id:created.id,
+        payload:{appointment_id:appointmentId,lead_id:leadId,amount_cents:amount,currency}
+      });
+      return out({ok:true,payment:created,reused:false});
+    }
+
+    return out({error:"Unknown action"},400);
+  }catch(e){
+    console.error(e);
+    return out({error:"Operation failed",detail:clean(e instanceof Error?e.message:e,1000)},500);
+  }
+});

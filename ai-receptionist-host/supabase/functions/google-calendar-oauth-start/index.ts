@@ -33,10 +33,11 @@ Deno.serve(async(req:Request)=>{
     const {data:u,error:ue}=await userDb.auth.getUser(token);
     if(ue||!u?.user) return json({error:"Unauthorized"},401);
 
-    const {data:mem,error:me}=await userDb.from("memberships")
-      .select("organization_id,role")
-      .eq("user_id",u.user.id).eq("active",true).single();
-    if(me||!mem) return json({error:"Membership not found"},403);
+    const {data:activeContext}=await db.from("user_org_context").select("organization_id").eq("user_id",u.user.id).maybeSingle();
+    let membershipQuery=userDb.from("memberships").select("organization_id,role").eq("user_id",u.user.id).eq("active",true);
+    if(activeContext?.organization_id)membershipQuery=membershipQuery.eq("organization_id",activeContext.organization_id);
+    const {data:mem,error:me}=await membershipQuery.maybeSingle();
+    if(me||!mem) return json({error:me?"Organization selection required":"Membership not found"},me?409:403);
     if(!["owner","admin"].includes(mem.role)) return json({error:"Owner or admin role required"},403);
 
     const {data:integration,error:ie}=await userDb.from("tenant_integrations")

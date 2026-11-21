@@ -1,0 +1,3 @@
+supabase/.env.local
+supabase/functions/team-management/index.ts
+supabase/migrations/20261121112000_multi_company_context_and_team_invites.sql

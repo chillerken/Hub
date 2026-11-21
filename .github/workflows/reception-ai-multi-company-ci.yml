@@ -1,0 +1,109 @@
+name: Reception AI multi-company validation
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "ai-receptionist-host/app.js"
+      - "ai-receptionist-host/runtime-config.js"
+      - "ai-receptionist-host/scripts/**"
+      - "ai-receptionist-host/local-supabase/**"
+      - "package.json"
+      - ".gitignore"
+      - "ai-receptionist-host/supabase/**"
+      - "ai-receptionist-host/tests/**"
+      - "ai-receptionist-host/playwright.config.cjs"
+      - ".github/workflows/reception-ai-multi-company-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Isolated database and code checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reception_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d reception_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: reception_test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Prepare isolated Supabase-compatible schema
+        run: psql -v ON_ERROR_STOP=1 -f ai-receptionist-host/tests/team-management-fixture.sql
+      - name: Apply team management migration
+        run: psql -v ON_ERROR_STOP=1 -f ai-receptionist-host/supabase/migrations/20261121112000_multi_company_context_and_team_invites.sql
+      - name: Verify database constraints and access controls
+        run: psql -v ON_ERROR_STOP=1 -f ai-receptionist-host/tests/team-management-assertions.sql
+      - name: Check Edge Function types
+        run: deno check ai-receptionist-host/supabase/functions/team-management/index.ts
+      - name: Check integration admin Edge Function types
+        run: deno check ai-receptionist-host/supabase/functions/integration-admin/index.ts
+      - name: Check frontend JavaScript syntax
+        run: |
+          node --check ai-receptionist-host/app.js
+          node --check ai-receptionist-host/runtime-config.js
+          node --check ai-receptionist-host/scripts/start-local-supabase.mjs
+          node --check ai-receptionist-host/scripts/test-local-team-management.mjs
+      - name: Run team management contract tests
+        run: node --test ai-receptionist-host/tests/team-management-contract.test.cjs
+
+  browser-smoke:
+    name: Playwright public-site read-only browser tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    needs: validate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install pinned Playwright
+        run: npm install --no-save --no-package-lock @playwright/test@1.56.1
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run read-only browser smoke tests on public production site
+        env:
+          RECEPTION_AI_BASE_URL: https://reception-ai-luxwash.vercel.app
+        run: npx playwright test --config=ai-receptionist-host/playwright.config.cjs
+      - name: Upload screenshots and traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reception-ai-playwright-failure
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7

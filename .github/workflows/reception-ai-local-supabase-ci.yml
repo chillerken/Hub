@@ -1,0 +1,71 @@
+name: Reception AI local Supabase integration tests
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "ai-receptionist-host/app.js"
+      - "ai-receptionist-host/runtime-config.js"
+      - "ai-receptionist-host/scripts/**"
+      - "ai-receptionist-host/local-supabase/**"
+      - "ai-receptionist-host/supabase/functions/team-management/**"
+      - "ai-receptionist-host/supabase/migrations/20261121112000_multi_company_context_and_team_invites.sql"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/reception-ai-local-supabase-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-auth-and-tenant-isolation:
+    name: Real local Auth and Edge Function integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install repository dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Start isolated Supabase Local stack and frontend
+        run: |
+          node ai-receptionist-host/scripts/start-local-supabase.mjs > "$RUNNER_TEMP/reception-ai-local.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/reception-ai-local.pid"
+          for attempt in $(seq 1 240); do
+            if curl --silent --fail http://127.0.0.1:4173/ >/dev/null; then
+              echo "Local Reception AI is ready."
+              exit 0
+            fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/reception-ai-local.pid")" 2>/dev/null; then
+              cat "$RUNNER_TEMP/reception-ai-local.log"
+              exit 1
+            fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/reception-ai-local.log"
+          echo "Local Supabase stack did not become ready in time."
+          exit 1
+      - name: Run local Auth, invitation, role and tenant-isolation tests
+        run: npm run reception:test:local
+      - name: Seed synthetic local demo companies and CRM data
+        run: npm run reception:local:seed
+      - name: Upload local stack logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reception-ai-local-supabase-logs
+          path: ${{ runner.temp }}/reception-ai-local.log
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stop isolated Supabase Local stack
+        if: always()
+        run: |
+          cd ai-receptionist-host/local-supabase
+          npx -y supabase@3.2.0 stop || true

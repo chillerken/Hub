@@ -34,10 +34,11 @@ Deno.serve(async(req:Request)=>{
     const user=userRes?.user;
     if(userErr||!user) return out({error:"Unauthorized"},401);
 
-    const {data:membership,error:memErr}=await userDb.from("memberships")
-      .select("organization_id,role,active")
-      .eq("user_id",user.id).eq("active",true).single();
-    if(memErr||!membership) return out({error:"Organization membership not found"},403);
+    const {data:activeContext}=await serviceDb.from("user_org_context").select("organization_id").eq("user_id",user.id).maybeSingle();
+    let membershipQuery=userDb.from("memberships").select("organization_id,role,active").eq("user_id",user.id).eq("active",true);
+    if(activeContext?.organization_id)membershipQuery=membershipQuery.eq("organization_id",activeContext.organization_id);
+    const {data:membership,error:memErr}=await membershipQuery.maybeSingle();
+    if(memErr||!membership) return out({error:memErr?"Organization selection required":"Organization membership not found"},memErr?409:403);
     if(!["owner","admin"].includes(membership.role)) return out({error:"Owner or admin role required"},403);
 
     const body=await req.json();
@@ -446,7 +447,7 @@ Deno.serve(async(req:Request)=>{
         const vj=await vr.json().catch(()=>({}));
         if(!vr.ok) return out({error:"Stripe credential verification failed",detail:clean(vj?.error?.message||vr.statusText,800)},400);
 
-        const webhookUrl=`https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/customer-payment-webhook?integration_id=${encodeURIComponent(integration.id)}`;
+        const webhookUrl=`${url.replace(/\/+$/, "")}/functions/v1/customer-payment-webhook?integration_id=${encodeURIComponent(integration.id)}`;
         let webhookSecret=clean(stored?.webhook_secret,2000);
         let webhookEndpointId=clean(nextConfig.webhook_endpoint_id||stored?.webhook_endpoint_id,500);
 
