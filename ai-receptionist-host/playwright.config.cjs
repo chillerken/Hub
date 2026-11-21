@@ -9,7 +9,7 @@ module.exports = defineConfig({
   reporter: process.env.CI ? [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]] : "list",
   outputDir: "test-results",
   use: {
-    baseURL: process.env.RECEPTION_AI_PREVIEW_URL || "https://reception-i56l2e18d-luxwash.vercel.app",
+    baseURL: process.env.RECEPTION_AI_BASE_URL || "https://reception-i56l2e18d-luxwash.vercel.app",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     actionTimeout: 10000,
