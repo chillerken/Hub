@@ -69,7 +69,7 @@ jobs:
         run: node --test ai-receptionist-host/tests/team-management-contract.test.cjs
 
   browser-smoke:
-    name: Playwright preview browser tests
+    name: Playwright public-site read-only browser tests
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     needs: validate
@@ -84,9 +84,9 @@ jobs:
         run: npm install --no-save --no-package-lock @playwright/test@1.56.1
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Run public preview smoke tests
+      - name: Run read-only browser smoke tests on public production site
         env:
-          RECEPTION_AI_PREVIEW_URL: https://reception-i56l2e18d-luxwash.vercel.app
+          RECEPTION_AI_BASE_URL: https://reception-ai-luxwash.vercel.app
         run: npx playwright test --config=ai-receptionist-host/playwright.config.cjs
       - name: Upload screenshots and traces on failure
         if: failure()
