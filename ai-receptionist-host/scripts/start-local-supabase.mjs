@@ -121,13 +121,17 @@ async function waitForAllFunctions(timeoutMs = 90000) {
   const until = Date.now() + timeoutMs;
   let missing = functionDirs;
   while (Date.now() < until) {
-    const checks = await Promise.all(functionDirs.map(async name => {
-      try {
-        const response = await fetch(`http://127.0.0.1:54321/functions/v1/${name}`, { signal: AbortSignal.timeout(3000) });
-        return { name, status: response.status };
-      } catch { return { name, status: 0 }; }
-    }));
-    missing = checks.filter(x => x.status === 0 || x.status === 404 || x.status >= 500);
+    missing = [];
+    for (let i = 0; i < functionDirs.length; i += 5) {
+      const batch = functionDirs.slice(i, i + 5);
+      const checks = await Promise.all(batch.map(async name => {
+        try {
+          const response = await fetch(`http://127.0.0.1:54321/functions/v1/${name}`, { signal: AbortSignal.timeout(5000) });
+          return { name, status: response.status };
+        } catch { return { name, status: 0 }; }
+      }));
+      missing.push(...checks.filter(x => x.status === 0 || x.status === 404 || x.status >= 500));
+    }
     if (missing.length === 0) return;
     await new Promise(resolve => setTimeout(resolve, 1500));
   }
