@@ -77,9 +77,12 @@ begin
     null;
   end;
 
+  insert into auth.users(id,email,email_confirmed_at)
+  values('20000000-0000-4000-8000-000000000002','unassigned@example.test',now());
+
   begin
     insert into public.user_org_context(user_id,organization_id)
-    values(v_user,'30000000-0000-4000-8000-000000000001');
+    values('20000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000001');
     raise exception 'Invalid organization reference unexpectedly accepted';
   exception when foreign_key_violation then
     null;
