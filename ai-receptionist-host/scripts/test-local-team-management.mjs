@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,14 +7,16 @@ import { fileURLToPath } from "node:url";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const hostDir = resolve(scriptDir, "..");
 const config = JSON.parse(readFileSync(join(hostDir, "runtime-config.local.json"), "utf8"));
-const envFile = readFileSync(join(hostDir, "local-supabase", "supabase", ".env.local"), "utf8");
-const env = Object.fromEntries(envFile.split(/\r?\n/).map(line => line.trim()).filter(line => line && !line.startsWith("#") && line.includes("=")).map(line => {
-  const i = line.indexOf("=");
-  return [line.slice(0, i).trim(), line.slice(i + 1).trim().replace(/^["']|["']$/g, "")];
-}));
+const localRoot = join(hostDir, "local-supabase");
+const cli = process.platform === "win32" ? "npx.cmd" : "npx";
+const status = spawnSync(cli, ["-y", "supabase@3.2.0", "status", "-o", "env"], {
+  cwd: localRoot, encoding: "utf8", shell: process.platform === "win32"
+});
+if (status.status !== 0) throw new Error("Kan lokale Supabase-keys niet ophalen: " + status.stderr);
+const serviceMatch = status.stdout.match(/^SERVICE_ROLE_KEY=(.*)$/m);
 const base = String(config.supabaseUrl).replace(/\/$/, "");
 const anon = config.supabaseAnonKey;
-const service = env.SUPABASE_SERVICE_ROLE_KEY;
+const service = serviceMatch?.[1]?.trim().replace(/^["']|["']$/g, "");
 assert.ok(["127.0.0.1", "localhost"].includes(new URL(base).hostname), "Tests mogen alleen localhost aanspreken.");
 assert.ok(anon && service, `Lokale API-keys ontbreken. Gevonden env-sleutels: ${Object.keys(env).join(", ")}`);
 
