@@ -858,151 +858,151 @@ alter table "public"."tenant_integrations" add constraint "tenant_integrations_s
 
 alter table "public"."workflow_action_attempts" add constraint "workflow_action_attempts_outcome_check" CHECK (outcome = ANY (ARRAY['completed'::text, 'retry'::text, 'blocked'::text, 'failed'::text]));
 
-alter table "private"."billing_checkout_refs" add constraint "billing_checkout_refs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "private"."billing_checkout_refs" add constraint "billing_checkout_refs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "private"."integration_credentials" add constraint "integration_credentials_integration_id_fkey" FOREIGN KEY (integration_id) REFERENCES tenant_integrations(id) ON DELETE CASCADE;
+alter table "private"."integration_credentials" add constraint "integration_credentials_integration_id_fkey" FOREIGN KEY (integration_id) REFERENCES public.tenant_integrations(id) ON DELETE CASCADE;
 
-alter table "private"."integration_credentials" add constraint "integration_credentials_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "private"."integration_credentials" add constraint "integration_credentials_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "private"."oauth_states" add constraint "oauth_states_integration_id_fkey" FOREIGN KEY (integration_id) REFERENCES tenant_integrations(id) ON DELETE CASCADE;
+alter table "private"."oauth_states" add constraint "oauth_states_integration_id_fkey" FOREIGN KEY (integration_id) REFERENCES public.tenant_integrations(id) ON DELETE CASCADE;
 
-alter table "private"."oauth_states" add constraint "oauth_states_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "private"."oauth_states" add constraint "oauth_states_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."ai_usage_daily" add constraint "ai_usage_daily_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."ai_usage_daily" add constraint "ai_usage_daily_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."appointments" add constraint "appointments_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
+alter table "public"."appointments" add constraint "appointments_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE CASCADE;
 
-alter table "public"."appointments" add constraint "appointments_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."appointments" add constraint "appointments_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
 alter table "public"."audit_events" add constraint "audit_events_actor_user_id_fkey" FOREIGN KEY (actor_user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
 
-alter table "public"."audit_events" add constraint "audit_events_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."audit_events" add constraint "audit_events_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."business_profiles" add constraint "business_profiles_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."business_profiles" add constraint "business_profiles_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."commercial_learning_snapshots" add constraint "commercial_learning_snapshots_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."commercial_learning_snapshots" add constraint "commercial_learning_snapshots_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."conversations" add constraint "conversations_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL;
+alter table "public"."conversations" add constraint "conversations_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE SET NULL;
 
-alter table "public"."conversations" add constraint "conversations_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."conversations" add constraint "conversations_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
 alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_created_by_fkey" FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE CASCADE;
 
-alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL;
+alter table "public"."creator_hub_assets" add constraint "creator_hub_assets_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE SET NULL;
 
-alter table "public"."customer_payments" add constraint "customer_payments_appointment_id_fkey" FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE SET NULL;
+alter table "public"."customer_payments" add constraint "customer_payments_appointment_id_fkey" FOREIGN KEY (appointment_id) REFERENCES public.appointments(id) ON DELETE SET NULL;
 
-alter table "public"."customer_payments" add constraint "customer_payments_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
+alter table "public"."customer_payments" add constraint "customer_payments_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE CASCADE;
 
-alter table "public"."customer_payments" add constraint "customer_payments_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."customer_payments" add constraint "customer_payments_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_appointment_id_fkey" FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE CASCADE;
+alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_appointment_id_fkey" FOREIGN KEY (appointment_id) REFERENCES public.appointments(id) ON DELETE CASCADE;
 
-alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES workflow_actions(id) ON DELETE CASCADE;
+alter table "public"."google_calendar_dispatch_queue" add constraint "google_calendar_dispatch_queue_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES public.workflow_actions(id) ON DELETE CASCADE;
 
-alter table "public"."handoffs" add constraint "handoffs_conversation_id_fkey" FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE SET NULL;
+alter table "public"."handoffs" add constraint "handoffs_conversation_id_fkey" FOREIGN KEY (conversation_id) REFERENCES public.conversations(id) ON DELETE SET NULL;
 
-alter table "public"."handoffs" add constraint "handoffs_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL;
+alter table "public"."handoffs" add constraint "handoffs_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE SET NULL;
 
-alter table "public"."handoffs" add constraint "handoffs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."handoffs" add constraint "handoffs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
+alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE CASCADE;
 
-alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES workflow_actions(id) ON DELETE CASCADE;
+alter table "public"."izap_dispatch_queue" add constraint "izap_dispatch_queue_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES public.workflow_actions(id) ON DELETE CASCADE;
 
-alter table "public"."jarvis_agent_events" add constraint "jarvis_agent_events_task_id_fkey" FOREIGN KEY (task_id) REFERENCES jarvis_agent_tasks(id) ON DELETE CASCADE;
+alter table "public"."jarvis_agent_events" add constraint "jarvis_agent_events_task_id_fkey" FOREIGN KEY (task_id) REFERENCES public.jarvis_agent_tasks(id) ON DELETE CASCADE;
 
-alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
 alter table "public"."jarvis_agent_tasks" add constraint "jarvis_agent_tasks_owner_user_id_fkey" FOREIGN KEY (owner_user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
-alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
 alter table "public"."lead_agent_configs" add constraint "lead_agent_configs_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 
 alter table "public"."leadflow_leads" add constraint "leadflow_leads_owner_id_fkey" FOREIGN KEY (owner_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
-alter table "public"."leads" add constraint "leads_marketing_campaign_id_fkey" FOREIGN KEY (marketing_campaign_id) REFERENCES marketing_campaigns(id) ON DELETE SET NULL;
+alter table "public"."leads" add constraint "leads_marketing_campaign_id_fkey" FOREIGN KEY (marketing_campaign_id) REFERENCES public.marketing_campaigns(id) ON DELETE SET NULL;
 
-alter table "public"."leads" add constraint "leads_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."leads" add constraint "leads_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."marketing_agent_configs" add constraint "marketing_agent_configs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."marketing_agent_configs" add constraint "marketing_agent_configs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
 alter table "public"."marketing_agent_configs" add constraint "marketing_agent_configs_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 
 alter table "public"."marketing_campaigns" add constraint "marketing_campaigns_created_by_fkey" FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 
-alter table "public"."marketing_campaigns" add constraint "marketing_campaigns_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."marketing_campaigns" add constraint "marketing_campaigns_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."memberships" add constraint "memberships_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."memberships" add constraint "memberships_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
 alter table "public"."memberships" add constraint "memberships_user_id_fkey" FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
-alter table "public"."messages" add constraint "messages_conversation_id_fkey" FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE;
+alter table "public"."messages" add constraint "messages_conversation_id_fkey" FOREIGN KEY (conversation_id) REFERENCES public.conversations(id) ON DELETE CASCADE;
 
-alter table "public"."messages" add constraint "messages_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."messages" add constraint "messages_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
 alter table "public"."platform_admins" add constraint "platform_admins_user_id_fkey" FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
-alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
 alter table "public"."sales_agent_configs" add constraint "sales_agent_configs_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 
-alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_claimed_organization_id_fkey" FOREIGN KEY (claimed_organization_id) REFERENCES organizations(id) ON DELETE SET NULL;
+alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_claimed_organization_id_fkey" FOREIGN KEY (claimed_organization_id) REFERENCES public.organizations(id) ON DELETE SET NULL;
 
-alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
+alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE CASCADE;
 
-alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_sales_organization_id_fkey" FOREIGN KEY (sales_organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."sales_onboarding_invites" add constraint "sales_onboarding_invites_sales_organization_id_fkey" FOREIGN KEY (sales_organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."sales_opportunities" add constraint "sales_opportunities_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
+alter table "public"."sales_opportunities" add constraint "sales_opportunities_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE CASCADE;
 
-alter table "public"."sales_opportunities" add constraint "sales_opportunities_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."sales_opportunities" add constraint "sales_opportunities_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
+alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE CASCADE;
 
-alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_sequence_id_fkey" FOREIGN KEY (sequence_id) REFERENCES sales_sequences(id) ON DELETE CASCADE;
+alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_sequence_id_fkey" FOREIGN KEY (sequence_id) REFERENCES public.sales_sequences(id) ON DELETE CASCADE;
 
-alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES workflow_actions(id) ON DELETE SET NULL;
+alter table "public"."sales_sequence_steps" add constraint "sales_sequence_steps_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES public.workflow_actions(id) ON DELETE SET NULL;
 
 alter table "public"."sales_sequences" add constraint "sales_sequences_created_by_fkey" FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 
-alter table "public"."sales_sequences" add constraint "sales_sequences_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
+alter table "public"."sales_sequences" add constraint "sales_sequences_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE CASCADE;
 
-alter table "public"."sales_sequences" add constraint "sales_sequences_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."sales_sequences" add constraint "sales_sequences_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."tasks" add constraint "tasks_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL;
+alter table "public"."tasks" add constraint "tasks_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE SET NULL;
 
-alter table "public"."tasks" add constraint "tasks_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."tasks" add constraint "tasks_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
 alter table "public"."team_invitations" add constraint "team_invitations_accepted_by_fkey" FOREIGN KEY (accepted_by) REFERENCES auth.users(id);
 
 alter table "public"."team_invitations" add constraint "team_invitations_invited_by_fkey" FOREIGN KEY (invited_by) REFERENCES auth.users(id);
 
-alter table "public"."team_invitations" add constraint "team_invitations_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."team_invitations" add constraint "team_invitations_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."tenant_activation_events" add constraint "tenant_activation_events_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."tenant_activation_events" add constraint "tenant_activation_events_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."tenant_integrations" add constraint "tenant_integrations_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."tenant_integrations" add constraint "tenant_integrations_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."user_org_context" add constraint "user_org_context_membership_fk" FOREIGN KEY (organization_id, user_id) REFERENCES memberships(organization_id, user_id) ON DELETE CASCADE;
+alter table "public"."user_org_context" add constraint "user_org_context_membership_fk" FOREIGN KEY (organization_id, user_id) REFERENCES public.memberships(organization_id, user_id) ON DELETE CASCADE;
 
 alter table "public"."user_org_context" add constraint "user_org_context_user_id_fkey" FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
-alter table "public"."widget_rate_limits" add constraint "widget_rate_limits_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."widget_rate_limits" add constraint "widget_rate_limits_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."workflow_action_attempts" add constraint "workflow_action_attempts_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."workflow_action_attempts" add constraint "workflow_action_attempts_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
-alter table "public"."workflow_action_attempts" add constraint "workflow_action_attempts_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES workflow_actions(id) ON DELETE CASCADE;
+alter table "public"."workflow_action_attempts" add constraint "workflow_action_attempts_workflow_action_id_fkey" FOREIGN KEY (workflow_action_id) REFERENCES public.workflow_actions(id) ON DELETE CASCADE;
 
-alter table "public"."workflow_actions" add constraint "workflow_actions_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE;
+alter table "public"."workflow_actions" add constraint "workflow_actions_lead_id_fkey" FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE CASCADE;
 
-alter table "public"."workflow_actions" add constraint "workflow_actions_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+alter table "public"."workflow_actions" add constraint "workflow_actions_organization_id_fkey" FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
 CREATE INDEX billing_checkout_refs_expiry_idx ON private.billing_checkout_refs USING btree (expires_at);
 
