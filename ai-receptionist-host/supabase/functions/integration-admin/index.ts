@@ -447,7 +447,7 @@ Deno.serve(async(req:Request)=>{
         const vj=await vr.json().catch(()=>({}));
         if(!vr.ok) return out({error:"Stripe credential verification failed",detail:clean(vj?.error?.message||vr.statusText,800)},400);
 
-        const webhookUrl=`https://ndecxbsrxspkuxjsbndq.supabase.co/functions/v1/customer-payment-webhook?integration_id=${encodeURIComponent(integration.id)}`;
+        const webhookUrl=`${url.replace(/\\/+$/, "")}/functions/v1/customer-payment-webhook?integration_id=${encodeURIComponent(integration.id)}`;
         let webhookSecret=clean(stored?.webhook_secret,2000);
         let webhookEndpointId=clean(nextConfig.webhook_endpoint_id||stored?.webhook_endpoint_id,500);
 
